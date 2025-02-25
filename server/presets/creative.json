@@ -1,0 +1,9 @@
+{
+    "temperature": 1.2,
+    "top_k": 40,
+    "top_p": 0.7,
+    "num_predict": 200,
+    "repeat_penalty": 1.0,
+    "stop": ["\n"],
+    "seed": null
+}

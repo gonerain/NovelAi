@@ -1,0 +1,8 @@
+{
+    "temperature": 0.3,
+    "top_k": 10,
+    "top_p": 0.95,
+    "num_predict": 80,
+    "repeat_penalty": 1.5,
+    "stop": ["\n", "user:", "assistant:"]
+}
