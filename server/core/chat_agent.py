@@ -26,6 +26,10 @@ class ChatAgent:
         self.presets_dir = presets_dir
         os.makedirs(presets_dir, exist_ok=True)
 
+    async def close(self):
+        """关闭数据库连接"""
+        await self.memory.close()
+
     def _load_preset(self, preset_name: str) -> dict:
         """加载预设配置"""
         preset_path = os.path.join(self.presets_dir, f"{preset_name}.json")
@@ -85,7 +89,6 @@ class ChatAgent:
                 url,
                 headers=headers,
                 json=data,
-                timeout=30
             )
             response.raise_for_status()
             

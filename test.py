@@ -16,6 +16,8 @@ def test_workflow():
         session_res.raise_for_status()
         session_id = session_res.json()["session_id"]
         print(f"✅ 创建会话成功 ID: {session_id}")
+        check_res = requests.get(f"{API_BASE}/sessions/{session_id}")
+        print(check_res)
 
         # 2. 发起讨论（参数结构变更）
         generate_res = requests.post(
@@ -24,11 +26,21 @@ def test_workflow():
                 "session_id": session_id,
                 "initiator": "plot_writer",
                 "prompt": "设计主角的武功招式",
-                "max_rounds": 2
+                "max_rounds": 1
             }
         )
+
         generate_res.raise_for_status()
-        print("🎉 生成结果：", generate_res.json()["final_draft"][:50] + "...")
+        print("🎉 生成结果：", generate_res.json()["final_draft"])
+
+        # 2. 发起讨论（参数结构变更）
+        history_res = requests.post(
+            f"{API_BASE}/sessions/{session_id}/history",
+            json={
+                "session_id": session_id
+            }
+        )
+        print(history_res.json())
 
     except requests.exceptions.HTTPError as e:
         print(f"❌ HTTP错误: {e.response.status_code}")

@@ -11,7 +11,9 @@ class SessionCreate(BaseModel):
 
 class GenerateRequest(BaseModel):
     session_id: str
+    initiator: str
     prompt: str
+    max_rounds: int = 3
 
 # 基础模型
 class TimestampSchema(BaseModel):

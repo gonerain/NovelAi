@@ -2,6 +2,8 @@
 import logging
 from fastapi import FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from server.api.routes import router as ai_router
 from server.core.novelai_core import NovelAICore
@@ -60,6 +62,28 @@ app.include_router(
 @app.get("/health", include_in_schema=False)
 async def health_check():
     return {"status": "OK"}
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error_code": 422,
+            "message": "参数校验失败",
+            "detail": exc.errors()
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error_code": 500,
+            "message": "服务器内部错误",
+            "detail": str(exc)
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn

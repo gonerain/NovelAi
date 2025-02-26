@@ -24,6 +24,12 @@ class NovelAICore:
         self.active_sessions: Dict[str, dict] = {} 
         self._initialize_default_roles()
     
+    async def shutdown(self):
+        """关闭时清理资源"""
+        print("正在清理AI核心资源...")
+        await self.chat_agent.close()  # 关闭聊天代理
+        self.active_sessions.clear()
+    
     def _initialize_default_roles(self):
         """初始化预定义角色系统"""
         role_configs = {
@@ -83,12 +89,16 @@ class NovelAICore:
             "current_state": initial_prompt,
             "created_at": datetime.now().isoformat()
         }
+        print(f"[存储] 会话ID: {session_id} 数据: {self.active_sessions[session_id]}")
         return session_id
     
     def _generate_session_id(self) -> str:
         """生成唯一会话ID"""
         import uuid
         return str(uuid.uuid4())
+    
+    def kk(self) -> str:
+        return str(123)
 
     def ai_discussion(self,
                      session_id: str,
@@ -103,6 +113,8 @@ class NovelAICore:
             prompt: 讨论主题
             max_rounds: 最大讨论轮次
         """
+        if session_id not in self.active_sessions:
+            raise ValueError(f"会话不存在: {session_id}")
         session = self._get_session(session_id)
         discussion_log = []
         
@@ -111,8 +123,7 @@ class NovelAICore:
             session_id=session_id,
             initiator=initiator,
             prompt=prompt
-        )
-        
+        )        
         for round_num in range(max_rounds):
             round_log = {"round": round_num+1, "contributions": []}
             
@@ -232,6 +243,7 @@ if __name__ == "__main__":
         initial_prompt="初始故事设定..."
     )
 
+    print(session_id)
     # 发起讨论
     result = system.ai_discussion(
         session_id=session_id,
