@@ -1,8 +1,12 @@
+import asyncio
+import logging
 import sys
 import os
 import uuid
 from datetime import datetime
 from typing import Dict, List
+
+from fastapi import logger
 
 # 获取当前脚本的绝对路径的父目录的父目录（即项目根目录）
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -14,6 +18,8 @@ from typing import Dict, List, Optional
 from server.core.chat_memory import ChatMemory
 from server.core.chat_agent import ChatAgent
 
+logger = logging.getLogger(__name__)  # 使用标准 logging 模块
+
 class NovelAICore:
     """升级版小说协作系统核心"""
     
@@ -23,12 +29,34 @@ class NovelAICore:
         self.roles: Dict[str, dict] = {}
         self.active_sessions: Dict[str, dict] = {} 
         self._initialize_default_roles()
+        self._is_shutdown = False  # 初始化属性
+        self.model_loader = None  # 显式初始化为 None
     
     async def shutdown(self):
-        """关闭时清理资源"""
-        print("正在清理AI核心资源...")
-        await self.chat_agent.close()  # 关闭聊天代理
-        self.active_sessions.clear()
+        """原子化关闭操作"""
+        if self._is_shutdown:
+            return
+            
+        self._is_shutdown = True
+        
+        try:
+            logger.info("正在清理AI核心资源...")
+            
+            # 取消后台任务
+            # if self._background_task and not self._background_task.done():
+            #     self._background_task.cancel()
+            #     await self._background_task
+            
+            # 1. 清除会话状态
+            self.active_sessions.clear()
+            
+                
+        except Exception as e:
+            logger.error(f"关闭异常: {e}", exc_info=True)
+            
+        finally:
+            # 双重保障
+            self._is_shutdown = True
     
     def _initialize_default_roles(self):
         """初始化预定义角色系统"""

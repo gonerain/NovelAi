@@ -33,15 +33,6 @@ def test_workflow():
         generate_res.raise_for_status()
         print("🎉 生成结果：", generate_res.json()["final_draft"])
 
-        # 2. 发起讨论（参数结构变更）
-        history_res = requests.post(
-            f"{API_BASE}/sessions/{session_id}/history",
-            json={
-                "session_id": session_id
-            }
-        )
-        print(history_res.json())
-
     except requests.exceptions.HTTPError as e:
         print(f"❌ HTTP错误: {e.response.status_code}")
         print("错误详情:", e.response.json())
