@@ -108,3 +108,38 @@
   border-radius: 5px;
   cursor: pointer;
 }
+
+
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.new-session-btn {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.new-session-btn:hover {
+  background: #45a049;
+  transform: scale(1.1);
+}
+
+.session-id {
+  font-size: 0.8em;
+  color: #666;
+  margin-left: 8px;
+}

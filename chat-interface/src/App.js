@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 
-const API_BASE = 'http://localhost:8000/test'; // 修正测试接口地址
+const API_BASE_TEST = 'http://localhost:8000/test'; // 修正测试接口地址
+const API_BASE = 'http://localhost:8000/api/v1'; // 修正测试接口地址
+
+const DEFAULT_PARTICIPANTS = ["plot_writer", "editor_in_chief"];
 
 function App() {
   const [sessions, setSessions] = useState([]);
@@ -9,28 +12,23 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionCounter, setSessionCounter] = useState(1);
 
   // 初始化测试会话
   useEffect(() => {
     const initTestSession = async () => {
       try {
-        // 创建测试会话
-        const sessionRes = await fetch(`${API_BASE}/sessions`, { method: 'POST' });
-        const { session_id } = await sessionRes.json();
-        
-        // 初始化会话列表
-        setSessions([{ id: session_id, title: '测试会话' }]);
-        setCurrentSessionId(session_id);
-
-        // 加载测试历史
-        const historyRes = await fetch(`${API_BASE}/sessions/${session_id}/history`);
-        const history = await historyRes.json();
-        
-        setMessages(history.map(msg => ({
-          id: msg.timestamp || Date.now(),
-          text: msg.content,
-          isUser: msg.role === 'user'
-        })));
+        const sessionId = await createNewSession('初始会话');
+        if (sessionId) {
+          setCurrentSessionId(sessionId);
+          const historyRes = await fetch(`${API_BASE}/sessions/${sessionId}/history`);
+          const history = await historyRes.json();
+          setMessages(history.map(msg => ({
+            id: msg.timestamp || Date.now(),
+            text: msg.content,
+            isUser: msg.role === 'user'
+          })));
+        }
 
       } catch (error) {
         console.error('初始化失败:', error);
@@ -40,8 +38,66 @@ function App() {
     initTestSession();
   }, []);
 
+    // 处理新建会话点击
+    const handleNewSession = async () => {
+      const newSessionId = await createNewSession();
+      if (newSessionId) {
+        setCurrentSessionId(newSessionId);
+        setMessages([]); // 清空当前消息
+        setNewMessage('');
+      }
+    };
+
+  
+    // 根据消息生成会话参数
+    const generateSessionParams = (userInput) => {
+      return {
+        theme: userInput, // 截取前20字符作为主题
+        participants: DEFAULT_PARTICIPANTS,
+        initial_prompt: userInput
+      };
+    };
+
+
+  // 创建会话（带用户输入参数）
+  const createNewSession = async (userInput) => {
+    try {
+      const params = generateSessionParams(userInput);
+      
+      const res = await fetch(`${API_BASE}/sessions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(params)
+      });
+      
+      if (!res.ok) throw new Error('会话创建失败');
+      
+      const { session_id } = await res.json();
+      
+      setSessions(prev => [...prev, {
+        id: session_id,
+        title: params.theme  // 使用生成的主题
+      }]);
+      
+      return session_id;
+      
+    } catch (error) {
+      console.error('创建失败:', error);
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        text: `会话创建失败: ${error.message}`,
+        isUser: false
+      }]);
+      return null;
+    }
+  };
+  
+
   const handleSend = async () => {
-    if (!newMessage.trim() || !currentSessionId) return;
+    const userInput = newMessage.trim();
+    if (!userInput) return;
   
     // 添加用户消息
     const userMessage = {
@@ -54,17 +110,32 @@ function App() {
   
     try {
       setIsLoading(true);
+
+      // 智能创建会话
+      let sessionId = currentSessionId;
+      if (!sessionId) {
+        sessionId = await createNewSession(userInput);
+        if (!sessionId) return;
+        setCurrentSessionId(sessionId);
+      }
+
+      // 添加用户消息
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        text: userInput,
+        isUser: true
+      }]);
       
-      // 调用测试接口
+      // 发送生成请求
       const res = await fetch(`${API_BASE}/generate`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          session_id: currentSessionId,
-          prompt: newMessage,
-          // delay: 0.5 // 可选参数
+          session_id: sessionId,
+          prompt: userInput,
+          initiator: "user"  // 标记用户为讨论发起者
         })
       });
       
@@ -104,12 +175,21 @@ function App() {
       setIsLoading(false);
     }
   };
+
+
   return (
     <div className="app">
       <div className="sidebar">
         <div className="sidebar-header">
           会话列表
           <div className="test-badge">测试模式</div>
+          <button 
+              className="new-session-btn"
+              onClick={handleNewSession}
+              title="新建会话"
+            >
+              +
+            </button>
         </div>
         {sessions.map(session => (
           <div
