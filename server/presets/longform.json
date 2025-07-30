@@ -1,6 +1,0 @@
-{
-    "num_predict": 512,
-    "num_ctx": 2048,
-    "temperature": 0.9,
-    "repeat_penalty": 1.1
-}
