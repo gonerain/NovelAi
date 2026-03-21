@@ -1,0 +1,244 @@
+{
+  "compact": {
+    "profileId": "author-profile-demo",
+    "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+    "corePreferences": [
+      "自我救赎",
+      "拒绝廉价",
+      "慢热叙事"
+    ],
+    "favoriteCharacterTypes": [
+      "冷静破碎",
+      "病弱克制",
+      "嘴硬"
+    ],
+    "favoriteRelationshipPatterns": [
+      "试探误读",
+      "迟来坦白"
+    ],
+    "plotBiases": [
+      "慢热推进",
+      "拆小结果"
+    ],
+    "endingBiases": [
+      "苦涩成立",
+      "点题震撼"
+    ],
+    "aestheticMotifs": [
+      "雨夜旧伤",
+      "照顾装没事"
+    ],
+    "topConstraints": [
+      {
+        "id": "con1",
+        "name": "拒绝廉价和解",
+        "description": "和解需代价，避快速解决。",
+        "severity": "high"
+      },
+      {
+        "id": "con2",
+        "name": "避工具人配角",
+        "description": "配角有动机，非仅服务主角。",
+        "severity": "medium"
+      }
+    ],
+    "activeComponents": [
+      {
+        "id": "comp1",
+        "name": "自我理解救赎",
+        "category": "theme",
+        "planner": [
+          "渐进心理设计"
+        ],
+        "writer": [
+          "刻画内在挣扎"
+        ],
+        "reviewer": [
+          "救赎逻辑"
+        ]
+      },
+      {
+        "id": "comp2",
+        "name": "冷静破碎角色",
+        "category": "character",
+        "planner": [
+          "平衡反差"
+        ],
+        "writer": [
+          "展现脆弱"
+        ],
+        "reviewer": [
+          "一致性"
+        ]
+      },
+      {
+        "id": "comp3",
+        "name": "试探关系张力",
+        "category": "conflict",
+        "planner": [
+          "设计误解"
+        ],
+        "writer": [
+          "写微妙互动"
+        ],
+        "reviewer": [
+          "张力维持"
+        ]
+      }
+    ]
+  },
+  "planner": {
+    "task": "planner",
+    "profileId": "author-profile-demo",
+    "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+    "hardConstraints": [
+      "和解需代价，避快速解决。",
+      "配角有动机，非仅服务主角。"
+    ],
+    "softPreferences": [
+      "自我救赎",
+      "拒绝廉价",
+      "慢热叙事",
+      "慢热推进",
+      "拆小结果"
+    ],
+    "activeComponents": [
+      {
+        "id": "comp1",
+        "name": "自我理解救赎",
+        "category": "theme",
+        "planner": [
+          "渐进心理设计"
+        ]
+      },
+      {
+        "id": "comp2",
+        "name": "冷静破碎角色",
+        "category": "character",
+        "planner": [
+          "平衡反差"
+        ]
+      },
+      {
+        "id": "comp3",
+        "name": "试探关系张力",
+        "category": "conflict",
+        "planner": [
+          "设计误解"
+        ]
+      }
+    ],
+    "promptCapsule": [
+      "规划规则：专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+      "硬约束：和解需代价，避快速解决。",
+      "硬约束：配角有动机，非仅服务主角。",
+      "软偏好：自我救赎",
+      "软偏好：拒绝廉价",
+      "软偏好：慢热叙事",
+      "软偏好：慢热推进",
+      "软偏好：拆小结果"
+    ]
+  },
+  "writer": {
+    "task": "writer",
+    "profileId": "author-profile-demo",
+    "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+    "hardConstraints": [
+      "和解需代价，避快速解决。",
+      "配角有动机，非仅服务主角。"
+    ],
+    "softPreferences": [
+      "冷静破碎",
+      "病弱克制",
+      "嘴硬",
+      "试探误读",
+      "迟来坦白"
+    ],
+    "activeComponents": [
+      {
+        "id": "comp1",
+        "name": "自我理解救赎",
+        "category": "theme",
+        "writer": [
+          "刻画内在挣扎"
+        ]
+      },
+      {
+        "id": "comp2",
+        "name": "冷静破碎角色",
+        "category": "character",
+        "writer": [
+          "展现脆弱"
+        ]
+      },
+      {
+        "id": "comp3",
+        "name": "试探关系张力",
+        "category": "conflict",
+        "writer": [
+          "写微妙互动"
+        ]
+      }
+    ],
+    "promptCapsule": [
+      "写作规则：专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+      "硬约束：和解需代价，避快速解决。",
+      "硬约束：配角有动机，非仅服务主角。",
+      "软偏好：冷静破碎",
+      "软偏好：病弱克制",
+      "软偏好：嘴硬",
+      "软偏好：试探误读",
+      "软偏好：迟来坦白"
+    ]
+  },
+  "reviewer": {
+    "task": "reviewer",
+    "profileId": "author-profile-demo",
+    "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+    "hardConstraints": [
+      "和解需代价，避快速解决。",
+      "配角有动机，非仅服务主角。"
+    ],
+    "softPreferences": [
+      "拒绝廉价和解",
+      "避工具人配角",
+      "苦涩成立",
+      "点题震撼"
+    ],
+    "activeComponents": [
+      {
+        "id": "comp1",
+        "name": "自我理解救赎",
+        "category": "theme",
+        "reviewer": [
+          "救赎逻辑"
+        ]
+      },
+      {
+        "id": "comp2",
+        "name": "冷静破碎角色",
+        "category": "character",
+        "reviewer": [
+          "一致性"
+        ]
+      },
+      {
+        "id": "comp3",
+        "name": "试探关系张力",
+        "category": "conflict",
+        "reviewer": [
+          "张力维持"
+        ]
+      }
+    ],
+    "promptCapsule": [
+      "审校规则：专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+      "硬约束：和解需代价，避快速解决。",
+      "硬约束：配角有动机，非仅服务主角。",
+      "软偏好：拒绝廉价和解",
+      "软偏好：避工具人配角",
+      "软偏好：苦涩成立",
+      "软偏好：点题震撼"
+    ]
+  }
+}

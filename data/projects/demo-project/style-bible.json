@@ -1,0 +1,39 @@
+{
+  "narrativeStyle": [
+    "克制",
+    "细腻",
+    "慢热"
+  ],
+  "emotionalStyle": [
+    "通过动作和环境表达情绪",
+    "爆发段落短促有力"
+  ],
+  "dialogueStyle": [
+    "潜台词",
+    "试探",
+    "回避式对话"
+  ],
+  "pacingStyle": [
+    "慢热铺垫",
+    "关键段落集中爆发"
+  ],
+  "imagery": [
+    "雨夜",
+    "旧伤",
+    "药味",
+    "照顾与被照顾"
+  ],
+  "preferredConflictShapes": [
+    "误读",
+    "回避",
+    "自我否认"
+  ],
+  "preferredClimaxShapes": [
+    "迟来的理解",
+    "有代价的和解"
+  ],
+  "antiPatterns": [
+    "快速和解",
+    "说教式点题"
+  ]
+}

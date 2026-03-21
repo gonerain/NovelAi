@@ -1,0 +1,42 @@
+[
+  {
+    "id": "fact-inn-001",
+    "category": "location_rule",
+    "title": "客栈暂时安全但不宜久留",
+    "description": "客栈结界能暂时隔绝追踪，但最多维持一夜，天亮后追兵会重新锁定位置。",
+    "scope": "local",
+    "visibility": "public",
+    "relatedCharacterIds": [
+      "protagonist",
+      "senior_brother"
+    ],
+    "relatedLocationIds": [
+      "inn-room"
+    ]
+  },
+  {
+    "id": "fact-pill-002",
+    "category": "resource_rule",
+    "title": "丹药使用后会暴露异常灵息",
+    "description": "高阶保命丹药在使用时会产生极强灵息波动，极易让外人判断持有者来历不凡。",
+    "scope": "character_specific",
+    "visibility": "hidden",
+    "relatedCharacterIds": [
+      "protagonist"
+    ],
+    "relatedLocationIds": []
+  },
+  {
+    "id": "fact-brother-003",
+    "category": "character_rule",
+    "title": "师兄不会接受被完全排除在外",
+    "description": "师兄一旦确认主角在拿命硬撑，宁可强行介入，也不会继续装作没看见。",
+    "scope": "character_specific",
+    "visibility": "public",
+    "relatedCharacterIds": [
+      "senior_brother",
+      "protagonist"
+    ],
+    "relatedLocationIds": []
+  }
+]

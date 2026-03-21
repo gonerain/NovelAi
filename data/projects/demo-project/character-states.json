@@ -1,0 +1,105 @@
+[
+  {
+    "id": "protagonist",
+    "name": "主角",
+    "archetype": "克制型自毁者",
+    "coreTraits": [
+      "冷静",
+      "嘴硬",
+      "过度自持"
+    ],
+    "desires": [
+      "独自解决问题",
+      "维持体面"
+    ],
+    "fears": [
+      "被看穿脆弱",
+      "拖累他人"
+    ],
+    "wounds": [
+      "旧伤反复发作",
+      "长期拒绝求助形成惯性"
+    ],
+    "voiceNotes": [
+      "说话简短",
+      "擅长轻描淡写自己的伤势"
+    ],
+    "currentGoals": [
+      "隐藏伤势",
+      "不暴露底牌"
+    ],
+    "emotionalState": [
+      "压抑",
+      "疲惫",
+      "戒备"
+    ],
+    "knowledgeBoundary": [
+      "知道自己仍持有保命丹药"
+    ],
+    "secretsKept": [
+      "隐瞒保命底牌的来源与效果"
+    ],
+    "relationships": [
+      {
+        "targetCharacterId": "senior_brother",
+        "type": "ally",
+        "publicLabel": "同行师兄",
+        "privateTruth": "已经在情感上高度依赖对方，但不愿承认",
+        "trustLevel": 72,
+        "tensionLevel": 81,
+        "dependencyLevel": 68,
+        "lastUpdatedInChapter": 0
+      }
+    ]
+  },
+  {
+    "id": "senior_brother",
+    "name": "师兄",
+    "archetype": "表面温和实则强势的保护者",
+    "coreTraits": [
+      "敏锐",
+      "克制",
+      "不轻易逼问"
+    ],
+    "desires": [
+      "确认主角到底隐瞒了什么",
+      "保护主角活下来"
+    ],
+    "fears": [
+      "再次失去重要之人"
+    ],
+    "wounds": [
+      "曾因迟疑失去同伴"
+    ],
+    "voiceNotes": [
+      "说话平静",
+      "会用极轻的语气逼近真相"
+    ],
+    "currentGoals": [
+      "逼主角接受帮助"
+    ],
+    "emotionalState": [
+      "怀疑",
+      "担忧",
+      "压着火气"
+    ],
+    "knowledgeBoundary": [
+      "怀疑主角有底牌但不知道具体是什么"
+    ],
+    "secretsKept": [
+      "已经决定必要时强行介入"
+    ],
+    "relationships": [
+      {
+        "targetCharacterId": "protagonist",
+        "type": "ally",
+        "publicLabel": "同行师弟",
+        "privateTruth": "保护欲已越界",
+        "trustLevel": 78,
+        "tensionLevel": 76,
+        "dependencyLevel": 64,
+        "lastUpdatedInChapter": 0
+      }
+    ]
+  }
+]

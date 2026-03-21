@@ -1,0 +1,74 @@
+[
+  {
+    "id": "memory-pill-001",
+    "kind": "resource",
+    "title": "未使用的保命丹药",
+    "summary": "主角曾在黑市获得一枚可在濒死时保命的高阶丹药，至今未使用。",
+    "ownerCharacterId": "protagonist",
+    "relatedCharacterIds": [
+      "protagonist"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "濒死",
+      "重伤",
+      "无法撤离"
+    ],
+    "introducedIn": 12,
+    "lastReferencedIn": 12,
+    "status": "active",
+    "priority": "critical",
+    "visibility": "private",
+    "notes": [
+      "师兄并不知道丹药的存在"
+    ]
+  },
+  {
+    "id": "memory-wound-003",
+    "kind": "injury",
+    "title": "旧伤复发",
+    "summary": "主角此前留下的旧伤在高强度战斗后会迅速恶化，影响行动与判断。",
+    "ownerCharacterId": "protagonist",
+    "relatedCharacterIds": [
+      "protagonist",
+      "senior_brother"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "高强度战斗",
+      "灵力透支",
+      "重伤"
+    ],
+    "introducedIn": 8,
+    "lastReferencedIn": 18,
+    "status": "active",
+    "priority": "high",
+    "visibility": "public",
+    "notes": [
+      "主角习惯压着不说"
+    ]
+  },
+  {
+    "id": "memory-secret-002",
+    "kind": "promise",
+    "title": "绝不再欠人情",
+    "summary": "主角曾发誓不再通过接受拯救来延续生命，因此对求助有强烈抗拒。",
+    "ownerCharacterId": "protagonist",
+    "relatedCharacterIds": [
+      "protagonist"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "被迫求助",
+      "接受照顾"
+    ],
+    "introducedIn": 10,
+    "lastReferencedIn": 16,
+    "status": "active",
+    "priority": "high",
+    "visibility": "private",
+    "notes": [
+      "这是其拒绝师兄帮助的重要心理来源"
+    ]
+  }
+]

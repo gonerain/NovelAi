@@ -1,0 +1,194 @@
+{
+  "id": "author-profile-demo",
+  "name": "Demo Author Profile",
+  "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+  "corePreferences": [
+    "自我救赎",
+    "拒绝廉价",
+    "慢热叙事"
+  ],
+  "aestheticMotifs": [
+    "雨夜旧伤",
+    "照顾装没事"
+  ],
+  "favoriteCharacterTypes": [
+    "冷静破碎",
+    "病弱克制",
+    "嘴硬"
+  ],
+  "favoriteRelationshipPatterns": [
+    "试探误读",
+    "迟来坦白"
+  ],
+  "plotBiases": [
+    "慢热推进",
+    "拆小结果"
+  ],
+  "endingBiases": [
+    "苦涩成立",
+    "点题震撼"
+  ],
+  "components": [
+    {
+      "id": "comp1",
+      "name": "自我理解救赎",
+      "category": "theme",
+      "description": "自我理解救赎 component",
+      "strengthens": [
+        "心理深度",
+        "主题一致"
+      ],
+      "suppresses": [
+        "快速和解",
+        "浅层冲突"
+      ],
+      "effects": [
+        {
+          "target": "planner",
+          "apply": [
+            "渐进心理设计"
+          ],
+          "avoid": []
+        },
+        {
+          "target": "writer",
+          "apply": [
+            "刻画内在挣扎"
+          ],
+          "avoid": []
+        },
+        {
+          "target": "reviewer",
+          "apply": [
+            "救赎逻辑"
+          ],
+          "avoid": []
+        },
+        {
+          "target": "memory",
+          "apply": [
+            "关键顿悟"
+          ],
+          "avoid": []
+        }
+      ],
+      "validationHints": [
+        "救赎逻辑"
+      ],
+      "priority": 1,
+      "enabled": true
+    },
+    {
+      "id": "comp2",
+      "name": "冷静破碎角色",
+      "category": "character",
+      "description": "冷静破碎角色 component",
+      "strengthens": [
+        "角色复杂",
+        "情感张力"
+      ],
+      "suppresses": [
+        "扁平角色",
+        "直白表达"
+      ],
+      "effects": [
+        {
+          "target": "planner",
+          "apply": [
+            "平衡反差"
+          ],
+          "avoid": []
+        },
+        {
+          "target": "writer",
+          "apply": [
+            "展现脆弱"
+          ],
+          "avoid": []
+        },
+        {
+          "target": "reviewer",
+          "apply": [
+            "一致性"
+          ],
+          "avoid": []
+        },
+        {
+          "target": "memory",
+          "apply": [
+            "崩溃场景"
+          ],
+          "avoid": []
+        }
+      ],
+      "validationHints": [
+        "一致性"
+      ],
+      "priority": 2,
+      "enabled": true
+    },
+    {
+      "id": "comp3",
+      "name": "试探关系张力",
+      "category": "conflict",
+      "description": "试探关系张力 component",
+      "strengthens": [
+        "关系深度",
+        "叙事悬念"
+      ],
+      "suppresses": [
+        "快速亲密",
+        "工具人"
+      ],
+      "effects": [
+        {
+          "target": "planner",
+          "apply": [
+            "设计误解"
+          ],
+          "avoid": []
+        },
+        {
+          "target": "writer",
+          "apply": [
+            "写微妙互动"
+          ],
+          "avoid": []
+        },
+        {
+          "target": "reviewer",
+          "apply": [
+            "张力维持"
+          ],
+          "avoid": []
+        },
+        {
+          "target": "memory",
+          "apply": [
+            "关系里程碑"
+          ],
+          "avoid": []
+        }
+      ],
+      "validationHints": [
+        "张力维持"
+      ],
+      "priority": 3,
+      "enabled": true
+    }
+  ],
+  "constraints": [
+    {
+      "id": "con1",
+      "name": "拒绝廉价和解",
+      "description": "和解需代价，避快速解决。",
+      "severity": "high"
+    },
+    {
+      "id": "con2",
+      "name": "避工具人配角",
+      "description": "配角有动机，非仅服务主角。",
+      "severity": "medium"
+    }
+  ]
+}
