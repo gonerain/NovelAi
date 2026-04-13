@@ -2,6 +2,7 @@ import {
   applyMemoryUpdaterResult,
   buildContextPack,
   buildDerivedAuthorProfilePacks,
+  defaultPayoffPatterns,
   mapAuthorInterviewToProfile,
   normalizeAuthorInterviewResult,
   type ArcOutline,
@@ -82,6 +83,14 @@ interface ProjectBaseState {
   chapterPlans: ChapterPlan[];
 }
 
+interface InvalidateResult {
+  projectId: string;
+  chapterNumber: number;
+  deletedChapterNumbers: number[];
+  remainingChapterPlans: number;
+  remainingMemories: number;
+}
+
 function pickArcForChapter(
   arcOutlines: ArcOutline[],
   chapterNumber: number,
@@ -120,6 +129,15 @@ function pickBeatForChapter(
     return undefined;
   }
 
+  const rangedMatch = arcBeats.find((beat) => {
+    const range = beat.chapterRangeHint;
+    return range ? chapterNumber >= range.start && chapterNumber <= range.end : false;
+  });
+
+  if (rangedMatch) {
+    return rangedMatch;
+  }
+
   const range = arcOutline.chapterRangeHint;
   if (!range) {
     return arcBeats[0];
@@ -150,6 +168,72 @@ function uniqueStrings(items: string[], limit: number): string[] {
   }
 
   return result;
+}
+
+function stripGeneratedChapterNotes(notes: string[]): string[] {
+  return uniqueStrings(
+    notes.filter((note) => !/^Chapter\s+\d+:/i.test(note.trim())),
+    12,
+  );
+}
+
+function deriveFallbackSeedMemories(memories: StoryMemory[]): StoryMemory[] {
+  const nongenerated = memories.filter((memory) => !memory.id.startsWith("chapter-"));
+  const nongeneratedIds = new Set(nongenerated.map((memory) => memory.id));
+  const demoIds = new Set(demoStoryMemories.map((memory) => memory.id));
+
+  if (
+    nongenerated.length > 0 &&
+    nongenerated.every((memory) => demoIds.has(memory.id))
+  ) {
+    return demoStoryMemories
+      .filter((memory) => nongeneratedIds.has(memory.id))
+      .map((memory) => ({ ...memory, notes: [...memory.notes] }));
+  }
+
+  return nongenerated.map((memory) => ({
+    ...memory,
+    status: "active",
+    lastReferencedIn: memory.introducedIn,
+    notes: stripGeneratedChapterNotes(memory.notes),
+  }));
+}
+
+async function loadSeedStoryMemories(
+  repository: FileProjectRepository,
+  projectId: string,
+  currentMemories: StoryMemory[],
+): Promise<StoryMemory[]> {
+  const existingSeed = await repository.loadSeedStoryMemories(projectId);
+  if (existingSeed.length > 0) {
+    return existingSeed;
+  }
+
+  const fallbackSeed = deriveFallbackSeedMemories(currentMemories);
+  await repository.saveSeedStoryMemories(projectId, fallbackSeed);
+  return fallbackSeed;
+}
+
+function normalizePayoffPatternIds(args: {
+  plannerIds?: string[];
+  currentArc?: ArcOutline;
+  currentBeat?: BeatOutline;
+}): string[] {
+  const validIds = new Set(defaultPayoffPatterns.map((pattern) => pattern.id));
+  const preferredIds = [
+    ...(args.currentBeat?.payoffPatternIds ?? []),
+    ...(args.currentArc?.primaryPayoffPatternIds ?? []),
+  ].filter((id, index, items) => Boolean(id) && items.indexOf(id) === index);
+
+  const filteredPlannerIds = (args.plannerIds ?? []).filter((id) => validIds.has(id));
+
+  if (filteredPlannerIds.length > 0) {
+    const allowedPreferred = new Set(preferredIds);
+    const aligned = filteredPlannerIds.filter((id) => allowedPreferred.has(id));
+    return aligned.length > 0 ? aligned.slice(0, 2) : filteredPlannerIds.slice(0, 2);
+  }
+
+  return preferredIds.filter((id) => validIds.has(id)).slice(0, 2);
 }
 
 function upsertChapterPlan(chapterPlans: ChapterPlan[], chapterPlan: ChapterPlan): ChapterPlan[] {
@@ -255,6 +339,12 @@ async function ensureBootstrappedProject(
   await repository.saveCharacterStates(projectId, characterStates);
   await repository.saveWorldFacts(projectId, worldFacts);
   await repository.saveStoryMemories(projectId, storyMemories);
+  if ((await repository.loadSeedStoryMemories(projectId)).length === 0) {
+    await repository.saveSeedStoryMemories(
+      projectId,
+      loadedStoryMemories.length ? deriveFallbackSeedMemories(storyMemories) : demoStoryMemories,
+    );
+  }
 
   return {
     storySetup,
@@ -269,6 +359,61 @@ async function ensureBootstrappedProject(
     storyMemories,
     chapterPlans,
     validationIssues,
+  };
+}
+
+export async function invalidateFromChapter(args: {
+  projectId: string;
+  chapterNumber: number;
+}): Promise<InvalidateResult> {
+  const repository = new FileProjectRepository();
+
+  if (args.chapterNumber < 1) {
+    throw new Error("chapterNumber must be >= 1");
+  }
+
+  const currentMemories = await repository.loadStoryMemories(args.projectId);
+  const seedMemories = await loadSeedStoryMemories(repository, args.projectId, currentMemories);
+  const allChapterNumbers = await repository.listChapterArtifactNumbers(args.projectId);
+  const deletedChapterNumbers = allChapterNumbers.filter((number) => number >= args.chapterNumber);
+  const keptChapterNumbers = allChapterNumbers.filter((number) => number < args.chapterNumber);
+
+  let rebuiltMemories = seedMemories.map((memory) => ({
+    ...memory,
+    notes: [...memory.notes],
+  }));
+
+  for (const chapterNumber of keptChapterNumbers) {
+    const artifact = await repository.loadChapterArtifact(args.projectId, chapterNumber);
+    if (!artifact) {
+      continue;
+    }
+
+    rebuiltMemories = applyMemoryUpdaterResult(
+      rebuiltMemories,
+      artifact.memoryUpdate,
+      artifact.chapterNumber,
+    );
+  }
+
+  const chapterPlans = await repository.loadChapterPlans(args.projectId);
+  const remainingPlans = chapterPlans.filter(
+    (plan) => (plan.chapterNumber ?? Number.MAX_SAFE_INTEGER) < args.chapterNumber,
+  );
+
+  for (const chapterNumber of deletedChapterNumbers) {
+    await repository.deleteChapterArtifact(args.projectId, chapterNumber);
+  }
+
+  await repository.saveChapterPlans(args.projectId, remainingPlans);
+  await repository.saveStoryMemories(args.projectId, rebuiltMemories);
+
+  return {
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    deletedChapterNumbers,
+    remainingChapterPlans: remainingPlans.length,
+    remainingMemories: rebuiltMemories.length,
   };
 }
 
@@ -341,8 +486,13 @@ async function generateChapterArtifact(args: {
   const chapterPlan = {
     ...plannerResult.object.chapterPlan,
     chapterNumber: args.chapterNumber,
-    arcId: plannerResult.object.chapterPlan.arcId ?? currentArc?.id ?? "arc-1",
-    beatId: plannerResult.object.chapterPlan.beatId ?? currentBeat?.id,
+    arcId: currentArc?.id ?? plannerResult.object.chapterPlan.arcId ?? "arc-1",
+    beatId: currentBeat?.id ?? plannerResult.object.chapterPlan.beatId,
+    payoffPatternIds: normalizePayoffPatternIds({
+      plannerIds: plannerResult.object.chapterPlan.payoffPatternIds,
+      currentArc,
+      currentBeat,
+    }),
   };
 
   const contextPack = buildContextPack({
@@ -555,6 +705,16 @@ export function formatV1RunResult(result: V1RunResult): string {
   }
 
   return lines.join("\n");
+}
+
+export function formatInvalidateResult(result: InvalidateResult): string {
+  return [
+    `Project: ${result.projectId}`,
+    `Invalidated from chapter: ${result.chapterNumber}`,
+    `Deleted chapter artifacts: ${result.deletedChapterNumbers.length > 0 ? result.deletedChapterNumbers.join(", ") : "none"}`,
+    `Remaining chapter plans: ${result.remainingChapterPlans}`,
+    `Remaining memories: ${result.remainingMemories}`,
+  ].join("\n");
 }
 
 export const defaultDemoProjectId = "demo-project";

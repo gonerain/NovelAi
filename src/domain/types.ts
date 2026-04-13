@@ -226,6 +226,10 @@ export interface BeatOutline {
   id: EntityId;
   arcId: EntityId;
   order: number;
+  chapterRangeHint?: {
+    start: number;
+    end: number;
+  };
   beatGoal: string;
   conflict: string;
   expectedChange: string;

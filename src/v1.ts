@@ -7,7 +7,9 @@ import { FileProjectRepository } from "./storage/index.js";
 import {
   bootstrapProject,
   defaultDemoProjectId,
+  formatInvalidateResult,
   formatV1RunResult,
+  invalidateFromChapter,
   runV1,
 } from "./v1-lib.js";
 
@@ -19,7 +21,8 @@ type CommandName =
   | "outline:generate-stack"
   | "chapter:generate"
   | "chapter:generate-first"
-  | "chapter:inspect";
+  | "chapter:inspect"
+  | "chapter:invalidate-from";
 
 interface ParsedArgs {
   command: CommandName;
@@ -70,6 +73,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     "chapter:generate",
     "chapter:generate-first",
     "chapter:inspect",
+    "chapter:invalidate-from",
   ]);
 
   if (!allowed.has(command)) {
@@ -206,6 +210,7 @@ function usage(): string {
     "  chapter generate --project <id> --chapter <n>",
     "  chapter generate-first --project <id> --count <n>",
     "  chapter inspect --project <id> --chapter <n>",
+    "  chapter invalidate-from --project <id> --chapter <n>",
   ].join("\n");
 }
 
@@ -295,6 +300,18 @@ async function main(): Promise<void> {
         );
       }
       console.log(summarizeChapterArtifact(parsed.projectId, artifact));
+      return;
+    }
+
+    case "chapter:invalidate-from": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("chapter invalidate-from requires --chapter <n>");
+      }
+      const result = await invalidateFromChapter({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatInvalidateResult(result));
       return;
     }
   }

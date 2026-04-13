@@ -55,12 +55,16 @@ export interface ProjectRepository {
 
   saveStoryMemories(projectId: string, memories: StoryMemory[]): Promise<void>;
   loadStoryMemories(projectId: string): Promise<StoryMemory[]>;
+  saveSeedStoryMemories(projectId: string, memories: StoryMemory[]): Promise<void>;
+  loadSeedStoryMemories(projectId: string): Promise<StoryMemory[]>;
 
   saveChapterPlans(projectId: string, chapterPlans: ChapterPlan[]): Promise<void>;
   loadChapterPlans(projectId: string): Promise<ChapterPlan[]>;
 
   saveChapterArtifact(projectId: string, artifact: ChapterArtifact): Promise<void>;
   loadChapterArtifact(projectId: string, chapterNumber: number): Promise<ChapterArtifact | null>;
+  listChapterArtifactNumbers(projectId: string): Promise<number[]>;
+  deleteChapterArtifact(projectId: string, chapterNumber: number): Promise<void>;
 
   loadStoryProject(projectId: string): Promise<StoryProject | null>;
 }

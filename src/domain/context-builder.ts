@@ -101,6 +101,19 @@ function uniqueTrimmed(items: string[], limit: number): string[] {
   return result;
 }
 
+function asForbiddenRule(item: string): string {
+  const normalized = item.trim();
+  if (!normalized) {
+    return normalized;
+  }
+
+  if (/^(do not|don't|avoid|never)\b/i.test(normalized)) {
+    return normalized;
+  }
+
+  return `Do not: ${normalized}`;
+}
+
 function priorityWeight(priority: StoryMemory["priority"]): number {
   const weight = { critical: 4, high: 3, medium: 2, low: 1 } as const;
   return weight[priority];
@@ -250,6 +263,7 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       input.arcOutline?.arcSellingPoint ? `Arc selling point: ${input.arcOutline.arcSellingPoint}` : "",
       input.arcOutline?.arcHook ? `Arc hook: ${input.arcOutline.arcHook}` : "",
       input.arcOutline?.arcPayoff ? `Arc payoff: ${input.arcOutline.arcPayoff}` : "",
+      ...(input.beatOutline?.constraints ?? []).map((item) => `Beat constraint: ${item}`),
       `Chapter goal: ${input.chapterPlan.chapterGoal}`,
       `Emotional goal: ${input.chapterPlan.emotionalGoal}`,
       `Planned outcome: ${input.chapterPlan.plannedOutcome}`,
@@ -261,8 +275,12 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
     task: input.task,
     authorRules,
     hardConstraints: uniqueTrimmed(
-      [...input.authorPack.hardConstraints, ...input.chapterPlan.disallowedMoves],
-      6,
+      [
+        ...input.authorPack.hardConstraints,
+        ...input.chapterPlan.disallowedMoves.map(asForbiddenRule),
+        ...(input.beatOutline?.constraints ?? []).map(asForbiddenRule),
+      ],
+      10,
     ),
     readerValue: {
       sellingPoint: input.arcOutline?.arcSellingPoint,

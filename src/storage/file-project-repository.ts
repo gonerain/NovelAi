@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type {
@@ -151,6 +151,16 @@ export class FileProjectRepository implements ProjectRepository {
     return (await this.readProjectFile<StoryMemory[]>(projectId, "story-memories.json")) ?? [];
   }
 
+  async saveSeedStoryMemories(projectId: string, memories: StoryMemory[]): Promise<void> {
+    await this.writeProjectFile(projectId, "seed-story-memories.json", memories);
+  }
+
+  async loadSeedStoryMemories(projectId: string): Promise<StoryMemory[]> {
+    return (
+      (await this.readProjectFile<StoryMemory[]>(projectId, "seed-story-memories.json")) ?? []
+    );
+  }
+
   async saveChapterPlans(projectId: string, chapterPlans: ChapterPlan[]): Promise<void> {
     await this.writeProjectFile(projectId, "chapter-plans.json", chapterPlans);
   }
@@ -174,6 +184,46 @@ export class FileProjectRepository implements ProjectRepository {
       projectId,
       path.join("chapters", this.chapterFolderName(chapterNumber), "result.json"),
     );
+  }
+
+  async listChapterArtifactNumbers(projectId: string): Promise<number[]> {
+    const chaptersDir = path.join(this.projectDir(projectId), "chapters");
+
+    try {
+      const entries = await readdir(chaptersDir, { withFileTypes: true });
+      return entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => {
+          const match = /^chapter-(\d+)$/.exec(entry.name);
+          return match ? Number(match[1]) : null;
+        })
+        .filter((value): value is number => value !== null)
+        .sort((left, right) => left - right);
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return [];
+      }
+
+      throw error;
+    }
+  }
+
+  async deleteChapterArtifact(projectId: string, chapterNumber: number): Promise<void> {
+    const target = this.projectFilePath(
+      projectId,
+      path.join("chapters", this.chapterFolderName(chapterNumber)),
+    );
+
+    try {
+      await rm(target, { recursive: true, force: true });
+      await this.touchMetadata(projectId);
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return;
+      }
+
+      throw error;
+    }
   }
 
   async loadStoryProject(projectId: string): Promise<StoryProject | null> {
