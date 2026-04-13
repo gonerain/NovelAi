@@ -1,5 +1,7 @@
 import type { TaskAuthorPack } from "./author-profile-packs.js";
 import type {
+  ArcOutline,
+  BeatOutline,
   ChapterPlan,
   CharacterState,
   EntityId,
@@ -15,6 +17,8 @@ export interface ContextBuilderInput {
   themeBible: ThemeBible;
   styleBible: StyleBible;
   chapterPlan: ChapterPlan;
+  arcOutline?: ArcOutline;
+  beatOutline?: BeatOutline;
   characterStates: CharacterState[];
   storyMemories: StoryMemory[];
   worldFacts: WorldFact[];
@@ -56,6 +60,13 @@ export interface ContextPack {
   task: "writer" | "reviewer";
   authorRules: string[];
   hardConstraints: string[];
+  readerValue?: {
+    sellingPoint?: string;
+    hook?: string;
+    payoff?: string;
+    powerPatterns: string[];
+    payoffPatterns: string[];
+  };
   chapterObjective: {
     goal: string;
     emotionalGoal: string;
@@ -236,6 +247,9 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
   const promptCapsule = uniqueTrimmed(
     [
       ...input.authorPack.promptCapsule,
+      input.arcOutline?.arcSellingPoint ? `Arc selling point: ${input.arcOutline.arcSellingPoint}` : "",
+      input.arcOutline?.arcHook ? `Arc hook: ${input.arcOutline.arcHook}` : "",
+      input.arcOutline?.arcPayoff ? `Arc payoff: ${input.arcOutline.arcPayoff}` : "",
       `Chapter goal: ${input.chapterPlan.chapterGoal}`,
       `Emotional goal: ${input.chapterPlan.emotionalGoal}`,
       `Planned outcome: ${input.chapterPlan.plannedOutcome}`,
@@ -250,6 +264,20 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       [...input.authorPack.hardConstraints, ...input.chapterPlan.disallowedMoves],
       6,
     ),
+    readerValue: {
+      sellingPoint: input.arcOutline?.arcSellingPoint,
+      hook: input.arcOutline?.arcHook,
+      payoff: input.arcOutline?.arcPayoff,
+      powerPatterns: uniqueTrimmed(input.arcOutline?.primaryPowerPatternIds ?? [], 3),
+      payoffPatterns: uniqueTrimmed(
+        [
+          ...(input.arcOutline?.primaryPayoffPatternIds ?? []),
+          ...(input.beatOutline?.payoffPatternIds ?? []),
+          ...(input.chapterPlan.payoffPatternIds ?? []),
+        ],
+        4,
+      ),
+    },
     chapterObjective: {
       goal: input.chapterPlan.chapterGoal,
       emotionalGoal: input.chapterPlan.emotionalGoal,

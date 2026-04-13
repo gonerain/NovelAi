@@ -351,6 +351,8 @@ async function generateChapterArtifact(args: {
     themeBible: args.base.themeBible,
     styleBible: args.base.styleBible,
     chapterPlan,
+    arcOutline: currentArc,
+    beatOutline: currentBeat,
     characterStates: args.base.characterStates,
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
