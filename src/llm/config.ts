@@ -5,11 +5,27 @@ export const defaultTaskRoutes: Record<TaskName, ModelRoute> = {
     provider: "deepseek",
     model: "deepseek-chat",
   },
+  story_outline: {
+    provider: "deepseek",
+    model: "deepseek-chat",
+  },
+  cast_expansion: {
+    provider: "deepseek",
+    model: "deepseek-chat",
+  },
+  arc_outline: {
+    provider: "deepseek",
+    model: "deepseek-chat",
+  },
   planner: {
     provider: "deepseek",
     model: "deepseek-chat",
   },
   writer: {
+    provider: "deepseek",
+    model: "deepseek-chat",
+  },
+  review_missing_resource: {
     provider: "deepseek",
     model: "deepseek-chat",
   },
@@ -22,7 +38,7 @@ export const defaultTaskRoutes: Record<TaskName, ModelRoute> = {
     model: "deepseek-chat",
   },
   memory_updater: {
-    provider: "ollama",
-    model: "qwen3:8b",
+    provider: "deepseek",
+    model: "deepseek-chat",
   },
 };

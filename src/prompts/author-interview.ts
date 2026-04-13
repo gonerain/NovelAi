@@ -9,37 +9,37 @@ export const authorInterviewQuestions: AuthorInterviewQuestion[] = [
   {
     id: "theme_core",
     prompt:
-      "你最想反复写的主题是什么？角色最终最应该明白、失去或救回什么？",
+      "What themes do you most want to write again and again? What should the characters finally understand, lose, protect, or redeem?",
     intent: "Capture the author's core themes and emotional destination.",
   },
   {
     id: "character_bias",
     prompt:
-      "你最容易偏爱的角色通常是什么样？他们通常带着什么伤口、欲望、缺点或执念？",
+      "What kinds of characters do you instinctively favor? What wounds, flaws, obsessions, desires, or masks do they usually carry?",
     intent: "Capture preferred character archetypes and wounds.",
   },
   {
     id: "relationship_pattern",
     prompt:
-      "你最喜欢角色之间怎么拉扯、靠近、伤害和修复？你偏爱的关系张力是什么？",
+      "How do you prefer characters to pull, hurt, avoid, approach, and repair each other? What kind of relationship tension do you like most?",
     intent: "Capture relationship dynamics and repair rules.",
   },
   {
     id: "plot_bias",
     prompt:
-      "你喜欢故事怎么推进？更偏慢熬、爆发、密集转折、强情绪驱动，还是别的方式？",
+      "How do you like stories to move? Slow burn, explosive turns, dense plotting, emotional causality, or something else?",
     intent: "Capture plotting and pacing preferences.",
   },
   {
     id: "ending_bias",
     prompt:
-      "你理想中的结局是什么感觉？你能接受怎样的失去、代价、遗憾或圆满？",
+      "What kind of ending feels right to you? What kinds of loss, cost, regret, fulfillment, or closure can you accept?",
     intent: "Capture ending shape and acceptable cost.",
   },
   {
     id: "aesthetic_private_goods",
     prompt:
-      "你总会忍不住塞进作品里的私货、意象、场景、桥段或禁忌是什么？",
+      "What motifs, scenes, images, dynamics, private obsessions, or hard dislikes do you always sneak into your stories?",
     intent: "Capture motifs, aesthetic patterns, and hard dislikes.",
   },
 ];
@@ -60,31 +60,25 @@ export function buildAuthorInterviewMessages(
 ): ChatMessage[] {
   const projectContext = input.targetProject
     ? [
-        input.targetProject.title
-          ? `项目标题：${input.targetProject.title}`
-          : undefined,
-        input.targetProject.premise
-          ? `项目前提：${input.targetProject.premise}`
-          : undefined,
-        input.targetProject.themeHint
-          ? `主题提示：${input.targetProject.themeHint}`
-          : undefined,
+        input.targetProject.title ? `Project title: ${input.targetProject.title}` : undefined,
+        input.targetProject.premise ? `Premise: ${input.targetProject.premise}` : undefined,
+        input.targetProject.themeHint ? `Theme hint: ${input.targetProject.themeHint}` : undefined,
       ]
         .filter(Boolean)
         .join("\n")
     : "";
 
   const priorProfile = input.priorProfile
-    ? `已有作者信息参考：${JSON.stringify(input.priorProfile, null, 2)}`
+    ? `Existing author profile for reference:\n${JSON.stringify(input.priorProfile, null, 2)}`
     : "";
 
   const answers = input.userRawAnswers
     .map((item) => {
       const question =
-        authorInterviewQuestions.find((question) => question.id === item.questionId)
-          ?.prompt ?? item.questionId;
+        authorInterviewQuestions.find((question) => question.id === item.questionId)?.prompt ??
+        item.questionId;
 
-      return `问题：${question}\n回答：${item.answer}`;
+      return `Question: ${question}\nAnswer: ${item.answer}`;
     })
     .join("\n\n");
 
@@ -92,24 +86,19 @@ export function buildAuthorInterviewMessages(
     {
       role: "system",
       content: [
-        "你是一个作者采访建模器。",
-        "你的任务不是写小说，而是从作者的自然语言回答中抽取作者偏好。",
-        "输出必须同时包含 display 和 normalized 两层结果。",
-        "display 用于给作者确认，允许简短解释，但要克制，不要写成长篇分析。",
-        "display.summary 最多 60 个汉字。",
-        "display.authorProfile.summary 最多 80 个汉字。",
-        "display.components 的 description 控制在 35 个汉字以内。",
-        "display.components 的 validationHints 最多 2 条，每条尽量短。",
-        "normalized 用于程序消费，必须更短、更硬、更稳定。",
-        "normalized.authorProfile 的每个数组最多 3 项。",
-        "normalized.components 每个数组字段最多 2 项，且每项控制在短语级别。",
-        `component.category 只能从以下枚举中选择：${allowedCategories.join(", ")}。`,
-        "不要发明新的 category，例如 relationship、pacing。",
-        "组件数量控制在 3 到 5 个之间，只保留高信号偏好。",
-        "每个 normalized component 只保留短字段，不要写成长句说明。",
-        "constraints 最多 3 条，openQuestions 最多 2 条，conflictsDetected 最多 2 条。",
-        "如果某类信息不确定，放进 openQuestions 或 conflictsDetected，而不是瞎补。",
-        "禁止输出 schema 说明、注释或额外解释。",
+        "You are an author preference modeler.",
+        "Your task is not to write fiction. Your task is to convert the author's natural-language answers into a compact, structured author profile.",
+        "Output must contain both display and normalized sections.",
+        "display is for a human author to confirm. Keep it short and readable, not essay-like.",
+        "normalized is for programmatic use. It must be shorter, harder, and more stable.",
+        "Each normalized authorProfile array should contain at most 3 items.",
+        "Generate between 3 and 5 components only.",
+        `component.category must be one of: ${allowedCategories.join(", ")}.`,
+        "Do not invent categories such as relationship or pacing.",
+        "For normalized components, keep each string brief and operational.",
+        "Constraints: at most 3. Open questions: at most 2. Conflicts detected: at most 2.",
+        "If something is unclear, put it in openQuestions or conflictsDetected instead of inventing certainty.",
+        "Return valid JSON only.",
       ].join("\n"),
     },
     {
@@ -117,7 +106,7 @@ export function buildAuthorInterviewMessages(
       content: [
         projectContext,
         priorProfile,
-        "以下是作者采访回答，请据此建模：",
+        "Build the author model from the following interview answers:",
         answers,
       ]
         .filter(Boolean)

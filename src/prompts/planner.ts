@@ -2,39 +2,91 @@ import type { PlannerInput, PlannerResult } from "../domain/index.js";
 import type { ChatMessage } from "../llm/types.js";
 
 export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
+  const storyLine = input.storyOutline
+    ? `Story outline: theme=${input.storyOutline.coreTheme}; ending=${input.storyOutline.endingTarget}; turns=${input.storyOutline.keyTurningPoints.join(" | ")}`
+    : undefined;
+
+  const arcLine = input.arcOutline
+    ? [
+        `Arc outline: name=${input.arcOutline.name}`,
+        `goal=${input.arcOutline.arcGoal}`,
+        input.arcOutline.arcSellingPoint ? `selling=${input.arcOutline.arcSellingPoint}` : undefined,
+        input.arcOutline.arcHook ? `hook=${input.arcOutline.arcHook}` : undefined,
+        input.arcOutline.arcPayoff ? `payoff=${input.arcOutline.arcPayoff}` : undefined,
+        input.arcOutline.primaryPowerPatternIds?.length
+          ? `power patterns=${input.arcOutline.primaryPowerPatternIds.join(" | ")}`
+          : undefined,
+        input.arcOutline.primaryPayoffPatternIds?.length
+          ? `payoff patterns=${input.arcOutline.primaryPayoffPatternIds.join(" | ")}`
+          : undefined,
+        input.arcOutline.riskNotes?.length
+          ? `risks=${input.arcOutline.riskNotes.join(" | ")}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join("; ")
+    : undefined;
+
+  const beatLine = input.beatOutline
+    ? [
+        `Beat outline: goal=${input.beatOutline.beatGoal}`,
+        `conflict=${input.beatOutline.conflict}`,
+        `change=${input.beatOutline.expectedChange}`,
+        input.beatOutline.payoffPatternIds?.length
+          ? `beat payoff patterns=${input.beatOutline.payoffPatternIds.join(" | ")}`
+          : undefined,
+        input.beatOutline.revealTargets.length > 0
+          ? `reveals=${input.beatOutline.revealTargets.join(" | ")}`
+          : undefined,
+        input.beatOutline.constraints.length > 0
+          ? `beat constraints=${input.beatOutline.constraints.join(" | ")}`
+          : undefined,
+        input.beatOutline.openingAnchor
+          ? `opening hook=${input.beatOutline.openingAnchor.hook}`
+          : undefined,
+      ]
+        .filter(Boolean)
+        .join("; ")
+    : undefined;
+
   return [
     {
       role: "system",
       content: [
-        "你是一个长篇网文章节规划器。",
-        "你的任务是根据作者偏好、主题、风格和当前剧情状态，产出结构化的 ChapterPlan。",
-        "不要写正文，只做章节规划。",
-        "chapterPlan 必须聚焦单章，不要规划整卷。",
-        "sceneTags 控制在 3 到 5 个。",
-        "mustHitConflicts 控制在 2 到 4 条。",
-        "disallowedMoves 控制在 2 到 4 条。",
-        "styleReminders 控制在 3 到 5 条。",
-        "plannerNotes 控制在 2 到 4 条。",
+        "You are a long-form web-novel chapter planner.",
+        "Produce a structured ChapterPlan for exactly one chapter.",
+        "Do not write prose. Do not explain your reasoning.",
+        "The chapter plan must inherit the current arc's selling point, hook, and payoff pressure rather than drifting into generic continuation.",
+        "Prefer 1 or 2 payoffPatternIds that match the current arc and beat. Do not output a long list.",
+        "Keep sceneTags between 3 and 5 items.",
+        "Keep mustHitConflicts between 2 and 4 items.",
+        "Keep disallowedMoves between 2 and 4 items.",
+        "Keep styleReminders between 3 and 5 items.",
+        "Keep plannerNotes between 2 and 4 items.",
+        "Prioritize current chapter utility over broad arc summary.",
       ].join("\n"),
     },
     {
       role: "user",
       content: [
-        `作品前提：${input.premise}`,
-        `当前卷目标：${input.currentArcGoal}`,
-        `当前局势：${input.currentSituation}`,
-        input.chapterNumber ? `章节序号：${input.chapterNumber}` : undefined,
-        input.arcId ? `卷标识：${input.arcId}` : undefined,
-        `激活角色：${input.activeCharacterIds.join(", ")}`,
+        `Premise: ${input.premise}`,
+        `Current arc goal: ${input.currentArcGoal}`,
+        `Current situation: ${input.currentSituation}`,
+        input.chapterNumber ? `Chapter number: ${input.chapterNumber}` : undefined,
+        input.arcId ? `Arc id: ${input.arcId}` : undefined,
+        `Active characters: ${input.activeCharacterIds.join(", ")}`,
         input.candidateMemoryIds.length > 0
-          ? `候选记忆：${input.candidateMemoryIds.join(", ")}`
+          ? `Candidate memory ids: ${input.candidateMemoryIds.join(", ")}`
           : undefined,
         input.recentConsequences.length > 0
-          ? `近期后果：${input.recentConsequences.join("；")}`
+          ? `Recent consequences: ${input.recentConsequences.join(" | ")}`
           : undefined,
-        `作者规则：${input.authorPack.promptCapsule.join(" | ")}`,
-        `主题基线：核心主题=${input.themeBible.coreTheme}；子主题=${input.themeBible.subThemes.join("、")}；结局目标=${input.themeBible.endingTarget}；情绪终点=${input.themeBible.emotionalDestination}`,
-        `风格基线：叙事=${input.styleBible.narrativeStyle.join("、")}；情绪=${input.styleBible.emotionalStyle.join("、")}；节奏=${input.styleBible.pacingStyle.join("、")}；反模式=${input.styleBible.antiPatterns.join("、")}`,
+        `Author planner pack: ${input.authorPack.promptCapsule.join(" | ")}`,
+        `Theme baseline: core=${input.themeBible.coreTheme}; subthemes=${input.themeBible.subThemes.join(" | ")}; ending=${input.themeBible.endingTarget}; emotion=${input.themeBible.emotionalDestination}`,
+        `Style baseline: narrative=${input.styleBible.narrativeStyle.join(" | ")}; emotion=${input.styleBible.emotionalStyle.join(" | ")}; pacing=${input.styleBible.pacingStyle.join(" | ")}; avoid=${input.styleBible.antiPatterns.join(" | ")}`,
+        storyLine,
+        arcLine,
+        beatLine,
       ]
         .filter(Boolean)
         .join("\n"),
@@ -46,6 +98,7 @@ export const plannerResultSchema: PlannerResult = {
   chapterPlan: {
     chapterNumber: 1,
     arcId: "string",
+    beatId: "string",
     title: "string",
     chapterGoal: "string",
     emotionalGoal: "string",
@@ -58,6 +111,7 @@ export const plannerResultSchema: PlannerResult = {
     disallowedMoves: ["string"],
     styleReminders: ["string"],
     authorComponentIds: ["string"],
+    payoffPatternIds: ["string"],
   },
   plannerNotes: ["string"],
 } as unknown as PlannerResult;

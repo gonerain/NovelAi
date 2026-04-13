@@ -58,7 +58,6 @@ function uniqueTrimmed(items: string[], limit: number): string[] {
 
     seen.add(normalized);
     result.push(normalized);
-
     if (result.length >= limit) {
       break;
     }
@@ -100,12 +99,12 @@ function componentApply(profile: AuthorProfile, limit = 4): AuthorPackComponent[
 
 function buildPromptCapsule(task: AuthorPackTask, pack: TaskAuthorPack): string[] {
   const label =
-    task === "planner" ? "规划规则" : task === "writer" ? "写作规则" : "审校规则";
+    task === "planner" ? "Planner rules" : task === "writer" ? "Writer rules" : "Reviewer rules";
 
   return [
-    `${label}：${pack.summary}`,
-    ...pack.hardConstraints.map((item) => `硬约束：${item}`),
-    ...pack.softPreferences.map((item) => `软偏好：${item}`),
+    `${label}: ${pack.summary}`,
+    ...pack.hardConstraints.map((item) => `Hard constraint: ${item}`),
+    ...pack.softPreferences.map((item) => `Soft preference: ${item}`),
   ].slice(0, 8);
 }
 
@@ -167,10 +166,7 @@ export function buildDerivedAuthorProfilePacks(
       summary: profile.summary,
       corePreferences: uniqueTrimmed(profile.corePreferences, 3),
       favoriteCharacterTypes: uniqueTrimmed(profile.favoriteCharacterTypes, 3),
-      favoriteRelationshipPatterns: uniqueTrimmed(
-        profile.favoriteRelationshipPatterns,
-        3,
-      ),
+      favoriteRelationshipPatterns: uniqueTrimmed(profile.favoriteRelationshipPatterns, 3),
       plotBiases: uniqueTrimmed(profile.plotBiases, 3),
       endingBiases: uniqueTrimmed(profile.endingBiases, 3),
       aestheticMotifs: uniqueTrimmed(profile.aestheticMotifs, 3),

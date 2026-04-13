@@ -125,8 +125,7 @@ function memoryScore(
   const triggerMatches = memory.triggerConditions.filter((condition) =>
     triggerKeywords.some(
       (keyword) =>
-        keyword.includes(condition.toLowerCase()) ||
-        condition.toLowerCase().includes(keyword),
+        keyword.includes(condition.toLowerCase()) || condition.toLowerCase().includes(keyword),
     ),
   ).length;
   score += triggerMatches * 15;
@@ -156,9 +155,7 @@ function worldFactScore(
   score += characterMatches * 10;
 
   const haystack = `${fact.title} ${fact.description} ${fact.category}`.toLowerCase();
-  const keywordMatches = triggerKeywords.filter((keyword) =>
-    haystack.includes(keyword),
-  ).length;
+  const keywordMatches = triggerKeywords.filter((keyword) => haystack.includes(keyword)).length;
   score += keywordMatches * 6;
 
   if (fact.scope === "local" || fact.scope === "character_specific") {
@@ -231,7 +228,7 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       ...input.authorPack.softPreferences,
       ...input.chapterPlan.styleReminders,
       ...input.themeBible.subThemes,
-      ...input.styleBible.antiPatterns.map((item) => `avoid:${item}`),
+      ...input.styleBible.antiPatterns.map((item) => `Avoid: ${item}`),
     ],
     8,
   );
@@ -239,9 +236,9 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
   const promptCapsule = uniqueTrimmed(
     [
       ...input.authorPack.promptCapsule,
-      `章节目标：${input.chapterPlan.chapterGoal}`,
-      `情绪目标：${input.chapterPlan.emotionalGoal}`,
-      `预期结果：${input.chapterPlan.plannedOutcome}`,
+      `Chapter goal: ${input.chapterPlan.chapterGoal}`,
+      `Emotional goal: ${input.chapterPlan.emotionalGoal}`,
+      `Planned outcome: ${input.chapterPlan.plannedOutcome}`,
     ],
     10,
   );

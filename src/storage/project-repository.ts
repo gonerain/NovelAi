@@ -1,8 +1,15 @@
 import type {
+  ArcOutline,
   AuthorProfile,
+  BeatOutline,
+  CastCharacterOutline,
+  ChapterArtifact,
   ChapterPlan,
   CharacterState,
   DerivedAuthorProfilePacks,
+  StoryOutline,
+  StoryProject,
+  StorySetup,
   StoryMemory,
   StyleBible,
   ThemeBible,
@@ -25,6 +32,21 @@ export interface ProjectRepository {
   saveStyleBible(projectId: string, styleBible: StyleBible): Promise<void>;
   loadStyleBible(projectId: string): Promise<StyleBible | null>;
 
+  saveStorySetup(projectId: string, storySetup: StorySetup): Promise<void>;
+  loadStorySetup(projectId: string): Promise<StorySetup | null>;
+
+  saveStoryOutline(projectId: string, storyOutline: StoryOutline): Promise<void>;
+  loadStoryOutline(projectId: string): Promise<StoryOutline | null>;
+
+  saveArcOutlines(projectId: string, arcOutlines: ArcOutline[]): Promise<void>;
+  loadArcOutlines(projectId: string): Promise<ArcOutline[]>;
+
+  saveBeatOutlines(projectId: string, beatOutlines: BeatOutline[]): Promise<void>;
+  loadBeatOutlines(projectId: string): Promise<BeatOutline[]>;
+
+  saveCastOutlines(projectId: string, castOutlines: CastCharacterOutline[]): Promise<void>;
+  loadCastOutlines(projectId: string): Promise<CastCharacterOutline[]>;
+
   saveCharacterStates(projectId: string, characterStates: CharacterState[]): Promise<void>;
   loadCharacterStates(projectId: string): Promise<CharacterState[]>;
 
@@ -36,4 +58,9 @@ export interface ProjectRepository {
 
   saveChapterPlans(projectId: string, chapterPlans: ChapterPlan[]): Promise<void>;
   loadChapterPlans(projectId: string): Promise<ChapterPlan[]>;
+
+  saveChapterArtifact(projectId: string, artifact: ChapterArtifact): Promise<void>;
+  loadChapterArtifact(projectId: string, chapterNumber: number): Promise<ChapterArtifact | null>;
+
+  loadStoryProject(projectId: string): Promise<StoryProject | null>;
 }

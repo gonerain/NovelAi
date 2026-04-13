@@ -56,8 +56,12 @@ export interface ModelRoute {
 
 export type TaskName =
   | "author_interview"
+  | "story_outline"
+  | "cast_expansion"
+  | "arc_outline"
   | "planner"
   | "writer"
+  | "review_missing_resource"
   | "review_fact"
   | "review_voice"
   | "memory_updater";

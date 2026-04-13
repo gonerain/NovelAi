@@ -2,10 +2,17 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type {
+  ArcOutline,
   AuthorProfile,
+  BeatOutline,
+  CastCharacterOutline,
+  ChapterArtifact,
   ChapterPlan,
   CharacterState,
   DerivedAuthorProfilePacks,
+  StoryOutline,
+  StoryProject,
+  StorySetup,
   StoryMemory,
   StyleBible,
   ThemeBible,
@@ -80,6 +87,46 @@ export class FileProjectRepository implements ProjectRepository {
     return this.readProjectFile(projectId, "style-bible.json");
   }
 
+  async saveStorySetup(projectId: string, storySetup: StorySetup): Promise<void> {
+    await this.writeProjectFile(projectId, "story-setup.json", storySetup);
+  }
+
+  async loadStorySetup(projectId: string): Promise<StorySetup | null> {
+    return this.readProjectFile(projectId, "story-setup.json");
+  }
+
+  async saveStoryOutline(projectId: string, storyOutline: StoryOutline): Promise<void> {
+    await this.writeProjectFile(projectId, "story-outline.json", storyOutline);
+  }
+
+  async loadStoryOutline(projectId: string): Promise<StoryOutline | null> {
+    return this.readProjectFile(projectId, "story-outline.json");
+  }
+
+  async saveArcOutlines(projectId: string, arcOutlines: ArcOutline[]): Promise<void> {
+    await this.writeProjectFile(projectId, "arc-outlines.json", arcOutlines);
+  }
+
+  async loadArcOutlines(projectId: string): Promise<ArcOutline[]> {
+    return (await this.readProjectFile<ArcOutline[]>(projectId, "arc-outlines.json")) ?? [];
+  }
+
+  async saveBeatOutlines(projectId: string, beatOutlines: BeatOutline[]): Promise<void> {
+    await this.writeProjectFile(projectId, "beat-outlines.json", beatOutlines);
+  }
+
+  async loadBeatOutlines(projectId: string): Promise<BeatOutline[]> {
+    return (await this.readProjectFile<BeatOutline[]>(projectId, "beat-outlines.json")) ?? [];
+  }
+
+  async saveCastOutlines(projectId: string, castOutlines: CastCharacterOutline[]): Promise<void> {
+    await this.writeProjectFile(projectId, "cast-outlines.json", castOutlines);
+  }
+
+  async loadCastOutlines(projectId: string): Promise<CastCharacterOutline[]> {
+    return (await this.readProjectFile<CastCharacterOutline[]>(projectId, "cast-outlines.json")) ?? [];
+  }
+
   async saveCharacterStates(projectId: string, characterStates: CharacterState[]): Promise<void> {
     await this.writeProjectFile(projectId, "character-states.json", characterStates);
   }
@@ -110,6 +157,82 @@ export class FileProjectRepository implements ProjectRepository {
 
   async loadChapterPlans(projectId: string): Promise<ChapterPlan[]> {
     return (await this.readProjectFile<ChapterPlan[]>(projectId, "chapter-plans.json")) ?? [];
+  }
+
+  async saveChapterArtifact(projectId: string, artifact: ChapterArtifact): Promise<void> {
+    const chapterDir = path.join("chapters", this.chapterFolderName(artifact.chapterNumber));
+    await this.writeProjectFile(projectId, path.join(chapterDir, "result.json"), artifact);
+    await this.writeProjectFile(
+      projectId,
+      path.join(chapterDir, "draft.md"),
+      artifact.writerResult.draft,
+    );
+  }
+
+  async loadChapterArtifact(projectId: string, chapterNumber: number): Promise<ChapterArtifact | null> {
+    return this.readProjectFile<ChapterArtifact>(
+      projectId,
+      path.join("chapters", this.chapterFolderName(chapterNumber), "result.json"),
+    );
+  }
+
+  async loadStoryProject(projectId: string): Promise<StoryProject | null> {
+    const metadata = await this.getProject(projectId);
+    if (!metadata) {
+      return null;
+    }
+
+    const [
+      authorProfile,
+      themeBible,
+      styleBible,
+      storySetup,
+      storyOutline,
+      arcOutlines,
+      beatOutlines,
+      castOutlines,
+      characters,
+      worldFacts,
+      memories,
+      chapterPlans,
+    ] = await Promise.all([
+      this.loadAuthorProfile(projectId),
+      this.loadThemeBible(projectId),
+      this.loadStyleBible(projectId),
+      this.loadStorySetup(projectId),
+      this.loadStoryOutline(projectId),
+      this.loadArcOutlines(projectId),
+      this.loadBeatOutlines(projectId),
+      this.loadCastOutlines(projectId),
+      this.loadCharacterStates(projectId),
+      this.loadWorldFacts(projectId),
+      this.loadStoryMemories(projectId),
+      this.loadChapterPlans(projectId),
+    ]);
+
+    if (!authorProfile || !themeBible || !styleBible || !storySetup) {
+      return null;
+    }
+
+    return {
+      id: metadata.id,
+      title: metadata.title,
+      premise: storySetup.premise,
+      description: undefined,
+      status: "active",
+      authorProfile,
+      themeBible,
+      styleBible,
+      storySetup,
+      storyOutline: storyOutline ?? undefined,
+      arcOutlines,
+      beatOutlines,
+      castOutlines,
+      characters,
+      worldFacts,
+      memories,
+      chapterPlans,
+    };
   }
 
   private async writeProjectFile<T>(projectId: string, filename: string, data: T): Promise<void> {
@@ -151,8 +274,17 @@ export class FileProjectRepository implements ProjectRepository {
     return path.join(this.projectDir(projectId), filename);
   }
 
+  private chapterFolderName(chapterNumber: number): string {
+    return `chapter-${String(chapterNumber).padStart(3, "0")}`;
+  }
+
   private async writeJson(filepath: string, data: unknown): Promise<void> {
     await mkdir(path.dirname(filepath), { recursive: true });
+    if (typeof data === "string") {
+      await writeFile(filepath, data.endsWith("\n") ? data : `${data}\n`, "utf8");
+      return;
+    }
+
     await writeFile(filepath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
   }
 

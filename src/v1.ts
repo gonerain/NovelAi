@@ -1,0 +1,308 @@
+import path from "node:path";
+
+import type { ChapterArtifact, StoryProject } from "./domain/index.js";
+import { formatOutlineStackResult, generateOutlineStack } from "./outline-lib.js";
+import { loadStoryProject } from "./project/index.js";
+import { FileProjectRepository } from "./storage/index.js";
+import {
+  bootstrapProject,
+  defaultDemoProjectId,
+  formatV1RunResult,
+  runV1,
+} from "./v1-lib.js";
+
+type CommandName =
+  | "project:bootstrap"
+  | "project:inspect"
+  | "project:paths"
+  | "outline:inspect"
+  | "outline:generate-stack"
+  | "chapter:generate"
+  | "chapter:generate-first"
+  | "chapter:inspect";
+
+interface ParsedArgs {
+  command: CommandName;
+  projectId: string;
+  chapterNumber?: number;
+  count?: number;
+}
+
+function readOption(args: Map<string, string>, key: string): string | undefined {
+  return args.get(key);
+}
+
+function parseFlags(argv: string[]): Map<string, string> {
+  const args = new Map<string, string>();
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const item = argv[index];
+    if (!item.startsWith("--")) {
+      continue;
+    }
+
+    const next = argv[index + 1];
+    if (next && !next.startsWith("--")) {
+      args.set(item, next);
+      index += 1;
+    } else {
+      args.set(item, "true");
+    }
+  }
+
+  return args;
+}
+
+function parseCommand(argv: string[]): ParsedArgs {
+  const [group = "chapter", action = "generate"] = argv.filter((item) => !item.startsWith("--"));
+  const flags = parseFlags(argv);
+  const projectId = readOption(flags, "--project") ?? defaultDemoProjectId;
+  const chapterOption = readOption(flags, "--chapter");
+  const countOption = readOption(flags, "--count");
+
+  const command = `${group}:${action}` as CommandName;
+  const allowed = new Set<CommandName>([
+    "project:bootstrap",
+    "project:inspect",
+    "project:paths",
+    "outline:inspect",
+    "outline:generate-stack",
+    "chapter:generate",
+    "chapter:generate-first",
+    "chapter:inspect",
+  ]);
+
+  if (!allowed.has(command)) {
+    throw new Error(`Unsupported command: ${group} ${action}`);
+  }
+
+  return {
+    command,
+    projectId,
+    chapterNumber: chapterOption ? Number(chapterOption) : undefined,
+    count: countOption ? Number(countOption) : undefined,
+  };
+}
+
+function projectDir(projectId: string): string {
+  return path.resolve(process.cwd(), "data", "projects", projectId);
+}
+
+function chapterDir(projectId: string, chapterNumber: number): string {
+  return path.join(
+    projectDir(projectId),
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+  );
+}
+
+function summarizeProject(project: StoryProject): string {
+  const lines: string[] = [];
+
+  lines.push(`Project: ${project.id}`);
+  lines.push(`Title: ${project.title}`);
+  lines.push(`Premise: ${project.premise}`);
+  lines.push(`Author profile: ${project.authorProfile.name}`);
+  lines.push(`Theme: ${project.themeBible.coreTheme}`);
+  lines.push(`Current arc goal: ${project.storySetup.currentArcGoal}`);
+  lines.push(`Story outline: ${project.storyOutline ? "yes" : "no"}`);
+  lines.push(`Arc outlines: ${project.arcOutlines.length}`);
+  lines.push(`Beat outlines: ${project.beatOutlines.length}`);
+  lines.push(`Cast outlines: ${project.castOutlines?.length ?? 0}`);
+  lines.push(`Characters: ${project.characters.length}`);
+  lines.push(`World facts: ${project.worldFacts.length}`);
+  lines.push(`Memories: ${project.memories.length}`);
+  lines.push(`Chapter plans: ${project.chapterPlans.length}`);
+
+  return lines.join("\n");
+}
+
+function summarizeOutline(project: StoryProject): string {
+  const lines: string[] = [];
+
+  lines.push(`Project: ${project.id}`);
+  lines.push(`Story outline: ${project.storyOutline?.title ?? "(missing)"}`);
+  if (project.storyOutline) {
+    lines.push(`Core theme: ${project.storyOutline.coreTheme}`);
+    lines.push(`Ending target: ${project.storyOutline.endingTarget}`);
+    lines.push(`Turning points: ${project.storyOutline.keyTurningPoints.join(" | ")}`);
+  }
+
+  for (const arc of project.arcOutlines) {
+    lines.push("");
+    lines.push(`Arc: ${arc.id} - ${arc.name}`);
+    lines.push(`Goal: ${arc.arcGoal}`);
+    lines.push(`Start: ${arc.startState}`);
+    lines.push(`End: ${arc.endState}`);
+    lines.push(`Required turns: ${arc.requiredTurns.join(" | ")}`);
+    lines.push(`Relationship changes: ${arc.relationshipChanges.join(" | ")}`);
+
+    const beats = project.beatOutlines
+      .filter((beat) => beat.arcId === arc.id)
+      .sort((left, right) => left.order - right.order);
+
+    for (const beat of beats) {
+      lines.push(`  Beat ${beat.order}: ${beat.id}`);
+      lines.push(`  Goal: ${beat.beatGoal}`);
+      lines.push(`  Conflict: ${beat.conflict}`);
+      lines.push(`  Change: ${beat.expectedChange}`);
+      if (beat.openingAnchor) {
+        lines.push(`  Opening hook: ${beat.openingAnchor.hook}`);
+      }
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function summarizeChapterArtifact(projectId: string, artifact: ChapterArtifact): string {
+  const lines: string[] = [];
+
+  lines.push(`Project: ${projectId}`);
+  lines.push(`Chapter: ${artifact.chapterNumber}`);
+  lines.push(`Title: ${artifact.writerResult.title ?? artifact.plan.title ?? "(untitled)"}`);
+  lines.push(`Goal: ${artifact.plan.chapterGoal}`);
+  lines.push(`Outcome: ${artifact.plan.plannedOutcome}`);
+  lines.push(`Summary: ${artifact.memoryUpdate.chapterSummary}`);
+  lines.push(`Next: ${artifact.memoryUpdate.nextSituation}`);
+  lines.push(`Missing resource findings: ${artifact.missingResourceReview.findings.length}`);
+  lines.push(`Fact findings: ${artifact.factConsistencyReview.findings.length}`);
+  lines.push(`Draft path: ${path.join(chapterDir(projectId, artifact.chapterNumber), "draft.md")}`);
+  lines.push(`Result path: ${path.join(chapterDir(projectId, artifact.chapterNumber), "result.json")}`);
+
+  return lines.join("\n");
+}
+
+function summarizeProjectPaths(projectId: string): string {
+  const dir = projectDir(projectId);
+
+  return [
+    `Project root: ${dir}`,
+    `Author profile: ${path.join(dir, "author-profile.json")}`,
+    `Theme bible: ${path.join(dir, "theme-bible.json")}`,
+    `Style bible: ${path.join(dir, "style-bible.json")}`,
+    `Story setup: ${path.join(dir, "story-setup.json")}`,
+    `Story outline: ${path.join(dir, "story-outline.json")}`,
+    `Long outline draft: ${path.join(dir, "story-outline-250.md")}`,
+    `Arc outlines: ${path.join(dir, "arc-outlines.json")}`,
+    `Beat outlines: ${path.join(dir, "beat-outlines.json")}`,
+    `Cast outlines: ${path.join(dir, "cast-outlines.json")}`,
+    `Character states: ${path.join(dir, "character-states.json")}`,
+    `World facts: ${path.join(dir, "world-facts.json")}`,
+    `Story memories: ${path.join(dir, "story-memories.json")}`,
+    `Chapter plans: ${path.join(dir, "chapter-plans.json")}`,
+    `Chapters dir: ${path.join(dir, "chapters")}`,
+  ].join("\n");
+}
+
+function usage(): string {
+  return [
+    "Commands:",
+    "  project bootstrap --project <id>",
+    "  project inspect --project <id>",
+    "  project paths --project <id>",
+    "  outline inspect --project <id>",
+    "  outline generate-stack --project <id> [--count <chapters>]",
+    "  chapter generate --project <id> --chapter <n>",
+    "  chapter generate-first --project <id> --count <n>",
+    "  chapter inspect --project <id> --chapter <n>",
+  ].join("\n");
+}
+
+async function main(): Promise<void> {
+  const parsed = parseCommand(process.argv.slice(2));
+  const repository = new FileProjectRepository();
+
+  switch (parsed.command) {
+    case "project:bootstrap": {
+      const result = await bootstrapProject(parsed.projectId);
+      console.log(`Project bootstrapped: ${result.projectId}`);
+      if (result.validationIssues.length > 0) {
+        console.log("Validation issues:");
+        for (const issue of result.validationIssues) {
+          console.log(`- ${issue}`);
+        }
+      }
+      return;
+    }
+
+    case "project:inspect": {
+      const project = await loadStoryProject(repository, parsed.projectId);
+      if (!project) {
+        throw new Error(`Project not found or incomplete: ${parsed.projectId}`);
+      }
+      console.log(summarizeProject(project));
+      return;
+    }
+
+    case "project:paths": {
+      console.log(summarizeProjectPaths(parsed.projectId));
+      return;
+    }
+
+    case "outline:inspect": {
+      const project = await loadStoryProject(repository, parsed.projectId);
+      if (!project) {
+        throw new Error(`Project not found or incomplete: ${parsed.projectId}`);
+      }
+      console.log(summarizeOutline(project));
+      return;
+    }
+
+    case "outline:generate-stack": {
+      const result = await generateOutlineStack({
+        projectId: parsed.projectId,
+        targetChapterCount: parsed.count,
+      });
+      console.log(formatOutlineStackResult(result));
+      return;
+    }
+
+    case "chapter:generate": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("chapter generate requires --chapter <n>");
+      }
+      const result = await runV1({
+        projectId: parsed.projectId,
+        mode: "chapter",
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatV1RunResult(result));
+      return;
+    }
+
+    case "chapter:generate-first": {
+      if (!parsed.count || parsed.count < 1) {
+        throw new Error("chapter generate-first requires --count <n>");
+      }
+      const result = await runV1({
+        projectId: parsed.projectId,
+        mode: "first-n",
+        count: parsed.count,
+      });
+      console.log(formatV1RunResult(result));
+      return;
+    }
+
+    case "chapter:inspect": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("chapter inspect requires --chapter <n>");
+      }
+      const artifact = await repository.loadChapterArtifact(parsed.projectId, parsed.chapterNumber);
+      if (!artifact) {
+        throw new Error(
+          `Chapter artifact not found: project=${parsed.projectId}, chapter=${parsed.chapterNumber}`,
+        );
+      }
+      console.log(summarizeChapterArtifact(parsed.projectId, artifact));
+      return;
+    }
+  }
+}
+
+main().catch((error) => {
+  console.error(error instanceof Error ? error.message : error);
+  console.error("");
+  console.error(usage());
+  process.exitCode = 1;
+});

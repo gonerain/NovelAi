@@ -1,517 +1,294 @@
 # Novel AI Agent
 
-一个面向长篇网文创作的 AI 写作系统。
+面向长篇网文创作的项目型写作原型。
 
-目标不是做一个“会续写”的通用文本生成器，而是做一个真正理解创作流程、作者偏好和长篇连续性的小说协作工具。
+当前重点不是 UI，而是一个可跑的命令行 pipeline：
 
-## 项目核心
+- 项目初始化
+- 作者配置生成
+- 大纲生成
+- 单章生成
+- reviewer 审校
+- memory 回写
 
-这个项目要同时建模两件事：
+## 运行环境
 
-1. `故事本身`
-包括主旨、角色、世界观、剧情记忆、章节计划。
+- Node.js 22+
+- Windows PowerShell
+- 已安装依赖：`cmd /c npm install`
+- `.env` 中至少配置一个可用模型，目前默认走 `DeepSeek`
 
-2. `写这个故事的人`
-包括作者偏好的主题、审美、冲突方式、人物类型、结局趣味、私货和禁忌。
+## 环境变量
 
-如果只建模故事，不建模作者，系统最后会退化成“结构对了，但味道不对”的平均化写作器。
+在项目根目录创建 `.env`：
 
-## 核心判断
+```env
+DEEPSEEK_API_KEY=your_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
 
-长篇小说最难的问题，不是能不能生成文字，而是下面几件事能不能长期稳定：
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
 
-1. 角色是否始终像自己
-2. 剧情细节是否不会遗忘
-3. 主题和风格是否不会在长流程里被稀释
-4. AI 是否能在大量信息里命中当前章节真正需要的内容
-5. 系统是否能保留不同作者之间真正的差异
+ANTHROPIC_API_KEY=
+ANTHROPIC_BASE_URL=https://api.anthropic.com
+ANTHROPIC_VERSION=2023-06-01
 
-因此，这个项目不采用“把前文全部塞进 Prompt”的方案，也不把“向量检索”视为唯一答案，而是采用更偏创作工程和作者建模的设计。
+OLLAMA_BASE_URL=http://localhost:11434
+```
 
-## 创作方法论
+当前默认任务路由在 [src/llm/config.ts](D:\Code\NovelAi\src\llm\config.ts)。
 
-项目默认支持的创作顺序如下：
+## 启动方式
 
-1. 确定主旨
-例如“理解自己与救赎”“爱与控制”“成长中的自毁与重建”。
+不要直接依赖全局 `npm` 或全局 `tsx`。
 
-2. 设计角色
-角色不只是基础设定，还包括：
-- 性格核心
-- 欲望与恐惧
-- 创伤与执念
-- 说话方式
-- 与其他角色的关系状态
-- 作者个人偏好与审美私货
+项目已经提供 PowerShell 入口脚本：
 
-3. 通过小剧场养角色
-在正式写作前，让角色站在自己的角度说话、思考、争吵、隐瞒、试探，用片段式 role play 逐步校准人物声音。
+- [run-v1.ps1](D:\Code\NovelAi\run-v1.ps1)
+- [run-demo.ps1](D:\Code\NovelAi\run-demo.ps1)
 
-4. 先确定结局
-结局必须能回应主旨，并满足作品的情绪强度、审美目标和角色弧线。
+它们会：
 
-5. 从结局反推大故事
-把大故事拆成多个时间连续的小故事，每个小故事都承担明确的剧情推进结果。
+1. 使用本地 `tsc.cmd` 编译
+2. 用 `node --env-file=.env` 运行编译后的 `dist/*.js`
 
-6. 为结果寻找角色上可成立的路径
-如果角色按现有设定无法自然走向目标，就补充推动因素、事件、规则、人物或代价，而不是强行扭曲角色。
+## 最小检查
 
-7. 回收设定并整合世界观
-将中途新增的因素、人物、规则重新收束回原始世界观，减少冗余角色，保留真正有用的结构。
+安装依赖：
 
-8. 显式维护风格
-主题决定故事说什么，风格决定这个故事是不是“作者本人写的”。
+```powershell
+cmd /c npm install
+```
 
-## 为什么普通 AI 写作方案不够
+类型检查：
 
-常见方案通常依赖：
-- 前文摘要
-- 最近几章上下文
-- 向量检索
-- 一个 Writer Prompt
+```powershell
+cmd /c npm run check
+```
 
-这对短文本够用，对长篇网文不够，原因是：
+跑 demo：
 
-1. 角色关系是动态变化的，静态人设卡不够
-2. 关键道具、承诺、秘密、伏笔不能只埋在自然语言里
-3. “当前章节需要什么信息”不能完全交给模型自由判断
-4. 写前检索不能替代写后审校
-5. 风格和审美如果不结构化，长流程里一定被平均化
-6. 不同作者的差异如果没有标准化表达，系统无法真正“像某个人写”
+```powershell
+.\run-demo.ps1
+```
 
-## 设计原则
+## 项目模型
 
-### 1. 同时维护“故事层”和“作者层”
+系统按 `project` 运转。
 
-故事层负责回答：
-- 这个故事发生了什么
-- 角色现在是什么状态
-- 当前章节要推进到哪里
+一个项目就是一套独立的：
 
-作者层负责回答：
-- 作者偏爱什么主题
-- 作者喜欢怎样的人物和关系
-- 作者喜欢怎样推进冲突
-- 作者不接受哪些处理方式
-
-### 2. 信息必须分层，而不是堆成一团
-
-系统中的信息至少分为两大层。
-
-#### 故事层
-
-1. `Theme Bible`
-记录主旨、母题、禁忌、结局目标、作品最终想抵达的情绪。
-
-2. `Style Bible`
-记录叙事风格、情绪表达方式、关系张力偏好、常用意象、节奏习惯。
-
-3. `Character State`
-不是静态角色卡，而是角色在当前时间点的状态：
-- 欲望
-- 立场
-- 情绪
-- 知情边界
-- 关系变化
-- 近期事件影响
-
-4. `World Facts`
-世界规则、地点状态、组织关系、身份信息、硬约束。
-
-5. `Story Memory`
-结构化事件、获得与失去、承诺、冲突、伤势、道具、线索、伏笔状态。
-
-6. `Chapter Plan`
-当前章节的目标、冲突、推进结果、禁止越界内容和情绪目标。
-
-#### 作者层
-
-1. `Author Profile`
-作者的核心创作偏好总入口。
-
-2. `Author Components`
-作者可拼装的标准化成分，例如：
-- 慢热拉扯
-- 苦涩救赎
-- 宿命感结局
-- 高压权谋
-- 互相拯救
-- 关系中的控制与失控
-
-3. `Constraint Rules`
-作者不希望出现的处理方式。
-
-4. `Aesthetic Motifs`
-作者反复偏爱的意象、桥段、私货、情绪结构。
-
-### 3. 关键记忆必须结构化
-
-例如“主角几十章前买过一枚天阶丹药”，不能只存在摘要里，而应该是可追踪对象：
-
-- 所有者是谁
-- 何时获得
-- 当前是否仍持有
-- 是否已使用
-- 触发条件是什么
-- 对哪些角色可见
-- 属于普通物品、关键资源还是伏笔
-
-系统不应该依赖模型“刚好想起来”，而应该在场景命中触发条件时强制召回。
-
-### 4. 检索应当由场景驱动，而不是由模型自由发挥
-
-写作前不直接让模型自己想“我需要什么信息”，而是由系统先做一次上下文构建：
-
-- 当前章节目标是什么
-- 当前场景是什么
-- 出场人物是谁
-- 当前时间点是什么
-- 当前风险标签是什么
-
-然后按规则召回对应信息。
-
-例如：
-- `濒死` -> 保命资源、治疗关系、未使用底牌、身体硬伤
-- `谈判` -> 阵营利益、秘密、人情债、立场冲突
-- `重逢` -> 旧关系、最后一次分离事件、误解来源、未兑现承诺
-- `潜入` -> 地点规则、守卫分布、已知风险、角色擅长项
-
-### 5. Reviewer 的质量来自任务窄化
-
-高质量 Reviewer 的原则：
-
-1. 不读全书，只读当前草稿和相关高优先级记忆
-2. 只检查一种错误类型
-3. 使用固定检查规则，而不是开放式评论
-4. 输出结构化问题，而不是泛泛建议
-5. 审校结果必须能写回记忆层
-
-### 6. 作者成分必须标准化，但允许扩展
-
-用户可以自由拼装自己的 AI 作者，但扩展必须建立在统一规范上，而不是任意拼接 prompt 标签。
-
-每个 `Author Component` 至少要定义：
-
-- 它属于哪个类别
-- 它会强化什么
-- 它会抑制什么
-- 它作用于哪些阶段
-- 它如何影响 planner / writer / reviewer / memory
-- 它的优先级
-
-## AI 作者系统
-
-### 1. 为什么要做“作者建模”
-
-同样一套：
-- 主旨
-- 角色
-- 世界观
+- 作者配置
 - 大纲
+- memory
+- 章节状态
 
-不同作者写出来会完全不同。差异并不只来自文风，而是来自：
+也就是：
 
-- 偏爱什么主题
-- 偏爱什么人物缺陷
-- 喜欢怎样制造冲突
-- 喜欢怎样推进关系
-- 喜欢怎样收束结局
-- 喜欢往作品里塞什么私货
+`一个项目 = 一套独立作者配置 + 一套独立大纲 + 一套独立 memory + 一套独立章节产物`
 
-所以系统必须支持“捏一个 AI 作者”，而不是只支持“配一个故事”。
+## 常用命令
 
-### 2. 推荐的作者成分骨架
+### 1. 初始化项目
 
-建议至少拆成八类：
+```powershell
+.\run-v1.ps1 project bootstrap --project demo-project
+```
 
-1. `Theme Engine`
-作者偏好的核心主题和价值判断。
+作用：
 
-2. `Style Engine`
-叙事密度、语言克制程度、情绪表达方式、节奏习惯。
+- 初始化项目目录
+- 生成或补齐默认配置文件
+- 生成作者配置与基础 packs
+- 写入默认 theme/style/setup
 
-3. `Character Bias`
-作者偏爱的人物类型、缺陷、成长路线、关系模式。
+### 2. 查看项目摘要
 
-4. `Plot Bias`
-作者偏爱的剧情推进方式，例如慢热、强冲突、强情绪、强转折。
+```powershell
+.\run-v1.ps1 project inspect --project demo-project
+```
 
-5. `Conflict Bias`
-作者喜欢用什么制造冲突，例如误解、利益矛盾、身份错位、规则压迫。
+输出内容包括：
 
-6. `Ending Bias`
-作者偏爱的结局形状，例如苦涩圆满、宿命感、迟来的理解、代价式救赎。
+- premise
+- 作者配置
+- story outline 是否存在
+- arc / beat 数量
+- memory 数量
+- chapter plan 数量
 
-7. `Aesthetic Bias`
-作者的意象偏好、桥段癖好、私货和审美执念。
+### 3. 查看项目文件路径
 
-8. `Constraint Rules`
-作者绝对不想出现的处理方式。
+```powershell
+.\run-v1.ps1 project paths --project demo-project
+```
 
-### 3. Author Component 不是标签，而是规则包
+适合手动编辑 JSON/Markdown 时先定位文件。
 
-例如一个 `SlowBurnRomance` component 不该只是“慢热感情线”五个字，而应至少表达：
+### 4. 查看当前 outline
 
-- 强化关系中的试探、回避、误读
-- 禁止冲突过后立即和解
-- 优先通过小动作和潜台词表达情感
-- 影响 planner 的关系推进速度
-- 影响 writer 的对话与情绪展开
-- 影响 reviewer 的“推进是否过快”检查
+```powershell
+.\run-v1.ps1 outline inspect --project demo-project
+```
 
-## 推荐的 Agent 流程
+会输出：
 
-### 1. Planner
+- story outline
+- arc outlines
+- beat outlines
 
-负责把作者意图和作者成分转换成当前章节任务：
+### 5. 生成分层大纲
 
-- 本章目标
-- 情绪目标
-- 推进结果
-- 必须出现的角色冲突
-- 禁止越界的内容
+```powershell
+.\run-v1.ps1 outline generate-stack --project demo-project --count 250
+```
 
-### 2. Context Builder
+当前实现会按三层生成：
 
-负责从多层信息中召回当前章节真正需要的内容：
+1. `StoryOutline`
+2. `CastExpansion`
+3. `ArcOutline`
 
-- 当前角色状态
-- 当前场景相关世界事实
-- 相关历史事件
-- 关键资源与伏笔
-- 风格约束
-- 作者成分约束
+产物会保存到项目目录：
 
-### 3. Writer
+- `story-outline.json`
+- `cast-outlines.json`
+- `arc-outlines.json`
 
-Writer 的职责不是“自由发挥”，而是在给定主旨、风格、作者偏好、当前目标和上下文约束下产出章节草稿。
+### 6. 生成指定章节
 
-写作阶段可使用 role play 思路：
-- 从角色视角发言
-- 明确知情边界
-- 明确关系 tension
-- 明确当前这场戏要达成什么结果
+```powershell
+.\run-v1.ps1 chapter generate --project demo-project --chapter 1
+```
 
-### 4. Reviewers
+当前单章链路是：
 
-MVP 不建议拆太多 Reviewer，优先保留四类：
+`Planner -> Context Builder -> Writer -> Missing Resource Reviewer -> Fact Consistency Reviewer -> MemoryUpdater`
 
-1. `事实一致性 Reviewer`
-检查时间线、伤势、地点、身份、物品归属、规则冲突。
+### 7. 连续生成前 N 章
 
-2. `知情边界 Reviewer`
-检查角色是否知道自己不该知道的事，是否说出不该说的话。
+```powershell
+.\run-v1.ps1 chapter generate-first --project demo-project --count 3
+```
 
-3. `关键资源遗漏 Reviewer`
-检查本场景触发条件下，是否有应该被考虑但没有被处理的关键资源、底牌、承诺、伏笔。
+适合跑一个最小连续写作验证。
 
-4. `角色声音 Reviewer`
-检查角色口吻、行为动机、关系状态是否偏离当前角色状态和作者设定。
+### 8. 查看某一章结果
 
-### 5. Rewriter
+```powershell
+.\run-v1.ps1 chapter inspect --project demo-project --chapter 1
+```
 
-根据 Reviewer 输出的问题清单做一次集中修订，而不是让多个 Reviewer 轮流重写正文。
+输出内容包括：
 
-### 6. Memory Updater
+- chapter plan
+- summary
+- reviewer finding 数量
+- draft 路径
+- result 路径
+
+## 推荐使用流程
 
-章节确认后，抽取本章新增信息并写回记忆层：
+### 流程 A：从零初始化到写第一章
 
-- 关系变化
-- 事件结果
-- 新道具与道具状态变化
-- 伏笔新增/触发/兑现/失效
-- 角色情绪与立场变化
-- 下一章必须继承的后果
+```powershell
+.\run-v1.ps1 project bootstrap --project my-novel
+.\run-v1.ps1 project inspect --project my-novel
+.\run-v1.ps1 outline inspect --project my-novel
+.\run-v1.ps1 chapter generate --project my-novel --chapter 1
+```
 
-## 记忆设计
+### 流程 B：先做长篇总纲，再写章节
 
-### 1. 不把“伏笔”当成单一类别
+```powershell
+.\run-v1.ps1 project bootstrap --project my-novel
+.\run-v1.ps1 outline generate-stack --project my-novel --count 250
+.\run-v1.ps1 outline inspect --project my-novel
+.\run-v1.ps1 chapter generate --project my-novel --chapter 1
+```
 
-建议至少拆成三类：
+### 流程 C：连续生成前几章做 smoke test
 
-1. `Critical Resource`
-关键资源，例如保命丹药、底牌、隐藏援助、保命承诺。
+```powershell
+.\run-v1.ps1 project bootstrap --project smoke-project
+.\run-v1.ps1 chapter generate-first --project smoke-project --count 3
+.\run-v1.ps1 chapter inspect --project smoke-project --chapter 1
+```
 
-2. `Suspense Hook`
-悬念，例如未拆开的信、可疑线索、未知身份。
+## 项目目录
 
-3. `Long Arc Thread`
-长期剧情线，例如复仇、调查、成长、宗门阴谋、关系修复。
+项目默认保存在：
 
-### 2. 每条记忆都应有状态
+```text
+data/projects/<project-id>/
+```
 
-建议字段包括：
+典型目录结构：
 
-- `introduced_in`
-- `last_referenced_in`
-- `status`
-- `priority`
-- `owner`
-- `related_characters`
-- `related_locations`
-- `trigger_conditions`
-- `visibility`
-- `notes`
+```text
+data/projects/demo-project/
+  author-profile.json
+  theme-bible.json
+  style-bible.json
+  story-setup.json
+  story-outline.json
+  cast-outlines.json
+  arc-outlines.json
+  beat-outlines.json
+  character-states.json
+  world-facts.json
+  story-memories.json
+  chapter-plans.json
+  derived/
+    author-profile-packs.json
+  chapters/
+    chapter-001/
+      draft.md
+      result.json
+```
 
-### 3. 章节摘要不能代替结构化记忆
+## 当前已实现
 
-章节摘要适合回答“之前发生了什么”，不适合回答：
+- 项目型存储
+- 作者采访器与 `AuthorProfile`
+- `planner / writer / reviewer / memory updater`
+- 分层 outline 生成实验
+- 命令层
+- 本地文件持久化
 
-- 主角还有没有那枚丹药
-- 谁知道这件事
-- 这个承诺是否已经兑现
-- 这个伏笔是否该在当前情境下触发
+## 当前未实现或未闭环
 
-这些问题必须由结构化层处理。
+- `Rewriter`
+- 完整 `StoryOutline -> ArcOutline -> BeatOutline -> ChapterPlan` 自动链路
+- opening mode 专门优化
+- memory 去噪与回滚
+- UI
 
-## MVP 范围
+## 相关文件
 
-MVP 不追求一步到位做成完整平台，而是先验证下面这条最小闭环：
+核心入口：
 
-1. 作者填写：
-- Author Profile
-- Theme Bible
-- Style Bible
-- 角色初始卡
-- 世界观基础规则
-- 结局方向
-- 当前卷大纲
+- [src/v1.ts](D:\Code\NovelAi\src\v1.ts)
+- [src/v1-lib.ts](D:\Code\NovelAi\src\v1-lib.ts)
 
-2. 系统生成：
-- 章节目标
-- 章节上下文包
-- 初稿
+命令脚本：
 
-3. 系统审校：
-- 事实一致性
-- 知情边界
-- 关键资源遗漏
+- [run-v1.ps1](D:\Code\NovelAi\run-v1.ps1)
+- [run-demo.ps1](D:\Code\NovelAi\run-demo.ps1)
 
-4. 系统修订：
-- 输出二稿
+存储层：
 
-5. 系统回写：
-- 结构化事件
-- 角色状态变化
-- 伏笔和资源状态变化
+- [src/storage/project-repository.ts](D:\Code\NovelAi\src\storage\project-repository.ts)
+- [src/storage/file-project-repository.ts](D:\Code\NovelAi\src\storage\file-project-repository.ts)
 
-## 当前路线
+大纲实验：
 
-### 阶段 1：领域模型
+- [src/outline-lib.ts](D:\Code\NovelAi\src\outline-lib.ts)
+- [src/prompts/story-outline.ts](D:\Code\NovelAi\src\prompts\story-outline.ts)
+- [src/prompts/cast-expansion.ts](D:\Code\NovelAi\src\prompts\cast-expansion.ts)
+- [src/prompts/arc-outline.ts](D:\Code\NovelAi\src\prompts\arc-outline.ts)
 
-先定义并实现以下对象：
+卖点与爽感设计：
 
-- Author Profile
-- Author Component
-- Theme Bible
-- Style Bible
-- Character State
-- World Facts
-- Story Memory
-- Chapter Plan
-
-### 阶段 2：单章生成闭环
-
-实现：
-
-- Planner
-- Context Builder
-- Writer
-- 3 个基础 Reviewer
-- Memory Updater
-
-### 阶段 3：多章连续性
-
-实现：
-
-- 关系状态更新
-- 伏笔状态追踪
-- 长期剧情线追踪
-- 章节间后果继承
-
-### 阶段 4：创作体验
-
-实现：
-
-- 作者成分拼装
-- 角色小剧场
-- 章节树
-- 关系图
-- 伏笔面板
-- 关键资源面板
-- 审校问题面板
-
-## 技术方向
-
-当前建议技术方向如下：
-
-| 模块 | 建议 |
-|------|------|
-| 前端 | Next.js + TypeScript |
-| 编辑器 | TipTap |
-| 后端 | FastAPI 或 NestJS |
-| 数据库 | PostgreSQL |
-| 缓存/队列 | Redis |
-| 语义检索 | Embeddings + FAISS / pgvector |
-| 结构化状态 | PostgreSQL 表 + JSONB |
-| LLM | 可切换 DeepSeek / OpenAI / Claude / 本地模型 |
-
-其中：
-- 向量检索用于“找相关内容”
-- 结构化状态用于“保证关键信息不会丢”
-
-两者必须并存，不能互相替代。
-
-## 当前已落地的 LLM 接入方案
-
-当前仓库已按方案 B 预留独立 provider 适配层：
-
-- `DeepSeek Adapter`
-- `OpenAI Adapter`
-- `Anthropic Adapter`
-- `Ollama Adapter`
-
-统一入口负责两件事：
-
-1. 按任务路由模型
-2. 向上层暴露统一调用接口
-
-当前任务路由默认值：
-
-- `planner` -> DeepSeek
-- `writer` -> DeepSeek
-- `review_fact` -> DeepSeek
-- `review_voice` -> DeepSeek
-- `memory_updater` -> Ollama
-
-当前代码结构：
-
-- `src/llm/providers/deepseek.ts`
-- `src/llm/providers/openai.ts`
-- `src/llm/providers/anthropic.ts`
-- `src/llm/providers/ollama.ts`
-- `src/llm/config.ts`
-- `src/llm/registry.ts`
-- `src/llm/service.ts`
-
-统一调用目标如下：
-
-- `generateForTask(...)`
-- `generateObjectForTask(...)`
-
-后续 Planner、Writer、Reviewer、Memory Updater 都应只依赖这一层，不直接请求模型。
-
-## 结论
-
-`Novel AI Agent` 的核心不是“让 AI 帮你写”，而是“让 AI 进入一个符合小说创作规律、同时又保留作者差异的系统里写”。
-
-系统必须同时理解：
-
-- 主题如何牵引故事
-- 角色如何逐步长成自己
-- 结局如何反向塑造过程
-- 风格如何保证作品属于作者本人
-- 作者成分如何影响规划、写作与审校
-- 记忆如何在长篇中被触发、审校、更新
-
-只有这样，这个项目才有机会从“会生成文字的工具”变成“真正能协助创作长篇网文、并允许用户捏出自己 AI 作者的系统”。
+- [docs/payoff-patterns.md](D:\Code\NovelAi\docs\payoff-patterns.md)
+- [docs/male-power-patterns.md](D:\Code\NovelAi\docs\male-power-patterns.md)

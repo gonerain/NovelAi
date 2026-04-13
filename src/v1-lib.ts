@@ -1,0 +1,559 @@
+import {
+  applyMemoryUpdaterResult,
+  buildContextPack,
+  buildDerivedAuthorProfilePacks,
+  mapAuthorInterviewToProfile,
+  normalizeAuthorInterviewResult,
+  type ArcOutline,
+  type BeatOutline,
+  type ChapterArtifact,
+  type ChapterPlan,
+  type CharacterState,
+  type DerivedAuthorProfilePacks,
+  type FactConsistencyReviewerResult,
+  type MemoryUpdaterResult,
+  type MissingResourceReviewerResult,
+  type StoryOutline,
+  type StoryMemory,
+  type StorySetup,
+  type StyleBible,
+  type ThemeBible,
+  type WorldFact,
+  type WriterResult,
+  validateAuthorInterviewResult,
+} from "./domain/index.js";
+import {
+  demoArcOutlines,
+  demoBeatOutlines,
+  demoCharacterStates,
+  demoInterviewInput,
+  demoPremise,
+  demoProjectTitle,
+  demoStoryOutline,
+  demoStoryMemories,
+  demoStorySetup,
+  demoStyleBible,
+  demoThemeBible,
+  demoWorldFacts,
+} from "./defaults/demo-project.js";
+import { LlmService } from "./llm/service.js";
+import {
+  authorInterviewResultSchema,
+  buildAuthorInterviewMessages,
+  buildFactConsistencyReviewMessages,
+  buildMemoryUpdaterMessages,
+  buildMissingResourceReviewMessages,
+  buildPlannerMessages,
+  buildWriterMessages,
+  factConsistencyReviewerResultSchema,
+  memoryUpdaterResultSchema,
+  missingResourceReviewerResultSchema,
+  plannerResultSchema,
+  writerResultSchema,
+} from "./prompts/index.js";
+import { FileProjectRepository } from "./storage/index.js";
+
+export interface V1RunOptions {
+  projectId: string;
+  mode: "first-n" | "chapter";
+  count?: number;
+  chapterNumber?: number;
+}
+
+export interface V1RunResult {
+  projectId: string;
+  targetChapter: number;
+  generatedChapterNumbers: number[];
+  artifacts: ChapterArtifact[];
+  validationIssues: string[];
+}
+
+interface ProjectBaseState {
+  storySetup: StorySetup;
+  storyOutline: StoryOutline;
+  arcOutlines: ArcOutline[];
+  beatOutlines: BeatOutline[];
+  authorPacks: DerivedAuthorProfilePacks;
+  themeBible: ThemeBible;
+  styleBible: StyleBible;
+  characterStates: CharacterState[];
+  worldFacts: WorldFact[];
+  storyMemories: StoryMemory[];
+  chapterPlans: ChapterPlan[];
+}
+
+function pickArcForChapter(
+  arcOutlines: ArcOutline[],
+  chapterNumber: number,
+  fallbackArcId?: string,
+): ArcOutline | undefined {
+  const rangedMatch = arcOutlines.find((arc) => {
+    const range = arc.chapterRangeHint;
+    return range ? chapterNumber >= range.start && chapterNumber <= range.end : false;
+  });
+
+  if (rangedMatch) {
+    return rangedMatch;
+  }
+
+  if (fallbackArcId) {
+    return arcOutlines.find((arc) => arc.id === fallbackArcId);
+  }
+
+  return arcOutlines[0];
+}
+
+function pickBeatForChapter(
+  beatOutlines: BeatOutline[],
+  arcOutline: ArcOutline | undefined,
+  chapterNumber: number,
+): BeatOutline | undefined {
+  if (!arcOutline) {
+    return undefined;
+  }
+
+  const arcBeats = beatOutlines
+    .filter((beat) => beat.arcId === arcOutline.id)
+    .sort((left, right) => left.order - right.order);
+
+  if (arcBeats.length === 0) {
+    return undefined;
+  }
+
+  const range = arcOutline.chapterRangeHint;
+  if (!range) {
+    return arcBeats[0];
+  }
+
+  const arcLength = range.end - range.start + 1;
+  const relativeIndex = Math.max(0, Math.min(arcLength - 1, chapterNumber - range.start));
+  const bucketSize = Math.max(1, Math.ceil(arcLength / arcBeats.length));
+  const beatIndex = Math.min(arcBeats.length - 1, Math.floor(relativeIndex / bucketSize));
+
+  return arcBeats[beatIndex];
+}
+
+function uniqueStrings(items: string[], limit: number): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const item of items) {
+    const normalized = item.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+    if (result.length >= limit) {
+      break;
+    }
+  }
+
+  return result;
+}
+
+function upsertChapterPlan(chapterPlans: ChapterPlan[], chapterPlan: ChapterPlan): ChapterPlan[] {
+  const chapterNumber = chapterPlan.chapterNumber;
+  if (!chapterNumber) {
+    return [...chapterPlans, chapterPlan];
+  }
+
+  const filtered = chapterPlans.filter((item) => item.chapterNumber !== chapterNumber);
+  return [...filtered, chapterPlan].sort(
+    (left, right) => (left.chapterNumber ?? 0) - (right.chapterNumber ?? 0),
+  );
+}
+
+function buildRecentConsequences(
+  artifact: ChapterArtifact | null,
+  fallbackGoal: string,
+): string[] {
+  if (!artifact) {
+    return [];
+  }
+
+  return uniqueStrings(
+    [
+      artifact.memoryUpdate.chapterSummary,
+      ...artifact.memoryUpdate.carryForwardHints,
+      artifact.plan.plannedOutcome,
+      fallbackGoal,
+    ],
+    4,
+  );
+}
+
+async function ensureBootstrappedProject(
+  service: LlmService,
+  repository: FileProjectRepository,
+  projectId: string,
+): Promise<ProjectBaseState & { validationIssues: string[] }> {
+  const existingProject = await repository.getProject(projectId);
+  if (!existingProject) {
+    await repository.createProject({
+      id: projectId,
+      title: demoProjectTitle,
+    });
+  }
+
+  let authorProfile = await repository.loadAuthorProfile(projectId);
+  let authorPacks = await repository.loadDerivedAuthorProfilePacks(projectId);
+  const validationIssues: string[] = [];
+
+  if (!authorProfile) {
+    const interviewMessages = buildAuthorInterviewMessages(demoInterviewInput);
+    const interviewResult = await service.generateObjectForTask({
+      task: "author_interview",
+      messages: interviewMessages,
+      schema: authorInterviewResultSchema,
+      temperature: 0.2,
+      maxTokens: 3200,
+    });
+
+    const normalizedInterview = normalizeAuthorInterviewResult(interviewResult.object);
+    validationIssues.push(
+      ...validateAuthorInterviewResult(normalizedInterview).map(
+        (issue) => `${issue.path}: ${issue.message}`,
+      ),
+    );
+    authorProfile = mapAuthorInterviewToProfile(normalizedInterview, {
+      profileId: `${projectId}-author-profile`,
+      profileName: "Default Author Profile",
+    });
+    authorPacks = buildDerivedAuthorProfilePacks(authorProfile);
+
+    await repository.saveAuthorProfile(projectId, authorProfile);
+    await repository.saveDerivedAuthorProfilePacks(projectId, authorPacks);
+  } else if (!authorPacks) {
+    authorPacks = buildDerivedAuthorProfilePacks(authorProfile);
+    await repository.saveDerivedAuthorProfilePacks(projectId, authorPacks);
+  }
+
+  const themeBible = (await repository.loadThemeBible(projectId)) ?? demoThemeBible;
+  const styleBible = (await repository.loadStyleBible(projectId)) ?? demoStyleBible;
+  const storySetup = (await repository.loadStorySetup(projectId)) ?? demoStorySetup;
+  const loadedStoryOutline = await repository.loadStoryOutline(projectId);
+  const loadedArcOutlines = await repository.loadArcOutlines(projectId);
+  const loadedBeatOutlines = await repository.loadBeatOutlines(projectId);
+  const loadedCharacterStates = await repository.loadCharacterStates(projectId);
+  const loadedWorldFacts = await repository.loadWorldFacts(projectId);
+  const loadedStoryMemories = await repository.loadStoryMemories(projectId);
+  const storyOutline = loadedStoryOutline ?? demoStoryOutline;
+  const arcOutlines = loadedArcOutlines.length ? loadedArcOutlines : demoArcOutlines;
+  const beatOutlines = loadedBeatOutlines.length ? loadedBeatOutlines : demoBeatOutlines;
+  const characterStates = loadedCharacterStates.length ? loadedCharacterStates : demoCharacterStates;
+  const worldFacts = loadedWorldFacts.length ? loadedWorldFacts : demoWorldFacts;
+  const storyMemories = loadedStoryMemories.length ? loadedStoryMemories : demoStoryMemories;
+  const chapterPlans = await repository.loadChapterPlans(projectId);
+
+  await repository.saveThemeBible(projectId, themeBible);
+  await repository.saveStyleBible(projectId, styleBible);
+  await repository.saveStorySetup(projectId, storySetup);
+  await repository.saveStoryOutline(projectId, storyOutline);
+  await repository.saveArcOutlines(projectId, arcOutlines);
+  await repository.saveBeatOutlines(projectId, beatOutlines);
+  await repository.saveCharacterStates(projectId, characterStates);
+  await repository.saveWorldFacts(projectId, worldFacts);
+  await repository.saveStoryMemories(projectId, storyMemories);
+
+  return {
+    storySetup,
+    storyOutline,
+    arcOutlines,
+    beatOutlines,
+    authorPacks,
+    themeBible,
+    styleBible,
+    characterStates,
+    worldFacts,
+    storyMemories,
+    chapterPlans,
+    validationIssues,
+  };
+}
+
+export async function bootstrapProject(projectId: string): Promise<{
+  projectId: string;
+  validationIssues: string[];
+}> {
+  const service = new LlmService();
+  const repository = new FileProjectRepository();
+  const base = await ensureBootstrappedProject(service, repository, projectId);
+
+  return {
+    projectId,
+    validationIssues: base.validationIssues,
+  };
+}
+
+async function generateChapterArtifact(args: {
+  service: LlmService;
+  base: ProjectBaseState;
+  repository: FileProjectRepository;
+  projectId: string;
+  chapterNumber: number;
+  currentSituation: string;
+  recentConsequences: string[];
+}): Promise<{
+  artifact: ChapterArtifact;
+  updatedStoryMemories: StoryMemory[];
+  updatedChapterPlans: ChapterPlan[];
+}> {
+  const currentArc = pickArcForChapter(
+    args.base.arcOutlines,
+    args.chapterNumber,
+    args.base.storySetup.currentArcId,
+  );
+  const currentBeat = pickBeatForChapter(args.base.beatOutlines, currentArc, args.chapterNumber);
+
+  const plannerMessages = buildPlannerMessages({
+    authorPack: args.base.authorPacks.planner,
+    themeBible: args.base.themeBible,
+    styleBible: args.base.styleBible,
+    storyOutline: args.base.storyOutline,
+    arcOutline: currentArc,
+    beatOutline: currentBeat,
+    arcId: currentArc?.id,
+    chapterNumber: args.chapterNumber,
+    mode: args.chapterNumber === 1 ? "opening" : "continuation",
+    premise: args.base.storySetup.premise,
+    currentArcGoal: currentArc?.arcGoal ?? args.base.storySetup.currentArcGoal,
+    currentSituation: args.currentSituation,
+    activeCharacterIds:
+      currentBeat?.requiredCharacters.length
+        ? currentBeat.requiredCharacters
+        : args.base.storySetup.defaultActiveCharacterIds,
+    candidateMemoryIds: args.base.storyMemories
+      .filter((memory) => memory.status === "active" || memory.status === "triggered")
+      .map((memory) => memory.id)
+      .slice(0, 12),
+    recentConsequences: args.recentConsequences,
+  });
+
+  const plannerResult = await args.service.generateObjectForTask({
+    task: "planner",
+    messages: plannerMessages,
+    schema: plannerResultSchema,
+    temperature: 0.2,
+    maxTokens: 2200,
+  });
+
+  const chapterPlan = {
+    ...plannerResult.object.chapterPlan,
+    chapterNumber: args.chapterNumber,
+    arcId: plannerResult.object.chapterPlan.arcId ?? currentArc?.id ?? "arc-1",
+    beatId: plannerResult.object.chapterPlan.beatId ?? currentBeat?.id,
+  };
+
+  const contextPack = buildContextPack({
+    task: "writer",
+    authorPack: args.base.authorPacks.writer,
+    themeBible: args.base.themeBible,
+    styleBible: args.base.styleBible,
+    chapterPlan,
+    characterStates: args.base.characterStates,
+    storyMemories: args.base.storyMemories,
+    worldFacts: args.base.worldFacts,
+  });
+
+  const writerResult = await args.service.generateObjectForTask({
+    task: "writer",
+    messages: buildWriterMessages({
+      contextPack,
+      minParagraphs: 5,
+      maxParagraphs: 8,
+    }),
+    schema: writerResultSchema,
+    temperature: 0.6,
+    maxTokens: 2800,
+  });
+
+  const missingResourceReview = await args.service.generateObjectForTask({
+    task: "review_missing_resource",
+    messages: buildMissingResourceReviewMessages({
+      contextPack,
+      draft: writerResult.object.draft,
+      storyMemories: args.base.storyMemories,
+    }),
+    schema: missingResourceReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1800,
+  });
+
+  const factConsistencyReview = await args.service.generateObjectForTask({
+    task: "review_fact",
+    messages: buildFactConsistencyReviewMessages({
+      contextPack,
+      draft: writerResult.object.draft,
+      storyMemories: args.base.storyMemories,
+      worldFacts: args.base.worldFacts,
+    }),
+    schema: factConsistencyReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1800,
+  });
+
+  const memoryUpdate = await args.service.generateObjectForTask({
+    task: "memory_updater",
+    messages: buildMemoryUpdaterMessages({
+      chapterNumber: args.chapterNumber,
+      chapterPlan,
+      draft: writerResult.object.draft,
+      storyMemories: args.base.storyMemories,
+      activeCharacterIds: chapterPlan.requiredCharacters,
+    }),
+    schema: memoryUpdaterResultSchema,
+    temperature: 0.2,
+    maxTokens: 2200,
+  });
+
+  const updatedStoryMemories = applyMemoryUpdaterResult(
+    args.base.storyMemories,
+    memoryUpdate.object,
+    args.chapterNumber,
+  );
+  const updatedChapterPlans = upsertChapterPlan(args.base.chapterPlans, chapterPlan);
+
+  const artifact: ChapterArtifact = {
+    chapterNumber: args.chapterNumber,
+    plan: chapterPlan,
+    contextPack,
+    writerResult: writerResult.object as WriterResult,
+    missingResourceReview: missingResourceReview.object as MissingResourceReviewerResult,
+    factConsistencyReview: factConsistencyReview.object as FactConsistencyReviewerResult,
+    memoryUpdate: memoryUpdate.object as MemoryUpdaterResult,
+    generatedAt: new Date().toISOString(),
+  };
+
+  await args.repository.saveChapterPlans(args.projectId, updatedChapterPlans);
+  await args.repository.saveStoryMemories(args.projectId, updatedStoryMemories);
+  await args.repository.saveChapterArtifact(args.projectId, artifact);
+
+  return {
+    artifact,
+    updatedStoryMemories,
+    updatedChapterPlans,
+  };
+}
+
+function parseTargetChapter(options: V1RunOptions): number {
+  if (options.mode === "first-n") {
+    if (!options.count || options.count < 1) {
+      throw new Error("count must be >= 1 when mode is first-n");
+    }
+    return options.count;
+  }
+
+  if (!options.chapterNumber || options.chapterNumber < 1) {
+    throw new Error("chapterNumber must be >= 1 when mode is chapter");
+  }
+
+  return options.chapterNumber;
+}
+
+export async function runV1(options: V1RunOptions): Promise<V1RunResult> {
+  const service = new LlmService();
+  const repository = new FileProjectRepository();
+  const targetChapter = parseTargetChapter(options);
+
+  const base = await ensureBootstrappedProject(service, repository, options.projectId);
+  const existingArtifacts: ChapterArtifact[] = [];
+  let maxExistingChapter = 0;
+  for (let chapterNumber = 1; chapterNumber <= targetChapter; chapterNumber += 1) {
+    const artifact = await repository.loadChapterArtifact(options.projectId, chapterNumber);
+    if (!artifact) {
+      break;
+    }
+    existingArtifacts.push(artifact);
+    maxExistingChapter = chapterNumber;
+  }
+
+  if (maxExistingChapter >= targetChapter) {
+    return {
+      projectId: options.projectId,
+      targetChapter,
+      generatedChapterNumbers: [],
+      artifacts: existingArtifacts,
+      validationIssues: base.validationIssues,
+    };
+  }
+
+  let storyMemories = base.storyMemories;
+  let chapterPlans = base.chapterPlans;
+  const generatedArtifacts: ChapterArtifact[] = [];
+
+  const previousArtifact = maxExistingChapter > 0 ? existingArtifacts[existingArtifacts.length - 1] : null;
+
+  let currentSituation = previousArtifact?.memoryUpdate.nextSituation ?? base.storySetup.openingSituation;
+  let recentConsequences = buildRecentConsequences(previousArtifact, base.storySetup.currentArcGoal);
+
+  for (let chapterNumber = maxExistingChapter + 1; chapterNumber <= targetChapter; chapterNumber += 1) {
+    const generation = await generateChapterArtifact({
+      service,
+      repository,
+      projectId: options.projectId,
+      chapterNumber,
+      currentSituation,
+      recentConsequences,
+      base: {
+        ...base,
+        storyMemories,
+        chapterPlans,
+      },
+    });
+
+    generatedArtifacts.push(generation.artifact);
+    storyMemories = generation.updatedStoryMemories;
+    chapterPlans = generation.updatedChapterPlans;
+    currentSituation = generation.artifact.memoryUpdate.nextSituation;
+    recentConsequences = buildRecentConsequences(
+      generation.artifact,
+      base.storySetup.currentArcGoal,
+    );
+  }
+
+  return {
+    projectId: options.projectId,
+    targetChapter,
+    generatedChapterNumbers: generatedArtifacts.map((artifact) => artifact.chapterNumber),
+    artifacts: generatedArtifacts,
+    validationIssues: base.validationIssues,
+  };
+}
+
+export function formatV1RunResult(result: V1RunResult): string {
+  const lines: string[] = [];
+
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Target chapter: ${result.targetChapter}`);
+  lines.push(
+    `Generated now: ${result.generatedChapterNumbers.length > 0 ? result.generatedChapterNumbers.join(", ") : "none"}`,
+  );
+
+  for (const artifact of result.artifacts) {
+    lines.push("");
+    lines.push(`=== Chapter ${artifact.chapterNumber} ===`);
+    lines.push(`Title: ${artifact.writerResult.title ?? artifact.plan.title ?? "(untitled)"}`);
+    lines.push(`Goal: ${artifact.plan.chapterGoal}`);
+    lines.push(`Draft path: data/projects/${result.projectId}/chapters/chapter-${String(artifact.chapterNumber).padStart(3, "0")}/draft.md`);
+    lines.push(`Summary: ${artifact.memoryUpdate.chapterSummary}`);
+    lines.push(`Next: ${artifact.memoryUpdate.nextSituation}`);
+    lines.push(
+      `Missing resource findings: ${artifact.missingResourceReview.findings.length}`,
+    );
+    lines.push(`Fact findings: ${artifact.factConsistencyReview.findings.length}`);
+  }
+
+  if (result.validationIssues.length > 0) {
+    lines.push("");
+    lines.push("Validation issues:");
+    for (const issue of result.validationIssues) {
+      lines.push(`- ${issue}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+export const defaultDemoProjectId = "demo-project";
+export const defaultDemoPremise = demoPremise;

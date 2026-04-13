@@ -49,6 +49,12 @@ export type AuthorEffectTarget =
   | "reviewer"
   | "memory";
 
+export type PayoffPatternCategory =
+  | "emotional"
+  | "plot"
+  | "relationship"
+  | "theme";
+
 export interface ThemeBible {
   coreTheme: string;
   subThemes: string[];
@@ -167,6 +173,7 @@ export interface StoryMemory {
 export interface ChapterPlan {
   chapterNumber?: number;
   arcId?: EntityId;
+  beatId?: EntityId;
   title?: string;
   chapterGoal: string;
   emotionalGoal: string;
@@ -179,17 +186,113 @@ export interface ChapterPlan {
   disallowedMoves: string[];
   styleReminders: string[];
   authorComponentIds: EntityId[];
+  payoffPatternIds?: EntityId[];
+}
+
+export interface StoryOutline {
+  id: EntityId;
+  title: string;
+  premise: string;
+  coreTheme: string;
+  endingTarget: string;
+  majorArcIds: EntityId[];
+  keyTurningPoints: string[];
+}
+
+export interface ArcOutline {
+  id: EntityId;
+  storyOutlineId?: EntityId;
+  name: string;
+  arcGoal: string;
+  arcSellingPoint?: string;
+  arcHook?: string;
+  arcPayoff?: string;
+  startState: string;
+  endState: string;
+  requiredTurns: string[];
+  primaryPowerPatternIds?: EntityId[];
+  relationshipChanges: string[];
+  memoryRequirements: EntityId[];
+  beatIds: EntityId[];
+  primaryPayoffPatternIds?: EntityId[];
+  riskNotes?: string[];
+  chapterRangeHint?: {
+    start: number;
+    end: number;
+  };
+}
+
+export interface BeatOutline {
+  id: EntityId;
+  arcId: EntityId;
+  order: number;
+  beatGoal: string;
+  conflict: string;
+  expectedChange: string;
+  requiredCharacters: EntityId[];
+  requiredMemories: EntityId[];
+  payoffPatternIds?: EntityId[];
+  revealTargets: string[];
+  constraints: string[];
+  openingAnchor?: {
+    readerAnchor: string[];
+    relationshipAnchor: string[];
+    worldAnchor: string[];
+    hook: string;
+  };
+}
+
+export interface CastCharacterOutline {
+  id: EntityId;
+  name: string;
+  role: string;
+  storyFunction: string;
+  relationshipToProtagonist: string;
+  relationshipToSeniorBrother?: string;
+  coreTension: string;
+  intendedArc: string;
+  presenceSpan: string;
+}
+
+export interface PayoffPattern {
+  id: EntityId;
+  name: string;
+  category: PayoffPatternCategory;
+  summary: string;
+  readerReward: string;
+  whenToUse: string[];
+  requiredSetup: string[];
+  avoidWhen: string[];
+  risks: string[];
+  arcUses: string[];
+  beatUses: string[];
 }
 
 export interface StoryProject {
   id: EntityId;
   title: string;
+  description?: string;
+  status?: "draft" | "active" | "paused" | "archived";
   premise: string;
   authorProfile: AuthorProfile;
   themeBible: ThemeBible;
   styleBible: StyleBible;
+  storySetup: StorySetup;
+  storyOutline?: StoryOutline;
+  arcOutlines: ArcOutline[];
+  beatOutlines: BeatOutline[];
+  castOutlines?: CastCharacterOutline[];
   characters: CharacterState[];
   worldFacts: WorldFact[];
   memories: StoryMemory[];
   chapterPlans: ChapterPlan[];
+}
+
+export interface StorySetup {
+  premise: string;
+  currentArcGoal: string;
+  openingSituation: string;
+  defaultActiveCharacterIds: EntityId[];
+  storyOutlineId?: EntityId;
+  currentArcId?: EntityId;
 }
