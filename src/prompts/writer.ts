@@ -1,6 +1,46 @@
 import type { WriterInput, WriterResult } from "../domain/index.js";
 import type { ChatMessage } from "../llm/types.js";
 
+function formatActiveCharacters(input: WriterInput): string {
+  return input.contextPack.activeCharacters
+    .map((character) =>
+      [
+        `${character.name}(${character.id})`,
+        `goals=${character.currentGoals.join(" / ") || "none"}`,
+        `emotion=${character.emotionalState.join(" / ") || "none"}`,
+        `wounds=${character.wounds.join(" / ") || "none"}`,
+        `voice=${character.voiceNotes.join(" / ") || "none"}`,
+      ].join("; "),
+    )
+    .join("\n");
+}
+
+function formatRelevantMemories(input: WriterInput): string {
+  return input.contextPack.relevantMemories
+    .map((memory) =>
+      [
+        `${memory.title}(${memory.id})`,
+        `kind=${memory.kind}`,
+        `priority=${memory.priority}`,
+        `summary=${memory.summary}`,
+      ].join("; "),
+    )
+    .join("\n");
+}
+
+function formatRelevantWorldFacts(input: WriterInput): string {
+  return input.contextPack.relevantWorldFacts
+    .map((fact) =>
+      [
+        `${fact.title}(${fact.id})`,
+        `category=${fact.category}`,
+        `scope=${fact.scope}`,
+        `description=${fact.description}`,
+      ].join("; "),
+    )
+    .join("\n");
+}
+
 export function buildWriterMessages(input: WriterInput): ChatMessage[] {
   const { contextPack } = input;
 
@@ -17,6 +57,12 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         "Use authorRules and promptCapsule to control tone, relationship handling, and emotional delivery.",
         "Use readerValue to make the chapter feel worth reading now: the draft should cash out at least one clear reader reward, not just atmosphere.",
         "Do not turn the chapter into slogan-like hype. Deliver payoff through scene, choice, relationship movement, or pressure shift.",
+        "Prefer prose that notices abnormal details instead of explaining themes directly.",
+        "Prefer short to medium sentences, clean Chinese punctuation, and sharp paragraph rhythm.",
+        "Let tension accumulate through observation, pauses, repeated micro-failures, and what characters choose not to say.",
+        "When a key beat lands, you may use very short standalone sentences for emphasis.",
+        "Show dangerous competence through precise action, not through bragging or explanation.",
+        "Do not narrate like a plan document. Do not restate chapter goals in prose.",
         `Keep the draft between ${input.minParagraphs ?? 5} and ${input.maxParagraphs ?? 8} paragraphs.`,
       ].join("\n"),
     },
@@ -45,9 +91,17 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
           ? `Payoff patterns: ${contextPack.readerValue.payoffPatterns.join(" | ")}`
           : undefined,
         `Prompt capsule: ${contextPack.promptCapsule.join(" | ")}`,
-        `Active characters:\n${JSON.stringify(contextPack.activeCharacters, null, 2)}`,
-        `Relevant memories:\n${JSON.stringify(contextPack.relevantMemories, null, 2)}`,
-        `Relevant world facts:\n${JSON.stringify(contextPack.relevantWorldFacts, null, 2)}`,
+        [
+          "Style target:",
+          "1. Write through observation and deviation: what is too precise, too quiet, too fast, too steady, too clean.",
+          "2. Let the narration feel like it is watching cracks appear, not summarizing a beat sheet.",
+          "3. Keep subtext heavy. Dialogue should be brief, controlled, and slightly evasive.",
+          "4. Use body reactions, breath, gaze, pauses, and tiny movement errors to reveal pain or care.",
+          "5. Preserve a dangerous edge: even injured, the protagonist should still feel sharp and potentially lethal.",
+        ].join("\n"),
+        `Active characters:\n${formatActiveCharacters(input)}`,
+        `Relevant memories:\n${formatRelevantMemories(input)}`,
+        `Relevant world facts:\n${formatRelevantWorldFacts(input)}`,
       ].join("\n\n"),
     },
   ];
