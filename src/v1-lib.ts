@@ -6,6 +6,7 @@ import {
   mapAuthorInterviewToProfile,
   normalizeAuthorInterviewResult,
   type ArcOutline,
+  type AuthorInterviewSessionInput,
   type BeatOutline,
   type ChapterArtifact,
   type ChapterPlan,
@@ -27,7 +28,6 @@ import {
   demoArcOutlines,
   demoBeatOutlines,
   demoCharacterStates,
-  demoInterviewInput,
   demoPremise,
   demoProjectTitle,
   demoStoryOutline,
@@ -37,6 +37,11 @@ import {
   demoThemeBible,
   demoWorldFacts,
 } from "./defaults/demo-project.js";
+import {
+  buildInterviewInputFromQuizAnswers,
+  formatAuthorPresetCatalog as formatAuthorPresetCatalogText,
+  getAuthorInterviewPresetById,
+} from "./defaults/author-presets.js";
 import { LlmService } from "./llm/service.js";
 import {
   authorInterviewDisplayDraftSchema,
@@ -394,6 +399,7 @@ async function ensureBootstrappedProject(
   service: LlmService,
   repository: FileProjectRepository,
   projectId: string,
+  authorPresetId?: string,
 ): Promise<ProjectBaseState & { validationIssues: string[] }> {
   logStage("bootstrap", `ensure project=${projectId}`);
   const existingProject = await repository.getProject(projectId);
@@ -410,76 +416,23 @@ async function ensureBootstrappedProject(
 
   if (!authorProfile) {
     logStage("bootstrap", "author profile missing -> run interview");
-    const interviewCombined = demoInterviewInput.smallModel
-      ? await (async () => {
-          logStage("bootstrap", "llm: author_interview normalized-only");
-          const normalizedOnlyMessages =
-            buildAuthorInterviewSmallModelNormalizeMessages(demoInterviewInput);
-          const normalizedOnlyResult = await service.generateObjectForTask({
-            task: "author_interview",
-            messages: normalizedOnlyMessages,
-            schema: authorInterviewNormalizedDraftSchema,
-            temperature: 0.2,
-            maxTokens: 2200,
-          });
-
-          return {
-            display: {
-              summary: normalizedOnlyResult.object.normalized.authorProfile.summary,
-              authorProfile: normalizedOnlyResult.object.normalized.authorProfile,
-              components: normalizedOnlyResult.object.normalized.components.map((component) => ({
-                id: component.id,
-                name: component.name,
-                category: component.category,
-                description: component.name,
-                priority: component.priority,
-              })),
-              constraints: normalizedOnlyResult.object.normalized.constraints,
-              openQuestions: [],
-              conflictsDetected: [],
-            },
-            normalized: normalizedOnlyResult.object.normalized,
-          };
-        })()
-      : await (async () => {
-          logStage("bootstrap", "llm: author_interview display");
-          const displayMessages = buildAuthorInterviewDisplayMessages(demoInterviewInput);
-          const displayResult = await service.generateObjectForTask({
-            task: "author_interview",
-            messages: displayMessages,
-            schema: authorInterviewDisplayDraftSchema,
-            temperature: 0.2,
-            maxTokens: 2200,
-          });
-          logStage("bootstrap", "llm: author_interview normalized");
-          const normalizedMessages = buildAuthorInterviewNormalizeMessages({
-            input: demoInterviewInput,
-            display: displayResult.object.display,
-          });
-          const normalizedResult = await service.generateObjectForTask({
-            task: "author_interview",
-            messages: normalizedMessages,
-            schema: authorInterviewNormalizedDraftSchema,
-            temperature: 0.2,
-            maxTokens: 2600,
-          });
-
-          return {
-            display: displayResult.object.display,
-            normalized: normalizedResult.object.normalized,
-          };
-        })();
-    const normalizedInterview = normalizeAuthorInterviewResult(interviewCombined);
-    validationIssues.push(
-      ...validateAuthorInterviewResult(normalizedInterview).map(
-        (issue) => `${issue.path}: ${issue.message}`,
-      ),
-    );
-    authorProfile = mapAuthorInterviewToProfile(normalizedInterview, {
-      profileId: `${projectId}-author-profile`,
-      profileName: "Default Author Profile",
+    const selectedPreset = getAuthorInterviewPresetById(authorPresetId);
+    const interviewInput = {
+      ...selectedPreset.interviewInput,
+      targetProject: {
+        title: demoProjectTitle,
+        premise: demoPremise,
+        themeHint: "power, betrayal, and costly redemption",
+      },
+    };
+    const generated = await generateAuthorProfileFromInterviewInput({
+      service,
+      interviewInput,
+      projectId,
     });
-    authorPacks = buildDerivedAuthorProfilePacks(authorProfile);
+    validationIssues.push(...generated.validationIssues);
+    authorProfile = generated.authorProfile;
+    authorPacks = generated.authorPacks;
 
     await repository.saveAuthorProfile(projectId, authorProfile);
     await repository.saveDerivedAuthorProfilePacks(projectId, authorPacks);
@@ -596,13 +549,142 @@ export async function invalidateFromChapter(args: {
   };
 }
 
-export async function bootstrapProject(projectId: string): Promise<{
+async function generateAuthorProfileFromInterviewInput(args: {
+  service: LlmService;
+  interviewInput: AuthorInterviewSessionInput;
+  projectId: string;
+}): Promise<{
+  authorProfile: ReturnType<typeof mapAuthorInterviewToProfile>;
+  authorPacks: DerivedAuthorProfilePacks;
+  validationIssues: string[];
+}> {
+  const interviewCombined = args.interviewInput.smallModel
+    ? await (async () => {
+        logStage("bootstrap", "llm: author_interview normalized-only");
+        const normalizedOnlyMessages =
+          buildAuthorInterviewSmallModelNormalizeMessages(args.interviewInput);
+        const normalizedOnlyResult = await args.service.generateObjectForTask({
+          task: "author_interview",
+          messages: normalizedOnlyMessages,
+          schema: authorInterviewNormalizedDraftSchema,
+          temperature: 0.2,
+          maxTokens: 2200,
+        });
+
+        return {
+          display: {
+            summary: normalizedOnlyResult.object.normalized.authorProfile.summary,
+            authorProfile: normalizedOnlyResult.object.normalized.authorProfile,
+            components: normalizedOnlyResult.object.normalized.components.map((component) => ({
+              id: component.id,
+              name: component.name,
+              category: component.category,
+              description: component.name,
+              priority: component.priority,
+            })),
+            constraints: normalizedOnlyResult.object.normalized.constraints,
+            openQuestions: [],
+            conflictsDetected: [],
+          },
+          normalized: normalizedOnlyResult.object.normalized,
+        };
+      })()
+    : await (async () => {
+        logStage("bootstrap", "llm: author_interview display");
+        const displayMessages = buildAuthorInterviewDisplayMessages(args.interviewInput);
+        const displayResult = await args.service.generateObjectForTask({
+          task: "author_interview",
+          messages: displayMessages,
+          schema: authorInterviewDisplayDraftSchema,
+          temperature: 0.2,
+          maxTokens: 2200,
+        });
+        logStage("bootstrap", "llm: author_interview normalized");
+        const normalizedMessages = buildAuthorInterviewNormalizeMessages({
+          input: args.interviewInput,
+          display: displayResult.object.display,
+        });
+        const normalizedResult = await args.service.generateObjectForTask({
+          task: "author_interview",
+          messages: normalizedMessages,
+          schema: authorInterviewNormalizedDraftSchema,
+          temperature: 0.2,
+          maxTokens: 2600,
+        });
+
+        return {
+          display: displayResult.object.display,
+          normalized: normalizedResult.object.normalized,
+        };
+      })();
+
+  const normalizedInterview = normalizeAuthorInterviewResult(interviewCombined);
+  const validationIssues = validateAuthorInterviewResult(normalizedInterview).map(
+    (issue) => `${issue.path}: ${issue.message}`,
+  );
+  const authorProfile = mapAuthorInterviewToProfile(normalizedInterview, {
+    profileId: `${args.projectId}-author-profile`,
+    profileName: "Default Author Profile",
+  });
+  const authorPacks = buildDerivedAuthorProfilePacks(authorProfile);
+  return {
+    authorProfile,
+    authorPacks,
+    validationIssues,
+  };
+}
+
+export async function interviewProject(args: {
+  projectId: string;
+  answersRaw: string;
+}): Promise<{
   projectId: string;
   validationIssues: string[];
 }> {
   const service = new LlmService();
   const repository = new FileProjectRepository();
-  const base = await ensureBootstrappedProject(service, repository, projectId);
+  const existingProject = await repository.getProject(args.projectId);
+  if (!existingProject) {
+    await repository.createProject({
+      id: args.projectId,
+      title: demoProjectTitle,
+    });
+  }
+
+  const interviewInput = buildInterviewInputFromQuizAnswers(args.answersRaw, {
+    title: demoProjectTitle,
+    premise: demoPremise,
+    themeHint: "custom quiz generated author profile",
+  });
+  const generated = await generateAuthorProfileFromInterviewInput({
+    service,
+    interviewInput,
+    projectId: args.projectId,
+  });
+
+  await repository.saveAuthorProfile(args.projectId, generated.authorProfile);
+  await repository.saveDerivedAuthorProfilePacks(args.projectId, generated.authorPacks);
+  return {
+    projectId: args.projectId,
+    validationIssues: generated.validationIssues,
+  };
+}
+
+export async function bootstrapProject(
+  projectId: string,
+  options?: { authorPresetId?: string },
+): Promise<{
+  projectId: string;
+  validationIssues: string[];
+}> {
+  const service = new LlmService();
+  const repository = new FileProjectRepository();
+  const base = await ensureBootstrappedProject(
+    service,
+    repository,
+    projectId,
+    options?.authorPresetId,
+  );
 
   return {
     projectId,
@@ -1131,4 +1213,8 @@ export function formatInvalidateResult(result: InvalidateResult): string {
 }
 
 export const defaultDemoProjectId = "demo-project";
+
+export function formatAuthorPresetCatalog(): string {
+  return formatAuthorPresetCatalogText();
+}
 export const defaultDemoPremise = demoPremise;

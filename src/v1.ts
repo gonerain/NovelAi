@@ -12,14 +12,18 @@ import { FileProjectRepository } from "./storage/index.js";
 import {
   bootstrapProject,
   defaultDemoProjectId,
+  formatAuthorPresetCatalog,
   formatInvalidateResult,
   formatV1RunResult,
+  interviewProject,
   invalidateFromChapter,
   runV1,
 } from "./v1-lib.js";
 
 type CommandName =
   | "project:bootstrap"
+  | "project:interview"
+  | "project:profiles"
   | "project:inspect"
   | "project:paths"
   | "outline:inspect"
@@ -35,6 +39,8 @@ interface ParsedArgs {
   projectId: string;
   chapterNumber?: number;
   count?: number;
+  profileId?: string;
+  answers?: string;
 }
 
 function readOption(args: Map<string, string>, key: string): string | undefined {
@@ -68,10 +74,14 @@ function parseCommand(argv: string[]): ParsedArgs {
   const projectId = readOption(flags, "--project") ?? defaultDemoProjectId;
   const chapterOption = readOption(flags, "--chapter");
   const countOption = readOption(flags, "--count");
+  const profileOption = readOption(flags, "--profile");
+  const answersOption = readOption(flags, "--answers");
 
   const command = `${group}:${action}` as CommandName;
   const allowed = new Set<CommandName>([
     "project:bootstrap",
+    "project:interview",
+    "project:profiles",
     "project:inspect",
     "project:paths",
     "outline:inspect",
@@ -92,6 +102,8 @@ function parseCommand(argv: string[]): ParsedArgs {
     projectId,
     chapterNumber: chapterOption ? Number(chapterOption) : undefined,
     count: countOption ? Number(countOption) : undefined,
+    profileId: profileOption,
+    answers: answersOption,
   };
 }
 
@@ -209,7 +221,9 @@ function summarizeProjectPaths(projectId: string): string {
 function usage(): string {
   return [
     "Commands:",
-    "  project bootstrap --project <id>",
+    "  project profiles",
+    "  project bootstrap --project <id> [--profile <preset_id>]",
+    "  project interview --project <id> --answers A,B,C,A,B,C",
     "  project inspect --project <id>",
     "  project paths --project <id>",
     "  outline inspect --project <id>",
@@ -228,8 +242,33 @@ async function main(): Promise<void> {
 
   switch (parsed.command) {
     case "project:bootstrap": {
-      const result = await bootstrapProject(parsed.projectId);
+      const result = await bootstrapProject(parsed.projectId, {
+        authorPresetId: parsed.profileId,
+      });
       console.log(`Project bootstrapped: ${result.projectId}`);
+      if (result.validationIssues.length > 0) {
+        console.log("Validation issues:");
+        for (const issue of result.validationIssues) {
+          console.log(`- ${issue}`);
+        }
+      }
+      return;
+    }
+
+    case "project:profiles": {
+      console.log(formatAuthorPresetCatalog());
+      return;
+    }
+
+    case "project:interview": {
+      if (!parsed.answers) {
+        throw new Error("project interview requires --answers A,B,C,A,B,C");
+      }
+      const result = await interviewProject({
+        projectId: parsed.projectId,
+        answersRaw: parsed.answers,
+      });
+      console.log(`Project interview completed: ${result.projectId}`);
       if (result.validationIssues.length > 0) {
         console.log("Validation issues:");
         for (const issue of result.validationIssues) {
