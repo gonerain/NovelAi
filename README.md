@@ -36,9 +36,13 @@ ANTHROPIC_BASE_URL=https://api.anthropic.com
 ANTHROPIC_VERSION=2023-06-01
 
 OLLAMA_BASE_URL=http://localhost:11434
+
+GLM_API_KEY=
+GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 ```
 
 当前默认任务路由在 [src/llm/config.ts](./src/llm/config.ts)。
+如需启用 GLM，可将任务路由改为：`provider: "glm"`，模型例如 `glm-4.5`。
 
 ## 启动方式
 

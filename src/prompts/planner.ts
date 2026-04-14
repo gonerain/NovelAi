@@ -2,9 +2,6 @@ import type { PlannerInput, PlannerResult } from "../domain/index.js";
 import type { ChatMessage } from "../llm/types.js";
 
 export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
-  const storyLine = input.storyOutline
-    ? `Story outline: theme=${input.storyOutline.coreTheme}; ending=${input.storyOutline.endingTarget}`
-    : undefined;
 
   const arcLine = input.arcOutline
     ? [
@@ -53,18 +50,19 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
     {
       role: "system",
       content: [
-        "You are a long-form web-novel chapter planner.",
-        "Produce a structured ChapterPlan for exactly one chapter.",
-        "Do not write prose. Do not explain your reasoning.",
-        "The chapter plan must inherit the current arc's selling point, hook, and payoff pressure rather than drifting into generic continuation.",
-        "When beat outline is provided, treat it as a hard anchor for this chapter's conflict and expected change.",
-        "Prefer 1 or 2 payoffPatternIds that match the current arc and beat. Do not output a long list.",
+        "Task: produce a structured ChapterPlan for one chapter.",
+        "Hard constraints:",
+        "- JSON only, no prose writing.",
+        "- Keep JSON keys/schema fields/id-like tokens in English exactly as required.",
+        "- For semantic text fields, concise Chinese is preferred; English is allowed when clearer.",
+        "- Keep mixed-language style consistent: structural control in English, content payload can be Chinese.",
+        "- Use beat conflict/expectedChange as hard anchor when beat is provided.",
+        "- Keep payoffPatternIds to 1-2 aligned ids.",
         "Keep sceneTags between 3 and 5 items.",
         "Keep mustHitConflicts between 2 and 4 items.",
         "Keep disallowedMoves between 2 and 4 items.",
         "Keep styleReminders between 3 and 5 items.",
-        "Keep plannerNotes between 2 and 4 items.",
-        "Prioritize current chapter utility over broad arc summary.",
+        "Keep plannerNotes between 2 and 3 items.",
       ].join("\n"),
     },
     {
@@ -95,9 +93,8 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         `Author global preferences: ${input.authorPack.globalPreferences.join(" | ")}`,
         `Planner-specific preferences: ${input.authorPack.taskSpecificPreferences.join(" | ")}`,
         `Task-specific author rules: ${input.authorPack.taskRules.join(" | ")}`,
-        `Theme baseline: core=${input.themeBible.coreTheme}; subthemes=${input.themeBible.subThemes.join(" | ")}; ending=${input.themeBible.endingTarget}; emotion=${input.themeBible.emotionalDestination}`,
-        `Style baseline: narrative=${input.styleBible.narrativeStyle.join(" | ")}; emotion=${input.styleBible.emotionalStyle.join(" | ")}; pacing=${input.styleBible.pacingStyle.join(" | ")}; avoid=${input.styleBible.antiPatterns.join(" | ")}`,
-        storyLine,
+        `Theme baseline: core=${input.themeBible.coreTheme}; ending=${input.themeBible.endingTarget}; subthemes=${input.themeBible.subThemes.slice(0, 4).join(" | ")}`,
+        `Style baseline: narrative=${input.styleBible.narrativeStyle.slice(0, 3).join(" | ")}; pacing=${input.styleBible.pacingStyle.slice(0, 3).join(" | ")}; avoid=${input.styleBible.antiPatterns.slice(0, 4).join(" | ")}`,
         arcLine,
         beatLine,
       ]

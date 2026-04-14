@@ -47,15 +47,21 @@ import {
   buildFactConsistencyReviewMessages,
   buildMemoryUpdaterMessages,
   buildMissingResourceReviewMessages,
+  buildRewriterMessages,
   buildPlannerMessages,
   buildWriterMessages,
   factConsistencyReviewerResultSchema,
   memoryUpdaterResultSchema,
   missingResourceReviewerResultSchema,
   plannerResultSchema,
+  rewriterResultSchema,
   writerResultSchema,
 } from "./prompts/index.js";
 import { FileProjectRepository } from "./storage/index.js";
+
+function logStage(stage: string, detail: string): void {
+  console.log(`[${stage}] ${detail}`);
+}
 
 export interface V1RunOptions {
   projectId: string;
@@ -297,11 +303,58 @@ function buildRecentConsequences(
   );
 }
 
+function hasImportantReviewerIssues(args: {
+  missing: MissingResourceReviewerResult;
+  fact: FactConsistencyReviewerResult;
+}): boolean {
+  const hasImportantMissing = args.missing.findings.some(
+    (item) => item.severity === "medium" || item.severity === "high",
+  );
+  const hasImportantFact = args.fact.findings.some(
+    (item) => item.severity === "medium" || item.severity === "high",
+  );
+  return hasImportantMissing || hasImportantFact;
+}
+
+function hasHighReviewerIssues(args: {
+  missing: MissingResourceReviewerResult;
+  fact: FactConsistencyReviewerResult;
+}): boolean {
+  const missingHigh = args.missing.findings.some((item) => item.severity === "high");
+  const factHigh = args.fact.findings.some((item) => item.severity === "high");
+  return missingHigh || factHigh;
+}
+
+function countLowMediumIssues(args: {
+  missing: MissingResourceReviewerResult;
+  fact: FactConsistencyReviewerResult;
+}): number {
+  const missingCount = args.missing.findings.filter(
+    (item) => item.severity === "low" || item.severity === "medium",
+  ).length;
+  const factCount = args.fact.findings.filter(
+    (item) => item.severity === "low" || item.severity === "medium",
+  ).length;
+  return missingCount + factCount;
+}
+
+function pickRewriteMode(args: {
+  missing: MissingResourceReviewerResult;
+  fact: FactConsistencyReviewerResult;
+}): "repair_first" | "literary_polish" {
+  if (hasHighReviewerIssues(args)) {
+    return "repair_first";
+  }
+
+  return countLowMediumIssues(args) <= 1 ? "literary_polish" : "repair_first";
+}
+
 async function ensureBootstrappedProject(
   service: LlmService,
   repository: FileProjectRepository,
   projectId: string,
 ): Promise<ProjectBaseState & { validationIssues: string[] }> {
+  logStage("bootstrap", `ensure project=${projectId}`);
   const existingProject = await repository.getProject(projectId);
   if (!existingProject) {
     await repository.createProject({
@@ -315,8 +368,10 @@ async function ensureBootstrappedProject(
   const validationIssues: string[] = [];
 
   if (!authorProfile) {
+    logStage("bootstrap", "author profile missing -> run interview");
     const interviewCombined = demoInterviewInput.smallModel
       ? await (async () => {
+          logStage("bootstrap", "llm: author_interview normalized-only");
           const normalizedOnlyMessages =
             buildAuthorInterviewSmallModelNormalizeMessages(demoInterviewInput);
           const normalizedOnlyResult = await service.generateObjectForTask({
@@ -346,6 +401,7 @@ async function ensureBootstrappedProject(
           };
         })()
       : await (async () => {
+          logStage("bootstrap", "llm: author_interview display");
           const displayMessages = buildAuthorInterviewDisplayMessages(demoInterviewInput);
           const displayResult = await service.generateObjectForTask({
             task: "author_interview",
@@ -354,6 +410,7 @@ async function ensureBootstrappedProject(
             temperature: 0.2,
             maxTokens: 2200,
           });
+          logStage("bootstrap", "llm: author_interview normalized");
           const normalizedMessages = buildAuthorInterviewNormalizeMessages({
             input: demoInterviewInput,
             display: displayResult.object.display,
@@ -385,9 +442,11 @@ async function ensureBootstrappedProject(
 
     await repository.saveAuthorProfile(projectId, authorProfile);
     await repository.saveDerivedAuthorProfilePacks(projectId, authorPacks);
+    logStage("bootstrap", "saved author profile + packs");
   } else if (!authorPacks) {
     authorPacks = buildDerivedAuthorProfilePacks(authorProfile);
     await repository.saveDerivedAuthorProfilePacks(projectId, authorPacks);
+    logStage("bootstrap", "rebuilt missing author packs");
   }
 
   const themeBible = (await repository.loadThemeBible(projectId)) ?? demoThemeBible;
@@ -422,6 +481,8 @@ async function ensureBootstrappedProject(
       loadedStoryMemories.length ? deriveFallbackSeedMemories(storyMemories) : demoStoryMemories,
     );
   }
+
+  logStage("bootstrap", "base files ready");
 
   return {
     storySetup,
@@ -521,6 +582,7 @@ async function generateChapterArtifact(args: {
   updatedStoryMemories: StoryMemory[];
   updatedChapterPlans: ChapterPlan[];
 }> {
+  logStage("chapter", `start chapter=${args.chapterNumber}`);
   const currentArc = pickArcForChapter(
     args.base.arcOutlines,
     args.chapterNumber,
@@ -559,6 +621,7 @@ async function generateChapterArtifact(args: {
     recentConsequences: args.recentConsequences,
   });
 
+  logStage("chapter", `llm: planner chapter=${args.chapterNumber}`);
   const plannerResult = await args.service.generateObjectForTask({
     task: "planner",
     messages: plannerMessages,
@@ -602,6 +665,7 @@ async function generateChapterArtifact(args: {
     }),
   };
 
+  logStage("chapter", `build context chapter=${args.chapterNumber}`);
   const writerContextPack = buildContextPack({
     task: "writer",
     authorPack: args.base.authorPacks.writer,
@@ -627,6 +691,7 @@ async function generateChapterArtifact(args: {
     worldFacts: args.base.worldFacts,
   });
 
+  logStage("chapter", `llm: writer chapter=${args.chapterNumber}`);
   const writerResult = await args.service.generateObjectForTask({
     task: "writer",
     messages: buildWriterMessages({
@@ -639,6 +704,7 @@ async function generateChapterArtifact(args: {
     maxTokens: 2800,
   });
 
+  logStage("chapter", `llm: review_missing_resource chapter=${args.chapterNumber}`);
   const missingResourceReview = await args.service.generateObjectForTask({
     task: "review_missing_resource",
     messages: buildMissingResourceReviewMessages({
@@ -651,6 +717,7 @@ async function generateChapterArtifact(args: {
     maxTokens: 1800,
   });
 
+  logStage("chapter", `llm: review_fact chapter=${args.chapterNumber}`);
   const factConsistencyReview = await args.service.generateObjectForTask({
     task: "review_fact",
     messages: buildFactConsistencyReviewMessages({
@@ -664,12 +731,83 @@ async function generateChapterArtifact(args: {
     maxTokens: 1800,
   });
 
+  const initialMissing = missingResourceReview.object as MissingResourceReviewerResult;
+  const initialFact = factConsistencyReview.object as FactConsistencyReviewerResult;
+  const initialRewriteMode = pickRewriteMode({
+    missing: initialMissing,
+    fact: initialFact,
+  });
+
+  let rewrittenDraft = writerResult.object.draft;
+  let rewrittenTitle = writerResult.object.title;
+  let activeMissing = initialMissing;
+  let activeFact = initialFact;
+  const maxRewritePasses = 2;
+
+  for (let pass = 1; pass <= maxRewritePasses; pass += 1) {
+    const passMode = pass === 1 ? initialRewriteMode : "repair_first";
+    logStage(
+      "chapter",
+      `llm: rewriter chapter=${args.chapterNumber} mode=${passMode} pass=${pass}`,
+    );
+    const rewritten = await args.service.generateObjectForTask({
+      task: "rewriter",
+      messages: buildRewriterMessages({
+        title: rewrittenTitle,
+        draft: rewrittenDraft,
+        mode: passMode,
+        missingResourceReview: activeMissing,
+        factConsistencyReview: activeFact,
+      }),
+      schema: rewriterResultSchema,
+      temperature: passMode === "literary_polish" ? 0.65 : 0.35,
+      maxTokens: 3000,
+    });
+    rewrittenDraft = rewritten.object.draft;
+    rewrittenTitle = rewritten.object.title ?? rewrittenTitle;
+
+    logStage("chapter", `llm: review_missing_resource_final chapter=${args.chapterNumber} pass=${pass}`);
+    const missingResourceReviewFinal = await args.service.generateObjectForTask({
+      task: "review_missing_resource",
+      messages: buildMissingResourceReviewMessages({
+        contextPack: reviewerContextPack,
+        draft: rewrittenDraft,
+        storyMemories: args.base.storyMemories,
+      }),
+      schema: missingResourceReviewerResultSchema,
+      temperature: 0.2,
+      maxTokens: 1800,
+    });
+
+    logStage("chapter", `llm: review_fact_final chapter=${args.chapterNumber} pass=${pass}`);
+    const factConsistencyReviewFinal = await args.service.generateObjectForTask({
+      task: "review_fact",
+      messages: buildFactConsistencyReviewMessages({
+        contextPack: reviewerContextPack,
+        draft: rewrittenDraft,
+        storyMemories: args.base.storyMemories,
+        worldFacts: args.base.worldFacts,
+      }),
+      schema: factConsistencyReviewerResultSchema,
+      temperature: 0.2,
+      maxTokens: 1800,
+    });
+
+    activeMissing = missingResourceReviewFinal.object as MissingResourceReviewerResult;
+    activeFact = factConsistencyReviewFinal.object as FactConsistencyReviewerResult;
+
+    if (!hasImportantReviewerIssues({ missing: activeMissing, fact: activeFact })) {
+      break;
+    }
+  }
+
+  logStage("chapter", `llm: memory_updater chapter=${args.chapterNumber}`);
   const memoryUpdate = await args.service.generateObjectForTask({
     task: "memory_updater",
     messages: buildMemoryUpdaterMessages({
       chapterNumber: args.chapterNumber,
       chapterPlan,
-      draft: writerResult.object.draft,
+      draft: rewrittenDraft,
       storyMemories: args.base.storyMemories,
       activeCharacterIds: chapterPlan.requiredCharacters,
     }),
@@ -689,17 +827,23 @@ async function generateChapterArtifact(args: {
     chapterNumber: args.chapterNumber,
     plan: chapterPlan,
     contextPack: writerContextPack,
-    writerResult: writerResult.object as WriterResult,
-    missingResourceReview: missingResourceReview.object as MissingResourceReviewerResult,
-    factConsistencyReview: factConsistencyReview.object as FactConsistencyReviewerResult,
+    writerResult: {
+      ...(writerResult.object as WriterResult),
+      title: rewrittenTitle,
+      draft: rewrittenDraft,
+    },
+    missingResourceReview: activeMissing,
+    factConsistencyReview: activeFact,
     memoryUpdate: memoryUpdate.object as MemoryUpdaterResult,
     generatedAt: new Date().toISOString(),
   };
 
+  logStage("chapter", `save artifacts chapter=${args.chapterNumber}`);
   await args.repository.saveChapterPlans(args.projectId, updatedChapterPlans);
   await args.repository.saveStoryMemories(args.projectId, updatedStoryMemories);
   await args.repository.saveChapterArtifact(args.projectId, artifact);
 
+  logStage("chapter", `done chapter=${args.chapterNumber}`);
   return {
     artifact,
     updatedStoryMemories,
@@ -723,6 +867,7 @@ function parseTargetChapter(options: V1RunOptions): number {
 }
 
 export async function runV1(options: V1RunOptions): Promise<V1RunResult> {
+  logStage("run", `start mode=${options.mode} project=${options.projectId}`);
   const service = new LlmService();
   const repository = new FileProjectRepository();
   const targetChapter = parseTargetChapter(options);
@@ -759,6 +904,7 @@ export async function runV1(options: V1RunOptions): Promise<V1RunResult> {
   let recentConsequences = buildRecentConsequences(previousArtifact, base.storySetup.currentArcGoal);
 
   for (let chapterNumber = maxExistingChapter + 1; chapterNumber <= targetChapter; chapterNumber += 1) {
+    logStage("run", `generate chapter=${chapterNumber}/${targetChapter}`);
     const generation = await generateChapterArtifact({
       service,
       repository,
@@ -783,6 +929,7 @@ export async function runV1(options: V1RunOptions): Promise<V1RunResult> {
     );
   }
 
+  logStage("run", "completed");
   return {
     projectId: options.projectId,
     targetChapter,

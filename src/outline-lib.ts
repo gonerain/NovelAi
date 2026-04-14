@@ -21,6 +21,10 @@ import { loadStoryProject } from "./project/index.js";
 import { FileProjectRepository } from "./storage/index.js";
 import { bootstrapProject } from "./v1-lib.js";
 
+function logStage(stage: string, detail: string): void {
+  console.log(`[${stage}] ${detail}`);
+}
+
 export interface GenerateOutlineStackOptions {
   projectId: string;
   targetChapterCount?: number;
@@ -174,9 +178,24 @@ function coreCharacters(project: StoryProject): Array<{ id: string; name: string
   }));
 }
 
+function dedupeCast(cast: CastCharacterOutline[]): CastCharacterOutline[] {
+  const seen = new Set<string>();
+  const result: CastCharacterOutline[] = [];
+  for (const item of cast) {
+    const key = `${item.id}::${item.name}`.trim();
+    if (!key || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(item);
+  }
+  return result;
+}
+
 export async function generateOutlineStack(
   options: GenerateOutlineStackOptions,
 ): Promise<GenerateOutlineStackResult> {
+  logStage("outline", `bootstrap project=${options.projectId}`);
   await bootstrapProject(options.projectId);
 
   const repository = new FileProjectRepository();
@@ -188,6 +207,7 @@ export async function generateOutlineStack(
   const service = new LlmService();
   const authorPacks = buildDerivedAuthorProfilePacks(project.authorProfile);
 
+  logStage("outline", "llm: story_outline");
   const storyOutlineResult = await service.generateObjectForTask({
     task: "story_outline",
     messages: buildStoryOutlineMessages({
@@ -207,7 +227,9 @@ export async function generateOutlineStack(
   const storyOutline = storyOutlineResult.object.storyOutline;
   const arcBlueprints = storyOutlineResult.object.arcBlueprints;
 
-  const castResult = await service.generateObjectForTask({
+  logStage("outline", "llm: cast_expansion");
+  const desiredLongTermCastSize = options.desiredLongTermCastSize ?? 6;
+  const firstCastResult = await service.generateObjectForTask({
     task: "cast_expansion",
     messages: buildCastExpansionMessages({
       projectTitle: project.title,
@@ -215,20 +237,48 @@ export async function generateOutlineStack(
       storyOutline,
       arcBlueprints,
       existingCoreCharacters: coreCharacters(project),
-      desiredLongTermCastSize: options.desiredLongTermCastSize ?? 6,
+      desiredLongTermCastSize,
     }),
     schema: castExpansionResultSchema,
     temperature: 0.2,
     maxTokens: 2600,
   });
+  let cast = dedupeCast(firstCastResult.object.cast);
+  if (cast.length < desiredLongTermCastSize) {
+    const missing = desiredLongTermCastSize - cast.length;
+    logStage("outline", `llm: cast_expansion topup missing=${missing}`);
+    const topupResult = await service.generateObjectForTask({
+      task: "cast_expansion",
+      messages: buildCastExpansionMessages({
+        projectTitle: project.title,
+        authorProfile: authorPacks.compact,
+        storyOutline,
+        arcBlueprints,
+        existingCoreCharacters: [
+          ...coreCharacters(project),
+          ...cast.map((item) => ({
+            id: item.id,
+            name: item.name,
+            role: item.role,
+          })),
+        ],
+        desiredLongTermCastSize: missing,
+      }),
+      schema: castExpansionResultSchema,
+      temperature: 0.2,
+      maxTokens: 2200,
+    });
+    cast = dedupeCast([...cast, ...topupResult.object.cast]).slice(0, desiredLongTermCastSize);
+  }
 
+  logStage("outline", "llm: arc_outline");
   const arcResult = await service.generateObjectForTask({
     task: "arc_outline",
     messages: buildArcOutlineMessages({
       projectTitle: project.title,
       storyOutline,
       arcBlueprints,
-      cast: castResult.object.cast,
+      cast,
       targetArcCount: options.targetArcCount ?? 10,
       targetChapterCount: options.targetChapterCount ?? 250,
     }),
@@ -236,42 +286,51 @@ export async function generateOutlineStack(
     temperature: 0.2,
     maxTokens: 3200,
   });
-  const beatResult = await service.generateObjectForTask({
-    task: "beat_outline",
-    messages: buildBeatOutlineMessages({
-      projectTitle: project.title,
-      storyOutline,
-      arcOutlines: arcResult.object.arcOutlines,
-      targetChapterCount: options.targetChapterCount ?? 250,
-    }),
-    schema: beatOutlineGenerationResultSchema,
-    temperature: 0.2,
-    maxTokens: 3800,
-  });
+  logStage("outline", "llm: beat_outline");
+  const allBeatOutlines = [];
+  for (const arc of arcResult.object.arcOutlines) {
+    logStage("outline", `llm: beat_outline arc=${arc.id}`);
+    const beatResult = await service.generateObjectForTask({
+      task: "beat_outline",
+      messages: buildBeatOutlineMessages({
+        projectTitle: project.title,
+        storyOutline,
+        arcOutlines: [arc],
+        targetChapterCount: options.targetChapterCount ?? 250,
+      }),
+      schema: beatOutlineGenerationResultSchema,
+      temperature: 0.2,
+      maxTokens: 3200,
+    });
+    allBeatOutlines.push(...beatResult.object.beatOutlines);
+  }
 
-  validateCastSize(castResult.object.cast, options.desiredLongTermCastSize ?? 6);
+  logStage("outline", "validate: cast/arc/beat coverage");
+  validateCastSize(cast, desiredLongTermCastSize);
   validateArcCoverage(
     arcResult.object.arcOutlines,
     options.targetArcCount ?? 10,
     options.targetChapterCount ?? 250,
   );
-  validateBeatCoverage(beatResult.object.beatOutlines, arcResult.object.arcOutlines);
+  validateBeatCoverage(allBeatOutlines, arcResult.object.arcOutlines);
   const arcOutlinesWithBeatIds = attachBeatIdsToArcs(
     arcResult.object.arcOutlines,
-    beatResult.object.beatOutlines,
+    allBeatOutlines,
   );
 
+  logStage("outline", "save: story/cast/arc/beat files");
   await repository.saveStoryOutline(options.projectId, storyOutline);
-  await repository.saveCastOutlines(options.projectId, castResult.object.cast);
+  await repository.saveCastOutlines(options.projectId, cast);
   await repository.saveArcOutlines(options.projectId, arcOutlinesWithBeatIds);
-  await repository.saveBeatOutlines(options.projectId, beatResult.object.beatOutlines);
+  await repository.saveBeatOutlines(options.projectId, allBeatOutlines);
 
+  logStage("outline", "done");
   return {
     projectId: options.projectId,
     storyOutline,
-    cast: castResult.object.cast,
+    cast,
     arcOutlines: arcOutlinesWithBeatIds,
-    beatOutlines: beatResult.object.beatOutlines,
+    beatOutlines: allBeatOutlines,
   };
 }
 

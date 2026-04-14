@@ -7,19 +7,49 @@ import type { ChatMessage } from "../llm/types.js";
 export function buildStoryOutlineMessages(
   input: StoryOutlineGenerationInput,
 ): ChatMessage[] {
+  const compactAuthorProfile = {
+    summary: input.authorProfile.summary,
+    corePreferences: input.authorProfile.corePreferences.slice(0, 6),
+    plotBiases: input.authorProfile.plotBiases.slice(0, 6),
+    endingBiases: input.authorProfile.endingBiases.slice(0, 6),
+    topConstraints: input.authorProfile.topConstraints.slice(0, 4).map((item) => item.description),
+  };
+
+  const compactTheme = {
+    coreTheme: input.themeBible.coreTheme,
+    endingTarget: input.themeBible.endingTarget,
+    emotionalDestination: input.themeBible.emotionalDestination,
+    subThemes: input.themeBible.subThemes.slice(0, 5),
+    taboos: input.themeBible.taboos.slice(0, 4),
+  };
+
+  const compactStyle = {
+    narrativeStyle: input.styleBible.narrativeStyle.slice(0, 4),
+    pacingStyle: input.styleBible.pacingStyle.slice(0, 4),
+    antiPatterns: input.styleBible.antiPatterns.slice(0, 5),
+  };
+
+  const compactSetup = {
+    premise: input.storySetup.premise,
+    currentArcGoal: input.storySetup.currentArcGoal,
+    openingSituation: input.storySetup.openingSituation,
+    defaultActiveCharacterIds: input.storySetup.defaultActiveCharacterIds.slice(0, 4),
+  };
+
   return [
     {
       role: "system",
       content: [
-        "You are a story architect for long-form web fiction.",
-        "Design a story-level outline before any chapter-level breakdown.",
-        "Do not write chapters. Do not write prose scenes.",
-        "First solve structure: what makes this story sustain long form, how the conflict escalates, how the ending fulfills the theme.",
-        "The result must avoid middle-volume repetition, must not rely on only two characters to carry the whole book, and must produce distinct arc functions.",
-        "Return all content in English.",
-        "You must return exactly the requested number of arc blueprints.",
-        "Arc blueprints must partition the full chapter range contiguously from chapter 1 to the target chapter count with no gaps and no overlaps.",
-        "Every arc blueprint must have a distinct story function, not just another investigation or travel phase.",
+        "Task: Generate story-level outline and arc blueprints only.",
+        "Hard constraints:",
+        "- Output valid JSON only.",
+        "- Keep JSON keys/schema fields/id-like tokens in English exactly as required.",
+        "- For semantic text fields, concise Chinese is preferred; English is allowed when clearer.",
+        "- Keep mixed-language style consistent: structural control in English, content payload can be Chinese.",
+        "- Exactly targetArcCount arc blueprints.",
+        "- Arc blueprints must fully cover chapter 1..targetChapterCount, contiguous, no gaps, no overlaps.",
+        "- Arc functions must be distinct; avoid repeated generic arc shapes.",
+        "- Do not write chapter prose.",
         "Return valid JSON only.",
       ].join("\n"),
     },
@@ -29,31 +59,10 @@ export function buildStoryOutlineMessages(
         `Project title: ${input.projectTitle}`,
         `Target chapter count: ${input.targetChapterCount}`,
         `Target arc count: ${input.targetArcCount}`,
-        `Author profile:\n${JSON.stringify(input.authorProfile, null, 2)}`,
-        `Theme focus:\n${JSON.stringify(
-          {
-            coreTheme: input.themeBible.coreTheme,
-            endingTarget: input.themeBible.endingTarget,
-            emotionalDestination: input.themeBible.emotionalDestination,
-            subThemes: input.themeBible.subThemes,
-            taboos: input.themeBible.taboos,
-          },
-          null,
-          2,
-        )}`,
-        `Style focus:\n${JSON.stringify(
-          {
-            narrativeStyle: input.styleBible.narrativeStyle,
-            dialogueStyle: input.styleBible.dialogueStyle,
-            pacingStyle: input.styleBible.pacingStyle,
-            antiPatterns: input.styleBible.antiPatterns,
-          },
-          null,
-          2,
-        )}`,
-        `Story setup:\n${JSON.stringify(input.storySetup, null, 2)}`,
-        "Design a story outline and arc blueprints that can actually support a long-form project.",
-        "The output must make clear why this story needs long-form length, how the middle avoids repetition, and how the ending pays off the opening promise.",
+        `Author profile (compressed):\n${JSON.stringify(compactAuthorProfile, null, 2)}`,
+        `Theme (compressed):\n${JSON.stringify(compactTheme, null, 2)}`,
+        `Style (compressed):\n${JSON.stringify(compactStyle, null, 2)}`,
+        `Story setup (compressed):\n${JSON.stringify(compactSetup, null, 2)}`,
       ].join("\n\n"),
     },
   ];

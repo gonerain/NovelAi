@@ -1,5 +1,6 @@
 import { AnthropicClient } from "./providers/anthropic.js";
 import { DeepSeekClient } from "./providers/deepseek.js";
+import { GlmClient } from "./providers/glm.js";
 import { OllamaClient } from "./providers/ollama.js";
 import { OpenAiClient } from "./providers/openai.js";
 import type { LlmClient, LlmProvider } from "./types.js";
@@ -32,6 +33,8 @@ export class DefaultClientRegistry implements ClientRegistry {
         return new AnthropicClient();
       case "ollama":
         return new OllamaClient();
+      case "glm":
+        return new GlmClient();
       default:
         throw new Error(`No client registered for provider: ${String(provider)}`);
     }

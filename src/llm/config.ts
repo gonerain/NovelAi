@@ -7,25 +7,29 @@ export const defaultTaskRoutes: Record<TaskName, ModelRoute> = {
   },
   story_outline: {
     provider: "deepseek",
-    model: "deepseek-chat",
+    model: "deepseek-reasoner",
   },
   cast_expansion: {
     provider: "deepseek",
-    model: "deepseek-chat",
+    model: "deepseek-reasoner",
   },
   arc_outline: {
     provider: "deepseek",
-    model: "deepseek-chat",
+    model: "deepseek-reasoner",
   },
   beat_outline: {
     provider: "deepseek",
-    model: "deepseek-chat",
+    model: "deepseek-reasoner",
   },
   planner: {
     provider: "deepseek",
     model: "deepseek-chat",
   },
   writer: {
+    provider: "deepseek",
+    model: "deepseek-chat",
+  },
+  rewriter: {
     provider: "deepseek",
     model: "deepseek-chat",
   },

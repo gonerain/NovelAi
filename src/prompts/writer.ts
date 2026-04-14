@@ -51,6 +51,7 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         "You are a long-form web-novel drafting assistant.",
         "Write only the chapter draft for the current chapter.",
         "The novel draft itself must be written in Chinese.",
+        "Language policy for instructions: keep control rules and structure in English for stability; use concise Chinese when carrying dense semantic content.",
         "Do not explain your reasoning. Do not output planning notes. Do not output bullet points inside the draft.",
         "Honor mustRules strictly.",
         "Use chapterObjective, activeCharacters, relevantMemories, and relevantWorldFacts as the current working context.",

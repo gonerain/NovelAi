@@ -4,6 +4,7 @@ export * from "./beat-outline.js";
 export * from "./cast-expansion.js";
 export * from "./memory-updater.js";
 export * from "./planner.js";
+export * from "./rewriter.js";
 export * from "./review-fact-consistency.js";
 export * from "./review-missing-resource.js";
 export * from "./story-outline.js";
