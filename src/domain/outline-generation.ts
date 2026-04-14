@@ -1,5 +1,6 @@
 import type {
   ArcOutline,
+  BeatOutline,
   CastCharacterOutline,
   StoryOutline,
   StorySetup,
@@ -77,5 +78,17 @@ export interface ArcOutlineGenerationInput {
 
 export interface ArcOutlineGenerationResult {
   arcOutlines: ArcOutline[];
+  notes: string[];
+}
+
+export interface BeatOutlineGenerationInput {
+  projectTitle: string;
+  storyOutline: StoryOutline;
+  arcOutlines: ArcOutline[];
+  targetChapterCount: number;
+}
+
+export interface BeatOutlineGenerationResult {
+  beatOutlines: BeatOutline[];
   notes: string[];
 }

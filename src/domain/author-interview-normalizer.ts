@@ -10,6 +10,8 @@ const allowedCategories: AuthorComponentCategory[] = [
   "style",
   "character",
   "plot",
+  "relationship",
+  "pacing",
   "conflict",
   "ending",
   "aesthetic",
@@ -37,19 +39,18 @@ function uniqueTrimmed(items: string[], limit: number): string[] {
   return result;
 }
 
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === "string");
+}
+
 function normalizeCategory(category: string): AuthorComponentCategory {
   if (allowedCategories.includes(category as AuthorComponentCategory)) {
     return category as AuthorComponentCategory;
   }
-
-  switch (category) {
-    case "relationship":
-      return "conflict";
-    case "pacing":
-      return "plot";
-    default:
-      return "style";
-  }
+  return "style";
 }
 
 function normalizeDisplayComponent(
@@ -57,16 +58,11 @@ function normalizeDisplayComponent(
 ): AuthorInterviewDisplayComponent {
   return {
     ...component,
+    id: typeof component.id === "string" ? component.id : "component",
+    name: typeof component.name === "string" ? component.name : "Unnamed component",
     category: normalizeCategory(component.category),
-    strengthens: uniqueTrimmed(component.strengthens, 2),
-    suppresses: uniqueTrimmed(component.suppresses, 2),
-    validationHints: uniqueTrimmed(component.validationHints, 2),
-    effects: {
-      planner: uniqueTrimmed(component.effects.planner ?? [], 2),
-      writer: uniqueTrimmed(component.effects.writer ?? [], 2),
-      reviewer: uniqueTrimmed(component.effects.reviewer ?? [], 2),
-      memory: uniqueTrimmed(component.effects.memory ?? [], 2),
-    },
+    description: typeof component.description === "string" ? component.description : "",
+    priority: typeof component.priority === "number" ? component.priority : 2,
   };
 }
 
@@ -75,21 +71,28 @@ function normalizeNormalizedComponent(
 ): AuthorInterviewNormalizedComponent {
   return {
     ...component,
+    id: typeof component.id === "string" ? component.id : "component",
+    name: typeof component.name === "string" ? component.name : "Unnamed component",
     category: normalizeCategory(component.category),
-    strengthens: uniqueTrimmed(component.strengthens, 2),
-    suppresses: uniqueTrimmed(component.suppresses, 2),
-    plannerEffects: uniqueTrimmed(component.plannerEffects, 2),
-    writerEffects: uniqueTrimmed(component.writerEffects, 2),
-    reviewerChecks: uniqueTrimmed(component.reviewerChecks, 2),
-    memoryHints: uniqueTrimmed(component.memoryHints, 2),
+    plannerEffects: uniqueTrimmed(asStringArray(component.plannerEffects), 4),
+    writerEffects: uniqueTrimmed(asStringArray(component.writerEffects), 4),
+    reviewerChecks: uniqueTrimmed(asStringArray(component.reviewerChecks), 4),
+    memoryHints: uniqueTrimmed(asStringArray(component.memoryHints), 4),
+    priority: typeof component.priority === "number" ? component.priority : 2,
   };
 }
 
 function normalizeConstraints(constraints: ConstraintRule[]): ConstraintRule[] {
-  return constraints.slice(0, 3).map((constraint) => ({
+  const source = Array.isArray(constraints) ? constraints : [];
+  return source.slice(0, 6).map((constraint) => ({
     ...constraint,
-    name: constraint.name.trim(),
-    description: constraint.description.trim(),
+    id: typeof constraint.id === "string" ? constraint.id : "constraint",
+    name: typeof constraint.name === "string" ? constraint.name.trim() : "",
+    description:
+      typeof constraint.description === "string"
+        ? constraint.description.trim()
+        : "",
+    severity: constraint.severity,
   }));
 }
 
@@ -99,29 +102,41 @@ export function normalizeAuthorInterviewResult(
   return {
     display: {
       ...result.display,
-      openQuestions: uniqueTrimmed(result.display.openQuestions, 2),
-      conflictsDetected: result.display.conflictsDetected.slice(0, 2),
+      openQuestions: uniqueTrimmed(asStringArray(result.display.openQuestions), 2),
+      conflictsDetected: Array.isArray(result.display.conflictsDetected)
+        ? result.display.conflictsDetected.slice(0, 4)
+        : [],
       constraints: normalizeConstraints(result.display.constraints),
       authorProfile: {
         ...result.display.authorProfile,
-        corePreferences: uniqueTrimmed(result.display.authorProfile.corePreferences, 3),
+        summary:
+          typeof result.display.authorProfile.summary === "string"
+            ? result.display.authorProfile.summary
+            : "",
+        corePreferences: uniqueTrimmed(
+          asStringArray(result.display.authorProfile.corePreferences),
+          5,
+        ),
         favoriteCharacterTypes: uniqueTrimmed(
-          result.display.authorProfile.favoriteCharacterTypes,
-          3,
+          asStringArray(result.display.authorProfile.favoriteCharacterTypes),
+          5,
         ),
         favoriteRelationshipPatterns: uniqueTrimmed(
-          result.display.authorProfile.favoriteRelationshipPatterns,
-          3,
+          asStringArray(result.display.authorProfile.favoriteRelationshipPatterns),
+          5,
         ),
-        plotBiases: uniqueTrimmed(result.display.authorProfile.plotBiases, 3),
-        endingBiases: uniqueTrimmed(result.display.authorProfile.endingBiases, 3),
+        plotBiases: uniqueTrimmed(asStringArray(result.display.authorProfile.plotBiases), 5),
+        endingBiases: uniqueTrimmed(
+          asStringArray(result.display.authorProfile.endingBiases),
+          5,
+        ),
         aestheticMotifs: uniqueTrimmed(
-          result.display.authorProfile.aestheticMotifs,
-          4,
+          asStringArray(result.display.authorProfile.aestheticMotifs),
+          6,
         ),
       },
-      components: result.display.components
-        .slice(0, 5)
+      components: (Array.isArray(result.display.components) ? result.display.components : [])
+        .slice(0, 8)
         .map(normalizeDisplayComponent),
     },
     normalized: {
@@ -129,27 +144,39 @@ export function normalizeAuthorInterviewResult(
       constraints: normalizeConstraints(result.normalized.constraints),
       authorProfile: {
         ...result.normalized.authorProfile,
+        summary:
+          typeof result.normalized.authorProfile.summary === "string"
+            ? result.normalized.authorProfile.summary
+            : "",
         corePreferences: uniqueTrimmed(
-          result.normalized.authorProfile.corePreferences,
-          3,
+          asStringArray(result.normalized.authorProfile.corePreferences),
+          8,
         ),
         favoriteCharacterTypes: uniqueTrimmed(
-          result.normalized.authorProfile.favoriteCharacterTypes,
-          3,
+          asStringArray(result.normalized.authorProfile.favoriteCharacterTypes),
+          8,
         ),
         favoriteRelationshipPatterns: uniqueTrimmed(
-          result.normalized.authorProfile.favoriteRelationshipPatterns,
-          3,
+          asStringArray(result.normalized.authorProfile.favoriteRelationshipPatterns),
+          8,
         ),
-        plotBiases: uniqueTrimmed(result.normalized.authorProfile.plotBiases, 3),
-        endingBiases: uniqueTrimmed(result.normalized.authorProfile.endingBiases, 3),
+        plotBiases: uniqueTrimmed(
+          asStringArray(result.normalized.authorProfile.plotBiases),
+          8,
+        ),
+        endingBiases: uniqueTrimmed(
+          asStringArray(result.normalized.authorProfile.endingBiases),
+          8,
+        ),
         aestheticMotifs: uniqueTrimmed(
-          result.normalized.authorProfile.aestheticMotifs,
-          3,
+          asStringArray(result.normalized.authorProfile.aestheticMotifs),
+          8,
         ),
       },
-      components: result.normalized.components
-        .slice(0, 5)
+      components: (Array.isArray(result.normalized.components)
+        ? result.normalized.components
+        : [])
+        .slice(0, 8)
         .map(normalizeNormalizedComponent),
     },
   };

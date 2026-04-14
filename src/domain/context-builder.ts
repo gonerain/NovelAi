@@ -58,8 +58,12 @@ export interface ContextWorldFactSnapshot {
 
 export interface ContextPack {
   task: "writer" | "reviewer";
-  authorRules: string[];
-  hardConstraints: string[];
+  mustRules: string[];
+  authorIdentityRules: string[];
+  chapterExecutionReminders: string[];
+  themePressure: string[];
+  avoidRules: string[];
+  taskRules: string[];
   readerValue?: {
     sellingPoint?: string;
     hook?: string;
@@ -77,7 +81,8 @@ export interface ContextPack {
   activeCharacters: ContextCharacterSnapshot[];
   relevantMemories: ContextMemorySnapshot[];
   relevantWorldFacts: ContextWorldFactSnapshot[];
-  promptCapsule: string[];
+  arcSignals: string[];
+  chapterSignals: string[];
 }
 
 function uniqueTrimmed(items: string[], limit: number): string[] {
@@ -247,23 +252,17 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       scope: fact.scope,
     }));
 
-  const authorRules = uniqueTrimmed(
+  const arcSignals = uniqueTrimmed(
     [
-      ...input.authorPack.softPreferences,
-      ...input.chapterPlan.styleReminders,
-      ...input.themeBible.subThemes,
-      ...input.styleBible.antiPatterns.map((item) => `Avoid: ${item}`),
+      input.arcOutline?.arcSellingPoint ? `Arc selling point: ${input.arcOutline.arcSellingPoint}` : "",
+      input.arcOutline?.arcHook ? `Arc hook: ${input.arcOutline.arcHook}` : "",
+      input.arcOutline?.arcPayoff ? `Arc payoff: ${input.arcOutline.arcPayoff}` : "",
     ],
     8,
   );
 
-  const promptCapsule = uniqueTrimmed(
+  const chapterSignals = uniqueTrimmed(
     [
-      ...input.authorPack.promptCapsule,
-      input.arcOutline?.arcSellingPoint ? `Arc selling point: ${input.arcOutline.arcSellingPoint}` : "",
-      input.arcOutline?.arcHook ? `Arc hook: ${input.arcOutline.arcHook}` : "",
-      input.arcOutline?.arcPayoff ? `Arc payoff: ${input.arcOutline.arcPayoff}` : "",
-      ...(input.beatOutline?.constraints ?? []).map((item) => `Beat constraint: ${item}`),
       `Chapter goal: ${input.chapterPlan.chapterGoal}`,
       `Emotional goal: ${input.chapterPlan.emotionalGoal}`,
       `Planned outcome: ${input.chapterPlan.plannedOutcome}`,
@@ -273,14 +272,44 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
 
   return {
     task: input.task,
-    authorRules,
-    hardConstraints: uniqueTrimmed(
+    mustRules: uniqueTrimmed(
       [
-        ...input.authorPack.hardConstraints,
+        ...input.authorPack.mustRules,
         ...input.chapterPlan.disallowedMoves.map(asForbiddenRule),
-        ...(input.beatOutline?.constraints ?? []).map(asForbiddenRule),
       ],
       10,
+    ),
+    authorIdentityRules: uniqueTrimmed(
+      [
+        input.authorPack.summary,
+        ...input.authorPack.globalPreferences,
+        ...input.authorPack.taskSpecificPreferences,
+      ],
+      12,
+    ),
+    chapterExecutionReminders: uniqueTrimmed(
+      [...input.chapterPlan.styleReminders],
+      8,
+    ),
+    themePressure: uniqueTrimmed(
+      [
+        input.themeBible.coreTheme,
+        ...input.themeBible.subThemes,
+        `Ending target: ${input.themeBible.endingTarget}`,
+        `Emotional destination: ${input.themeBible.emotionalDestination}`,
+      ],
+      8,
+    ),
+    avoidRules: uniqueTrimmed(
+      [
+        ...input.styleBible.antiPatterns.map((item) => `Avoid: ${item}`),
+        ...input.chapterPlan.disallowedMoves.map(asForbiddenRule),
+      ],
+      10,
+    ),
+    taskRules: uniqueTrimmed(
+      input.task === "reviewer" ? input.authorPack.reviewChecks : input.authorPack.taskRules,
+      12,
     ),
     readerValue: {
       sellingPoint: input.arcOutline?.arcSellingPoint,
@@ -306,6 +335,7 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
     activeCharacters,
     relevantMemories,
     relevantWorldFacts,
-    promptCapsule,
+    arcSignals,
+    chapterSignals,
   };
 }

@@ -33,10 +33,12 @@ export interface TaskAuthorPack {
   task: AuthorPackTask;
   profileId: EntityId;
   summary: string;
-  hardConstraints: string[];
-  softPreferences: string[];
+  globalPreferences: string[];
+  taskSpecificPreferences: string[];
+  mustRules: string[];
+  taskRules: string[];
+  reviewChecks: string[];
   activeComponents: AuthorPackComponent[];
-  promptCapsule: string[];
 }
 
 export interface DerivedAuthorProfilePacks {
@@ -45,6 +47,8 @@ export interface DerivedAuthorProfilePacks {
   writer: TaskAuthorPack;
   reviewer: TaskAuthorPack;
 }
+
+const ACTIVE_COMPONENT_LIMIT = 6;
 
 function uniqueTrimmed(items: string[], limit: number): string[] {
   const seen = new Set<string>();
@@ -79,7 +83,7 @@ function topConstraints(profile: AuthorProfile, limit: number): ConstraintRule[]
     .slice(0, limit);
 }
 
-function componentApply(profile: AuthorProfile, limit = 4): AuthorPackComponent[] {
+function componentApply(profile: AuthorProfile, limit = ACTIVE_COMPONENT_LIMIT): AuthorPackComponent[] {
   return profile.components
     .filter((component) => component.enabled)
     .sort((left, right) => left.priority - right.priority)
@@ -97,35 +101,61 @@ function componentApply(profile: AuthorProfile, limit = 4): AuthorPackComponent[
     }));
 }
 
-function buildPromptCapsule(task: AuthorPackTask, pack: TaskAuthorPack): string[] {
-  const label =
-    task === "planner" ? "Planner rules" : task === "writer" ? "Writer rules" : "Reviewer rules";
+function asExecutableReviewCheck(text: string): string {
+  const normalized = text.trim();
+  if (!normalized) {
+    return normalized;
+  }
+  if (/^check whether\b/i.test(normalized)) {
+    return normalized;
+  }
+  if (/reconcil|repair|forgiv|trust/i.test(normalized)) {
+    return "Check whether reconciliation is earned through prior fracture, visible cost, and changed behavior.";
+  }
+  if (/side character|supporting|配角/i.test(normalized)) {
+    return "Check whether side characters have independent motive, pressure, and consequence.";
+  }
+  if (/ending|closure|payoff/i.test(normalized)) {
+    return `Check whether the chapter progression supports ending pressure: ${normalized}`;
+  }
+  return `Check whether this requirement is concretely evidenced in scene-level behavior: ${normalized}`;
+}
 
-  return [
-    `${label}: ${pack.summary}`,
-    ...pack.hardConstraints.map((item) => `Hard constraint: ${item}`),
-    ...pack.softPreferences.map((item) => `Soft preference: ${item}`),
-  ].slice(0, 8);
+function componentTaskRules(task: AuthorPackTask, components: AuthorPackComponent[]): string[] {
+  return uniqueTrimmed(
+    components.flatMap((component) =>
+      task === "planner"
+        ? component.planner ?? []
+        : task === "writer"
+          ? component.writer ?? []
+          : component.reviewer ?? [],
+    ),
+    10,
+  );
 }
 
 function buildTaskPack(task: AuthorPackTask, profile: AuthorProfile): TaskAuthorPack {
-  const activeComponents = componentApply(profile, 3).map((component) => ({
+  const activeComponents = componentApply(profile, ACTIVE_COMPONENT_LIMIT).map((component) => ({
     ...component,
     planner: task === "planner" ? component.planner : undefined,
     writer: task === "writer" ? component.writer : undefined,
     reviewer: task === "reviewer" ? component.reviewer : undefined,
   }));
 
-  const hardConstraints = uniqueTrimmed(
-    topConstraints(profile, 3).map((constraint) => constraint.description),
-    3,
+  const mustRules = uniqueTrimmed(
+    topConstraints(profile, 5).map((constraint) => constraint.description),
+    8,
+  );
+  const globalPreferences = uniqueTrimmed(
+    [...profile.corePreferences, ...profile.endingBiases],
+    10,
   );
 
-  const softPreferences =
+  const taskSpecificPreferences =
     task === "planner"
       ? uniqueTrimmed(
-          [...profile.corePreferences, ...profile.plotBiases, ...profile.endingBiases],
-          5,
+          [...profile.plotBiases, ...profile.favoriteRelationshipPatterns],
+          8,
         )
       : task === "writer"
         ? uniqueTrimmed(
@@ -133,27 +163,41 @@ function buildTaskPack(task: AuthorPackTask, profile: AuthorProfile): TaskAuthor
               ...profile.favoriteCharacterTypes,
               ...profile.favoriteRelationshipPatterns,
               ...profile.aestheticMotifs,
+              ...profile.plotBiases,
             ],
-            5,
+            10,
           )
         : uniqueTrimmed(
-            [...profile.constraints.map((constraint) => constraint.name), ...profile.endingBiases],
-            5,
+            [
+              ...profile.constraints.map((constraint) => constraint.description),
+              ...profile.endingBiases.map((bias) => `Check ending alignment: ${bias}`),
+            ],
+            10,
           );
 
-  const pack: TaskAuthorPack = {
+  const taskRules = componentTaskRules(task, activeComponents);
+  const reviewChecks =
+    task === "reviewer"
+      ? uniqueTrimmed(
+          [
+            ...taskRules.map(asExecutableReviewCheck),
+            ...profile.constraints.map((constraint) => asExecutableReviewCheck(constraint.description)),
+            ...profile.endingBiases.map((bias) => asExecutableReviewCheck(`ending tendency: ${bias}`)),
+          ],
+          12,
+        )
+      : [];
+
+  return {
     task,
     profileId: profile.id,
     summary: profile.summary,
-    hardConstraints,
-    softPreferences,
+    globalPreferences,
+    taskSpecificPreferences,
+    mustRules,
+    taskRules,
+    reviewChecks,
     activeComponents,
-    promptCapsule: [],
-  };
-
-  return {
-    ...pack,
-    promptCapsule: buildPromptCapsule(task, pack),
   };
 }
 
@@ -164,14 +208,14 @@ export function buildDerivedAuthorProfilePacks(
     compact: {
       profileId: profile.id,
       summary: profile.summary,
-      corePreferences: uniqueTrimmed(profile.corePreferences, 3),
-      favoriteCharacterTypes: uniqueTrimmed(profile.favoriteCharacterTypes, 3),
-      favoriteRelationshipPatterns: uniqueTrimmed(profile.favoriteRelationshipPatterns, 3),
-      plotBiases: uniqueTrimmed(profile.plotBiases, 3),
-      endingBiases: uniqueTrimmed(profile.endingBiases, 3),
-      aestheticMotifs: uniqueTrimmed(profile.aestheticMotifs, 3),
-      topConstraints: topConstraints(profile, 3),
-      activeComponents: componentApply(profile),
+      corePreferences: uniqueTrimmed(profile.corePreferences, 8),
+      favoriteCharacterTypes: uniqueTrimmed(profile.favoriteCharacterTypes, 8),
+      favoriteRelationshipPatterns: uniqueTrimmed(profile.favoriteRelationshipPatterns, 8),
+      plotBiases: uniqueTrimmed(profile.plotBiases, 8),
+      endingBiases: uniqueTrimmed(profile.endingBiases, 8),
+      aestheticMotifs: uniqueTrimmed(profile.aestheticMotifs, 8),
+      topConstraints: topConstraints(profile, 5),
+      activeComponents: componentApply(profile, ACTIVE_COMPONENT_LIMIT),
     },
     planner: buildTaskPack("planner", profile),
     writer: buildTaskPack("writer", profile),

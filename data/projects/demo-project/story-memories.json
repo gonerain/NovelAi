@@ -2,17 +2,17 @@
   {
     "id": "memory-pill-001",
     "kind": "resource",
-    "title": "未使用的保命丹药",
-    "summary": "主角曾在黑市获得一枚可在濒死时保命的高阶丹药，至今未使用。",
+    "title": "Unused life-saving pill",
+    "summary": "The protagonist once obtained a rare pill that can keep him alive in a near-death moment. He has not used it yet.",
     "ownerCharacterId": "protagonist",
     "relatedCharacterIds": [
       "protagonist"
     ],
     "relatedLocationIds": [],
     "triggerConditions": [
-      "濒死",
-      "重伤",
-      "无法撤离"
+      "near death",
+      "severe injury",
+      "cannot escape"
     ],
     "introducedIn": 12,
     "lastReferencedIn": 12,
@@ -20,14 +20,14 @@
     "priority": "critical",
     "visibility": "private",
     "notes": [
-      "师兄并不知道丹药的存在"
+      "Senior Brother does not know this pill exists."
     ]
   },
   {
     "id": "memory-wound-003",
     "kind": "injury",
-    "title": "旧伤复发",
-    "summary": "主角此前留下的旧伤在高强度战斗后会迅速恶化，影响行动与判断。",
+    "title": "Old injury flare-up",
+    "summary": "The protagonist's old injury worsens quickly after high-intensity combat and affects both movement and judgment.",
     "ownerCharacterId": "protagonist",
     "relatedCharacterIds": [
       "protagonist",
@@ -35,9 +35,9 @@
     ],
     "relatedLocationIds": [],
     "triggerConditions": [
-      "高强度战斗",
-      "灵力透支",
-      "重伤"
+      "high-intensity combat",
+      "energy overuse",
+      "severe injury"
     ],
     "introducedIn": 8,
     "lastReferencedIn": 18,
@@ -45,22 +45,22 @@
     "priority": "high",
     "visibility": "public",
     "notes": [
-      "主角习惯压着不说"
+      "The protagonist habitually hides the severity."
     ]
   },
   {
-    "id": "memory-secret-002",
+    "id": "memory-vow-002",
     "kind": "promise",
-    "title": "绝不再欠人情",
-    "summary": "主角曾发誓不再通过接受拯救来延续生命，因此对求助有强烈抗拒。",
+    "title": "Refusal to owe life-debts again",
+    "summary": "The protagonist has privately vowed not to keep surviving by accepting rescue and debt from others, which drives his resistance to help.",
     "ownerCharacterId": "protagonist",
     "relatedCharacterIds": [
       "protagonist"
     ],
     "relatedLocationIds": [],
     "triggerConditions": [
-      "被迫求助",
-      "接受照顾"
+      "being forced to accept help",
+      "being cared for"
     ],
     "introducedIn": 10,
     "lastReferencedIn": 16,
@@ -68,7 +68,7 @@
     "priority": "high",
     "visibility": "private",
     "notes": [
-      "这是其拒绝师兄帮助的重要心理来源"
+      "This is a key emotional source of his resistance."
     ]
   }
 ]

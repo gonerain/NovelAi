@@ -21,38 +21,38 @@ export const demoInterviewInput: AuthorInterviewSessionInput = {
     {
       questionId: "theme_core",
       answer:
-        "I want to write stories about slowly understanding yourself and then deciding whether you can forgive yourself. I like redemption, but never cheap forgiveness.",
+        "I want stories about ambition, betrayal, and delayed justice. Characters should pay real prices before earning any form of redemption.",
     },
     {
       questionId: "character_bias",
       answer:
-        "I favor characters who look composed, restrained, even cold, but are already damaged inside. I also like a frail quality, restraint, and stubbornness.",
+        "I favor highly competent characters with hidden damage: strategists, liars, survivors, and people who weaponize calm under pressure.",
     },
     {
       questionId: "relationship_pattern",
       answer:
-        "I like two people who matter deeply to each other but refuse to say it clearly. The relationship moves through testing, misreading, avoidance, and late confession. Repair must cost something.",
+        "I like alliances built on mutual use, then slowly contaminated by loyalty. Trust should be negotiated through leverage, not confession.",
     },
     {
       questionId: "plot_bias",
       answer:
-        "I prefer slow burn structure, but when the key scene arrives I want the emotion to hit hard. I like big stories broken into small outcomes that keep moving toward the end without feeling formulaic.",
+        "I prefer layered conspiracies, escalating stakes, and hard reversals. Each chapter should produce tactical gain with strategic loss.",
     },
     {
       questionId: "ending_bias",
       answer:
-        "I want endings that are thematic, complete, and striking. They can be bitter, but they must hold. Something can be lost, but the core theme cannot be lost.",
+        "I prefer bitter-precise endings: the protagonist wins the war but loses a private world. No perfect closure.",
     },
     {
       questionId: "aesthetic_private_goods",
       answer:
-        "I always sneak in rain at night, old wounds, medicine, caregiving, and characters pretending they are fine when they are near collapse. I dislike fast reconciliation and tool-like side characters.",
+        "I always sneak in decaying cities, ritual scars, coded messages, debt ledgers, cold weather, and courtroom-or-council confrontations. I dislike naive side characters and sudden emotional reconciliation.",
     },
   ],
   targetProject: {
     title: demoProjectTitle,
     premise: demoPremise,
-    themeHint: "self-understanding and redemption",
+    themeHint: "power, betrayal, and costly redemption",
   },
 };
 

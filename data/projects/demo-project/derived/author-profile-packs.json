@@ -1,244 +1,244 @@
 {
   "compact": {
-    "profileId": "author-profile-demo",
-    "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+    "profileId": "demo-project-author-profile",
+    "summary": "Self-understanding, redemption, emotional depth.",
     "corePreferences": [
-      "自我救赎",
-      "拒绝廉价",
-      "慢热叙事"
+      "slow-burn with emotional hits",
+      "thematic endings",
+      "restrained damaged characters"
     ],
     "favoriteCharacterTypes": [
-      "冷静破碎",
-      "病弱克制",
-      "嘴硬"
+      "composed but damaged",
+      "frail and stubborn"
     ],
     "favoriteRelationshipPatterns": [
-      "试探误读",
-      "迟来坦白"
+      "unspoken deep connections",
+      "costly repair"
     ],
     "plotBiases": [
-      "慢热推进",
-      "拆小结果"
+      "emotional causality",
+      "small outcomes to big story"
     ],
     "endingBiases": [
-      "苦涩成立",
-      "点题震撼"
+      "thematic completeness",
+      "bitter but held"
     ],
     "aestheticMotifs": [
-      "雨夜旧伤",
-      "照顾装没事"
+      "rain at night",
+      "caregiving",
+      "pretended fine near collapse"
     ],
     "topConstraints": [
       {
-        "id": "con1",
-        "name": "拒绝廉价和解",
-        "description": "和解需代价，避快速解决。",
-        "severity": "high"
+        "id": "const_no_fastreconcile",
+        "name": "No Fast Reconciliation",
+        "description": "Avoid fast/easy reconciliation.",
+        "severity": "medium"
       },
       {
-        "id": "con2",
-        "name": "避工具人配角",
-        "description": "配角有动机，非仅服务主角。",
+        "id": "const_no_toolchars",
+        "name": "No Tool-Like Side Characters",
+        "description": "Develop side characters fully.",
         "severity": "medium"
       }
     ],
     "activeComponents": [
       {
-        "id": "comp1",
-        "name": "自我理解救赎",
+        "id": "comp_theme_redemption",
+        "name": "Costly Redemption",
         "category": "theme",
         "planner": [
-          "渐进心理设计"
+          "Plan gradual redemption arcs"
         ],
         "writer": [
-          "刻画内在挣扎"
+          "Write internal conflicts"
         ],
         "reviewer": [
-          "救赎逻辑"
+          "Check forgiveness weight"
         ]
       },
       {
-        "id": "comp2",
-        "name": "冷静破碎角色",
+        "id": "comp_character_restrained",
+        "name": "Restrained Damage",
         "category": "character",
         "planner": [
-          "平衡反差"
+          "Design hidden wounds"
         ],
         "writer": [
-          "展现脆弱"
+          "Show subtle struggle"
         ],
         "reviewer": [
-          "一致性"
+          "Verify restraint consistency"
         ]
       },
       {
-        "id": "comp3",
-        "name": "试探关系张力",
-        "category": "conflict",
+        "id": "comp_plot_slowburn",
+        "name": "Slow-Burn Emotional Causality",
+        "category": "plot",
         "planner": [
-          "设计误解"
+          "Structure emotional beats"
         ],
         "writer": [
-          "写微妙互动"
+          "Pace for weight"
         ],
         "reviewer": [
-          "张力维持"
+          "Ensure impact in key scenes"
         ]
       }
     ]
   },
   "planner": {
     "task": "planner",
-    "profileId": "author-profile-demo",
-    "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+    "profileId": "demo-project-author-profile",
+    "summary": "Self-understanding, redemption, emotional depth.",
     "hardConstraints": [
-      "和解需代价，避快速解决。",
-      "配角有动机，非仅服务主角。"
+      "Avoid fast/easy reconciliation.",
+      "Develop side characters fully."
     ],
     "softPreferences": [
-      "自我救赎",
-      "拒绝廉价",
-      "慢热叙事",
-      "慢热推进",
-      "拆小结果"
+      "slow-burn with emotional hits",
+      "thematic endings",
+      "restrained damaged characters",
+      "emotional causality",
+      "small outcomes to big story"
     ],
     "activeComponents": [
       {
-        "id": "comp1",
-        "name": "自我理解救赎",
+        "id": "comp_theme_redemption",
+        "name": "Costly Redemption",
         "category": "theme",
         "planner": [
-          "渐进心理设计"
+          "Plan gradual redemption arcs"
         ]
       },
       {
-        "id": "comp2",
-        "name": "冷静破碎角色",
+        "id": "comp_character_restrained",
+        "name": "Restrained Damage",
         "category": "character",
         "planner": [
-          "平衡反差"
+          "Design hidden wounds"
         ]
       },
       {
-        "id": "comp3",
-        "name": "试探关系张力",
-        "category": "conflict",
+        "id": "comp_plot_slowburn",
+        "name": "Slow-Burn Emotional Causality",
+        "category": "plot",
         "planner": [
-          "设计误解"
+          "Structure emotional beats"
         ]
       }
     ],
     "promptCapsule": [
-      "规划规则：专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
-      "硬约束：和解需代价，避快速解决。",
-      "硬约束：配角有动机，非仅服务主角。",
-      "软偏好：自我救赎",
-      "软偏好：拒绝廉价",
-      "软偏好：慢热叙事",
-      "软偏好：慢热推进",
-      "软偏好：拆小结果"
+      "Planner rules: Self-understanding, redemption, emotional depth.",
+      "Hard constraint: Avoid fast/easy reconciliation.",
+      "Hard constraint: Develop side characters fully.",
+      "Soft preference: slow-burn with emotional hits",
+      "Soft preference: thematic endings",
+      "Soft preference: restrained damaged characters",
+      "Soft preference: emotional causality",
+      "Soft preference: small outcomes to big story"
     ]
   },
   "writer": {
     "task": "writer",
-    "profileId": "author-profile-demo",
-    "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+    "profileId": "demo-project-author-profile",
+    "summary": "Self-understanding, redemption, emotional depth.",
     "hardConstraints": [
-      "和解需代价，避快速解决。",
-      "配角有动机，非仅服务主角。"
+      "Avoid fast/easy reconciliation.",
+      "Develop side characters fully."
     ],
     "softPreferences": [
-      "冷静破碎",
-      "病弱克制",
-      "嘴硬",
-      "试探误读",
-      "迟来坦白"
+      "composed but damaged",
+      "frail and stubborn",
+      "unspoken deep connections",
+      "costly repair",
+      "rain at night"
     ],
     "activeComponents": [
       {
-        "id": "comp1",
-        "name": "自我理解救赎",
+        "id": "comp_theme_redemption",
+        "name": "Costly Redemption",
         "category": "theme",
         "writer": [
-          "刻画内在挣扎"
+          "Write internal conflicts"
         ]
       },
       {
-        "id": "comp2",
-        "name": "冷静破碎角色",
+        "id": "comp_character_restrained",
+        "name": "Restrained Damage",
         "category": "character",
         "writer": [
-          "展现脆弱"
+          "Show subtle struggle"
         ]
       },
       {
-        "id": "comp3",
-        "name": "试探关系张力",
-        "category": "conflict",
+        "id": "comp_plot_slowburn",
+        "name": "Slow-Burn Emotional Causality",
+        "category": "plot",
         "writer": [
-          "写微妙互动"
+          "Pace for weight"
         ]
       }
     ],
     "promptCapsule": [
-      "写作规则：专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
-      "硬约束：和解需代价，避快速解决。",
-      "硬约束：配角有动机，非仅服务主角。",
-      "软偏好：冷静破碎",
-      "软偏好：病弱克制",
-      "软偏好：嘴硬",
-      "软偏好：试探误读",
-      "软偏好：迟来坦白"
+      "Writer rules: Self-understanding, redemption, emotional depth.",
+      "Hard constraint: Avoid fast/easy reconciliation.",
+      "Hard constraint: Develop side characters fully.",
+      "Soft preference: composed but damaged",
+      "Soft preference: frail and stubborn",
+      "Soft preference: unspoken deep connections",
+      "Soft preference: costly repair",
+      "Soft preference: rain at night"
     ]
   },
   "reviewer": {
     "task": "reviewer",
-    "profileId": "author-profile-demo",
-    "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+    "profileId": "demo-project-author-profile",
+    "summary": "Self-understanding, redemption, emotional depth.",
     "hardConstraints": [
-      "和解需代价，避快速解决。",
-      "配角有动机，非仅服务主角。"
+      "Avoid fast/easy reconciliation.",
+      "Develop side characters fully."
     ],
     "softPreferences": [
-      "拒绝廉价和解",
-      "避工具人配角",
-      "苦涩成立",
-      "点题震撼"
+      "No Fast Reconciliation",
+      "No Tool-Like Side Characters",
+      "thematic completeness",
+      "bitter but held"
     ],
     "activeComponents": [
       {
-        "id": "comp1",
-        "name": "自我理解救赎",
+        "id": "comp_theme_redemption",
+        "name": "Costly Redemption",
         "category": "theme",
         "reviewer": [
-          "救赎逻辑"
+          "Check forgiveness weight"
         ]
       },
       {
-        "id": "comp2",
-        "name": "冷静破碎角色",
+        "id": "comp_character_restrained",
+        "name": "Restrained Damage",
         "category": "character",
         "reviewer": [
-          "一致性"
+          "Verify restraint consistency"
         ]
       },
       {
-        "id": "comp3",
-        "name": "试探关系张力",
-        "category": "conflict",
+        "id": "comp_plot_slowburn",
+        "name": "Slow-Burn Emotional Causality",
+        "category": "plot",
         "reviewer": [
-          "张力维持"
+          "Ensure impact in key scenes"
         ]
       }
     ],
     "promptCapsule": [
-      "审校规则：专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
-      "硬约束：和解需代价，避快速解决。",
-      "硬约束：配角有动机，非仅服务主角。",
-      "软偏好：拒绝廉价和解",
-      "软偏好：避工具人配角",
-      "软偏好：苦涩成立",
-      "软偏好：点题震撼"
+      "Reviewer rules: Self-understanding, redemption, emotional depth.",
+      "Hard constraint: Avoid fast/easy reconciliation.",
+      "Hard constraint: Develop side characters fully.",
+      "Soft preference: No Fast Reconciliation",
+      "Soft preference: No Tool-Like Side Characters",
+      "Soft preference: thematic completeness",
+      "Soft preference: bitter but held"
     ]
   }
 }

@@ -1,4 +1,4 @@
-export type LlmProvider = "openai" | "deepseek" | "anthropic" | "ollama";
+export type LlmProvider = "openai" | "deepseek" | "anthropic" | "ollama" | "glm";
 
 export type MessageRole = "system" | "user" | "assistant";
 
@@ -59,8 +59,10 @@ export type TaskName =
   | "story_outline"
   | "cast_expansion"
   | "arc_outline"
+  | "beat_outline"
   | "planner"
   | "writer"
+  | "rewriter"
   | "review_missing_resource"
   | "review_fact"
   | "review_voice"

@@ -1,6 +1,7 @@
 import type {
+  AuthorInterviewDisplayDraftResult,
+  AuthorInterviewNormalizedDraftResult,
   AuthorInterviewQuestion,
-  AuthorInterviewResult,
   AuthorInterviewSessionInput,
 } from "../domain/author-interview.js";
 import type { ChatMessage } from "../llm/types.js";
@@ -49,15 +50,15 @@ const allowedCategories = [
   "style",
   "character",
   "plot",
+  "relationship",
+  "pacing",
   "conflict",
   "ending",
   "aesthetic",
   "constraint",
 ] as const;
 
-export function buildAuthorInterviewMessages(
-  input: AuthorInterviewSessionInput,
-): ChatMessage[] {
+function buildInterviewSharedContext(input: AuthorInterviewSessionInput): string {
   const projectContext = input.targetProject
     ? [
         input.targetProject.title ? `Project title: ${input.targetProject.title}` : undefined,
@@ -82,40 +83,86 @@ export function buildAuthorInterviewMessages(
     })
     .join("\n\n");
 
+  return [projectContext, priorProfile, "Interview answers:", answers].filter(Boolean).join("\n\n");
+}
+
+export function buildAuthorInterviewDisplayMessages(
+  input: AuthorInterviewSessionInput,
+): ChatMessage[] {
   return [
     {
       role: "system",
       content: [
         "You are an author preference modeler.",
-        "Your task is not to write fiction. Your task is to convert the author's natural-language answers into a compact, structured author profile.",
-        "Output must contain both display and normalized sections.",
-        "display is for a human author to confirm. Keep it short and readable, not essay-like.",
-        "normalized is for programmatic use. It must be shorter, harder, and more stable.",
-        "Each normalized authorProfile array should contain at most 3 items.",
-        "Generate between 3 and 5 components only.",
+        "Stage 1: Build only the display section for human confirmation.",
+        "Do not output normalized.",
+        "Keep display concise, readable, and stable.",
+        "Generate between 4 and 6 components.",
         `component.category must be one of: ${allowedCategories.join(", ")}.`,
-        "Do not invent categories such as relationship or pacing.",
-        "For normalized components, keep each string brief and operational.",
-        "Constraints: at most 3. Open questions: at most 2. Conflicts detected: at most 2.",
-        "If something is unclear, put it in openQuestions or conflictsDetected instead of inventing certainty.",
+        "Component fields must stay minimal: id, name, category, description, priority.",
+        "Keep constraints/openQuestions/conflictsDetected short and prioritized.",
+        "Return valid JSON only.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: buildInterviewSharedContext(input),
+    },
+  ];
+}
+
+export function buildAuthorInterviewNormalizeMessages(args: {
+  input: AuthorInterviewSessionInput;
+  display: AuthorInterviewDisplayDraftResult["display"];
+}): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: [
+        "You are an author preference normalizer.",
+        "Stage 2: Convert display model into normalized model for programmatic use.",
+        "Keep normalized authorProfile arrays at medium-high resolution (5 to 8 items when possible).",
+        "Keep component fields minimal and operational.",
+        "component.category must stay within the allowed category list.",
+        "Prefer concrete operational checks in reviewerChecks.",
         "Return valid JSON only.",
       ].join("\n"),
     },
     {
       role: "user",
       content: [
-        projectContext,
-        priorProfile,
-        "Build the author model from the following interview answers:",
-        answers,
-      ]
-        .filter(Boolean)
-        .join("\n\n"),
+        buildInterviewSharedContext(args.input),
+        `Display model:\n${JSON.stringify(args.display, null, 2)}`,
+      ].join("\n\n"),
     },
   ];
 }
 
-export const authorInterviewResultSchema: AuthorInterviewResult = {
+export function buildAuthorInterviewSmallModelNormalizeMessages(
+  input: AuthorInterviewSessionInput,
+): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: [
+        "You are an author preference normalizer.",
+        "Small-model mode: output normalized only.",
+        "Do not output display.",
+        "Keep normalized authorProfile arrays concise and operational.",
+        "Keep component fields minimal and operational.",
+        "component.category must stay within the allowed category list.",
+        "Prefer concrete operational checks in reviewerChecks.",
+        "Return valid JSON only.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: buildInterviewSharedContext(input),
+    },
+  ];
+}
+
+export const authorInterviewDisplayDraftSchema: AuthorInterviewDisplayDraftResult = {
   display: {
     summary: "string",
     authorProfile: {
@@ -133,15 +180,6 @@ export const authorInterviewResultSchema: AuthorInterviewResult = {
         name: "string",
         category: "theme",
         description: "string",
-        strengthens: ["string"],
-        suppresses: ["string"],
-        effects: {
-          planner: ["string"],
-          writer: ["string"],
-          reviewer: ["string"],
-          memory: ["string"],
-        },
-        validationHints: ["string"],
         priority: 1,
       },
     ],
@@ -161,6 +199,9 @@ export const authorInterviewResultSchema: AuthorInterviewResult = {
       },
     ],
   },
+} as unknown as AuthorInterviewDisplayDraftResult;
+
+export const authorInterviewNormalizedDraftSchema: AuthorInterviewNormalizedDraftResult = {
   normalized: {
     authorProfile: {
       summary: "string",
@@ -176,8 +217,6 @@ export const authorInterviewResultSchema: AuthorInterviewResult = {
         id: "string",
         name: "string",
         category: "theme",
-        strengthens: ["string"],
-        suppresses: ["string"],
         plannerEffects: ["string"],
         writerEffects: ["string"],
         reviewerChecks: ["string"],
@@ -194,4 +233,4 @@ export const authorInterviewResultSchema: AuthorInterviewResult = {
       },
     ],
   },
-} as unknown as AuthorInterviewResult;
+} as unknown as AuthorInterviewNormalizedDraftResult;

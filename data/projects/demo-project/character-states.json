@@ -1,50 +1,50 @@
 [
   {
     "id": "protagonist",
-    "name": "主角",
-    "archetype": "克制型自毁者",
+    "name": "Protagonist",
+    "archetype": "restrained self-destructive lead",
     "coreTraits": [
-      "冷静",
-      "嘴硬",
-      "过度自持"
+      "calm",
+      "stubborn",
+      "over-controlled"
     ],
     "desires": [
-      "独自解决问题",
-      "维持体面"
+      "solve everything alone",
+      "stay composed"
     ],
     "fears": [
-      "被看穿脆弱",
-      "拖累他人"
+      "being seen as weak",
+      "burdening others"
     ],
     "wounds": [
-      "旧伤反复发作",
-      "长期拒绝求助形成惯性"
+      "old injury that flares under strain",
+      "habit of refusing help"
     ],
     "voiceNotes": [
-      "说话简短",
-      "擅长轻描淡写自己的伤势"
+      "speaks briefly",
+      "downplays his own pain"
     ],
     "currentGoals": [
-      "隐藏伤势",
-      "不暴露底牌"
+      "hide the severity of the injury",
+      "avoid exposing the hidden pill"
     ],
     "emotionalState": [
-      "压抑",
-      "疲惫",
-      "戒备"
+      "tense",
+      "drained",
+      "guarded"
     ],
     "knowledgeBoundary": [
-      "知道自己仍持有保命丹药"
+      "knows he still carries a life-saving pill"
     ],
     "secretsKept": [
-      "隐瞒保命底牌的来源与效果"
+      "the origin and value of the pill"
     ],
     "relationships": [
       {
         "targetCharacterId": "senior_brother",
         "type": "ally",
-        "publicLabel": "同行师兄",
-        "privateTruth": "已经在情感上高度依赖对方，但不愿承认",
+        "publicLabel": "traveling senior brother",
+        "privateTruth": "emotionally dependent on him, but unwilling to admit it",
         "trustLevel": 72,
         "tensionLevel": 81,
         "dependencyLevel": 68,
@@ -54,47 +54,47 @@
   },
   {
     "id": "senior_brother",
-    "name": "师兄",
-    "archetype": "表面温和实则强势的保护者",
+    "name": "Senior Brother",
+    "archetype": "protective ally with controlled intensity",
     "coreTraits": [
-      "敏锐",
-      "克制",
-      "不轻易逼问"
+      "observant",
+      "restrained",
+      "persistent"
     ],
     "desires": [
-      "确认主角到底隐瞒了什么",
-      "保护主角活下来"
+      "confirm what the protagonist is hiding",
+      "keep him alive"
     ],
     "fears": [
-      "再次失去重要之人"
+      "losing someone important through hesitation"
     ],
     "wounds": [
-      "曾因迟疑失去同伴"
+      "once lost a companion by acting too late"
     ],
     "voiceNotes": [
-      "说话平静",
-      "会用极轻的语气逼近真相"
+      "speaks evenly",
+      "presses truth quietly rather than loudly"
     ],
     "currentGoals": [
-      "逼主角接受帮助"
+      "force the protagonist to accept help"
     ],
     "emotionalState": [
-      "怀疑",
-      "担忧",
-      "压着火气"
+      "suspicious",
+      "worried",
+      "holding back anger"
     ],
     "knowledgeBoundary": [
-      "怀疑主角有底牌但不知道具体是什么"
+      "suspects a hidden trump card but does not know what it is"
     ],
     "secretsKept": [
-      "已经决定必要时强行介入"
+      "is willing to intervene by force if needed"
     ],
     "relationships": [
       {
         "targetCharacterId": "protagonist",
         "type": "ally",
-        "publicLabel": "同行师弟",
-        "privateTruth": "保护欲已越界",
+        "publicLabel": "traveling junior brother",
+        "privateTruth": "his protectiveness is no longer neutral",
         "trustLevel": 78,
         "tensionLevel": 76,
         "dependencyLevel": 64,

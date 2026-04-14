@@ -1,177 +1,177 @@
 {
-  "id": "author-profile-demo",
-  "name": "Demo Author Profile",
-  "summary": "专注心理救赎，喜破碎角色与试探关系，叙事慢热结局苦涩。",
+  "id": "demo-project-author-profile",
+  "name": "Default Author Profile",
+  "summary": "Self-understanding, redemption, emotional depth.",
   "corePreferences": [
-    "自我救赎",
-    "拒绝廉价",
-    "慢热叙事"
+    "slow-burn with emotional hits",
+    "thematic endings",
+    "restrained damaged characters"
   ],
   "aestheticMotifs": [
-    "雨夜旧伤",
-    "照顾装没事"
+    "rain at night",
+    "caregiving",
+    "pretended fine near collapse"
   ],
   "favoriteCharacterTypes": [
-    "冷静破碎",
-    "病弱克制",
-    "嘴硬"
+    "composed but damaged",
+    "frail and stubborn"
   ],
   "favoriteRelationshipPatterns": [
-    "试探误读",
-    "迟来坦白"
+    "unspoken deep connections",
+    "costly repair"
   ],
   "plotBiases": [
-    "慢热推进",
-    "拆小结果"
+    "emotional causality",
+    "small outcomes to big story"
   ],
   "endingBiases": [
-    "苦涩成立",
-    "点题震撼"
+    "thematic completeness",
+    "bitter but held"
   ],
   "components": [
     {
-      "id": "comp1",
-      "name": "自我理解救赎",
+      "id": "comp_theme_redemption",
+      "name": "Costly Redemption",
       "category": "theme",
-      "description": "自我理解救赎 component",
+      "description": "Costly Redemption component",
       "strengthens": [
-        "心理深度",
-        "主题一致"
+        "emotional depth",
+        "growth arcs"
       ],
       "suppresses": [
-        "快速和解",
-        "浅层冲突"
+        "fast reconciliation",
+        "superficial resolutions"
       ],
       "effects": [
         {
           "target": "planner",
           "apply": [
-            "渐进心理设计"
+            "Plan gradual redemption arcs"
           ],
           "avoid": []
         },
         {
           "target": "writer",
           "apply": [
-            "刻画内在挣扎"
+            "Write internal conflicts"
           ],
           "avoid": []
         },
         {
           "target": "reviewer",
           "apply": [
-            "救赎逻辑"
+            "Check forgiveness weight"
           ],
           "avoid": []
         },
         {
           "target": "memory",
           "apply": [
-            "关键顿悟"
+            "Recall self-realization moments"
           ],
           "avoid": []
         }
       ],
       "validationHints": [
-        "救赎逻辑"
+        "Check forgiveness weight"
       ],
       "priority": 1,
       "enabled": true
     },
     {
-      "id": "comp2",
-      "name": "冷静破碎角色",
+      "id": "comp_character_restrained",
+      "name": "Restrained Damage",
       "category": "character",
-      "description": "冷静破碎角色 component",
+      "description": "Restrained Damage component",
       "strengthens": [
-        "角色复杂",
-        "情感张力"
+        "mystery",
+        "tension"
       ],
       "suppresses": [
-        "扁平角色",
-        "直白表达"
+        "overt emotion",
+        "simplicity"
       ],
       "effects": [
         {
           "target": "planner",
           "apply": [
-            "平衡反差"
+            "Design hidden wounds"
           ],
           "avoid": []
         },
         {
           "target": "writer",
           "apply": [
-            "展现脆弱"
+            "Show subtle struggle"
           ],
           "avoid": []
         },
         {
           "target": "reviewer",
           "apply": [
-            "一致性"
+            "Verify restraint consistency"
           ],
           "avoid": []
         },
         {
           "target": "memory",
           "apply": [
-            "崩溃场景"
+            "Note damage surfacing"
           ],
           "avoid": []
         }
       ],
       "validationHints": [
-        "一致性"
+        "Verify restraint consistency"
       ],
       "priority": 2,
       "enabled": true
     },
     {
-      "id": "comp3",
-      "name": "试探关系张力",
-      "category": "conflict",
-      "description": "试探关系张力 component",
+      "id": "comp_plot_slowburn",
+      "name": "Slow-Burn Emotional Causality",
+      "category": "plot",
+      "description": "Slow-Burn Emotional Causality component",
       "strengthens": [
-        "关系深度",
-        "叙事悬念"
+        "build-up",
+        "resonance"
       ],
       "suppresses": [
-        "快速亲密",
-        "工具人"
+        "fast action",
+        "formulaic plots"
       ],
       "effects": [
         {
           "target": "planner",
           "apply": [
-            "设计误解"
+            "Structure emotional beats"
           ],
           "avoid": []
         },
         {
           "target": "writer",
           "apply": [
-            "写微妙互动"
+            "Pace for weight"
           ],
           "avoid": []
         },
         {
           "target": "reviewer",
           "apply": [
-            "张力维持"
+            "Ensure impact in key scenes"
           ],
           "avoid": []
         },
         {
           "target": "memory",
           "apply": [
-            "关系里程碑"
+            "Track emotional progression"
           ],
           "avoid": []
         }
       ],
       "validationHints": [
-        "张力维持"
+        "Ensure impact in key scenes"
       ],
       "priority": 3,
       "enabled": true
@@ -179,15 +179,15 @@
   ],
   "constraints": [
     {
-      "id": "con1",
-      "name": "拒绝廉价和解",
-      "description": "和解需代价，避快速解决。",
-      "severity": "high"
+      "id": "const_no_fastreconcile",
+      "name": "No Fast Reconciliation",
+      "description": "Avoid fast/easy reconciliation.",
+      "severity": "medium"
     },
     {
-      "id": "con2",
-      "name": "避工具人配角",
-      "description": "配角有动机，非仅服务主角。",
+      "id": "const_no_toolchars",
+      "name": "No Tool-Like Side Characters",
+      "description": "Develop side characters fully.",
       "severity": "medium"
     }
   ]

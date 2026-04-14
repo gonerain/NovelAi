@@ -56,6 +56,8 @@ export function buildFactConsistencyReviewMessages(
         `Chapter goal: ${input.contextPack.chapterObjective.goal}`,
         `Emotional goal: ${input.contextPack.chapterObjective.emotionalGoal}`,
         `Scene tags: ${input.contextPack.chapterObjective.sceneTags.join(" | ")}`,
+        `Must rules: ${input.contextPack.mustRules.join(" | ")}`,
+        `Reviewer checks: ${input.contextPack.taskRules.join(" | ")}`,
         `Active characters:\n${JSON.stringify(input.contextPack.activeCharacters, null, 2)}`,
         `Relevant memory facts:\n${JSON.stringify(relevant.memories, null, 2)}`,
         `Relevant world facts:\n${JSON.stringify(relevant.facts, null, 2)}`,

@@ -6,6 +6,8 @@ const allowedCategories = new Set<AuthorComponentCategory>([
   "style",
   "character",
   "plot",
+  "relationship",
+  "pacing",
   "conflict",
   "ending",
   "aesthetic",
@@ -40,38 +42,38 @@ export function validateAuthorInterviewResult(
     }
   }
 
-  if (result.display.components.length > 5) {
+  if (result.display.components.length > 8) {
     issues.push({
       path: "display.components",
-      message: "Too many display components; expected at most 5.",
+      message: "Too many display components; expected at most 8.",
     });
   }
 
-  if (result.normalized.components.length > 5) {
+  if (result.normalized.components.length > 8) {
     issues.push({
       path: "normalized.components",
-      message: "Too many normalized components; expected at most 5.",
+      message: "Too many normalized components; expected at most 8.",
     });
   }
 
-  if (result.display.constraints.length > 3) {
+  if (result.display.constraints.length > 6) {
     issues.push({
       path: "display.constraints",
-      message: "Too many constraints; expected at most 3.",
+      message: "Too many constraints; expected at most 6.",
     });
   }
 
-  if (result.display.openQuestions.length > 2) {
+  if (result.display.openQuestions.length > 4) {
     issues.push({
       path: "display.openQuestions",
-      message: "Too many open questions; expected at most 2.",
+      message: "Too many open questions; expected at most 4.",
     });
   }
 
-  if (result.display.conflictsDetected.length > 2) {
+  if (result.display.conflictsDetected.length > 4) {
     issues.push({
       path: "display.conflictsDetected",
-      message: "Too many conflicts; expected at most 2.",
+      message: "Too many conflicts; expected at most 4.",
     });
   }
 
