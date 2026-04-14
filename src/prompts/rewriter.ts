@@ -1,7 +1,6 @@
 import type {
   FactConsistencyReviewerResult,
   MissingResourceReviewerResult,
-  WriterResult,
 } from "../domain/index.js";
 import type { ChatMessage } from "../llm/types.js";
 
@@ -37,7 +36,9 @@ export function buildRewriterMessages(input: RewriterInput): ChatMessage[] {
     input.mode === "repair_first"
       ? [
           "Mode: repair_first.",
-          "First priority: resolve reviewer findings (especially medium/high) while preserving chapter intent.",
+          "First priority: resolve reviewer findings while preserving chapter intent.",
+          "Treat every finding in Review summary as hard constraints to fix.",
+          "List each fixed finding briefly in fixedFindings.",
           "Do not introduce new lore contradictions.",
           "After repairs, keep prose readable and controlled.",
         ].join("\n")
@@ -73,8 +74,14 @@ export function buildRewriterMessages(input: RewriterInput): ChatMessage[] {
   ];
 }
 
-export const rewriterResultSchema: WriterResult = {
+export const rewriterResultSchema = {
   title: "string",
   draft: "string",
   notes: ["string"],
-} as unknown as WriterResult;
+  fixedFindings: ["string"],
+} as unknown as {
+  title: string;
+  draft: string;
+  notes: string[];
+  fixedFindings: string[];
+};
