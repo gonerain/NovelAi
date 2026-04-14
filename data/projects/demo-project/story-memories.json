@@ -70,5 +70,249 @@
     "notes": [
       "This is a key emotional source of his resistance."
     ]
+  },
+  {
+    "id": "chapter-001-memory-1",
+    "title": "深夜遇袭受伤",
+    "summary": "主角为保护师兄被袭击者刀刃擦伤肋骨，伤势渗血严重，但强行掩饰，拒绝使用保命丹。",
+    "kind": "event",
+    "ownerCharacterId": "manipulator_mei",
+    "relatedCharacterIds": [
+      "ally_wang"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "当提及伤势或保命丹时",
+      "当师兄询问主角状态时"
+    ],
+    "introducedIn": 1,
+    "lastReferencedIn": 3,
+    "status": "triggered",
+    "priority": "high",
+    "visibility": "private",
+    "notes": [
+      "伤势可能恶化",
+      "保命丹未使用",
+      "师兄已起疑",
+      "Chapter 2: 伤势恶化，渗血未止，主角拒绝使用保命丹并强忍剧痛，旧伤开始发作。",
+      "渗血扩大，旧伤发作导致麻痹感蔓延",
+      "保命丹仍未被使用",
+      "主角继续掩饰伤势",
+      "Chapter 3: 伤势在战斗中彻底恶化，保命丹最终被使用，主角无法再掩饰。",
+      "右肩骨裂，左肋伤口崩开，失血严重",
+      "保命丹被师兄强行喂下",
+      "主角控制性格崩溃，依赖问题暴露"
+    ]
+  },
+  {
+    "id": "chapter-001-memory-2",
+    "title": "师兄的怀疑",
+    "summary": "师兄在袭击后注意到主角脸色苍白和异常动作，开始怀疑主角隐瞒了伤势或秘密。",
+    "kind": "event",
+    "ownerCharacterId": "ally_wang",
+    "relatedCharacterIds": [
+      "manipulator_mei"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "当主角行为异常时",
+      "当讨论袭击事件时"
+    ],
+    "introducedIn": 1,
+    "lastReferencedIn": 3,
+    "status": "triggered",
+    "priority": "medium",
+    "visibility": "public",
+    "notes": [
+      "为后续依赖暴露埋下伏笔",
+      "Chapter 2: 师兄注意到主角衣服上的深色痕迹和僵硬动作，怀疑加深但未直接质问。",
+      "师兄怀疑已扎根，为后续依赖暴露铺垫",
+      "主角撒谎被识破迹象",
+      "Chapter 3: 师兄亲眼目睹主角伤势和拒绝用药，怀疑得到证实，直接介入救助。",
+      "师兄强行取出保命丹",
+      "主角依赖问题被师兄知晓",
+      "为后续性格冲突铺垫"
+    ]
+  },
+  {
+    "id": "chapter-001-memory-3",
+    "title": "保命丹的抉择",
+    "summary": "主角拥有保命丹可治疗伤势，但因担心暴露灵力波动和欠下命债而拒绝使用，选择硬撑。",
+    "kind": "resource",
+    "ownerCharacterId": "manipulator_mei",
+    "relatedCharacterIds": [],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "当主角伤势加重时",
+      "当面临生死危机时"
+    ],
+    "introducedIn": 1,
+    "lastReferencedIn": 1,
+    "status": "active",
+    "priority": "medium",
+    "visibility": "private",
+    "notes": [
+      "保命丹仍在储物袋中",
+      "使用会暴露底牌"
+    ]
+  },
+  {
+    "id": "chapter-001-memory-4",
+    "title": "袭击者同伙在外",
+    "summary": "袭击被击退，但屏障波动显示还有同伙在外部潜伏，可能再次发动攻击。",
+    "kind": "event",
+    "ownerCharacterId": "manipulator_mei",
+    "relatedCharacterIds": [
+      "ally_wang"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "当环境安静或屏障被触动时",
+      "当讨论安全措施时"
+    ],
+    "introducedIn": 1,
+    "lastReferencedIn": 3,
+    "status": "triggered",
+    "priority": "medium",
+    "visibility": "public",
+    "notes": [
+      "增加紧张感和后续威胁",
+      "Chapter 3: 追兵袭击发生，屏障被击碎，同伙威胁已转化为实际攻击。",
+      "三名追兵突袭",
+      "屏障碎裂",
+      "增加紧迫感"
+    ]
+  },
+  {
+    "id": "chapter-002-memory-1",
+    "title": "旧伤发作的脆弱时刻",
+    "summary": "主角在伤势恶化下旧伤开始发作，导致麻痹感从肋骨蔓延到肩膀，视野模糊，暴露了控制性格下的身体脆弱性。",
+    "kind": "event",
+    "ownerCharacterId": "manipulator_mei",
+    "relatedCharacterIds": [
+      "ally_wang"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "当主角使用力量或承受压力时",
+      "当提及旧伤或伤势时"
+    ],
+    "introducedIn": 2,
+    "lastReferencedIn": 3,
+    "status": "triggered",
+    "priority": "medium",
+    "visibility": "private",
+    "notes": [
+      "可能影响后续战斗或行动能力",
+      "为性格弱点提供线索",
+      "Chapter 3: 旧伤在战斗中彻底发作，导致行动受限，暴露身体脆弱性。",
+      "旧伤崩开，麻痹感加剧",
+      "影响战斗和移动能力",
+      "为性格弱点提供证据"
+    ]
+  },
+  {
+    "id": "chapter-002-memory-2",
+    "title": "天亮前离开的决定",
+    "summary": "师兄决定在天亮前离开客栈，因屏障即将失效，外部追兵威胁仍在，但主角伤势未处理，增加逃亡风险。",
+    "kind": "event",
+    "ownerCharacterId": "ally_wang",
+    "relatedCharacterIds": [
+      "manipulator_mei"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "当时间接近天亮时",
+      "当讨论下一步行动时"
+    ],
+    "introducedIn": 2,
+    "lastReferencedIn": 3,
+    "status": "triggered",
+    "priority": "medium",
+    "visibility": "public",
+    "notes": [
+      "紧迫感增加，可能触发冲突或逃亡场景",
+      "主角需在伤势下行动",
+      "Chapter 3: 屏障失效，追兵袭击，天亮前离开的决定变得紧迫。",
+      "屏障被击碎",
+      "追兵威胁现实化",
+      "需立即行动离开"
+    ]
+  },
+  {
+    "id": "chapter-003-memory-1",
+    "title": "控制性格的崩溃",
+    "summary": "主角在重伤濒死时，因控制性格拒绝使用保命丹，被师兄强行喂药，内心控制屏障彻底破碎，被迫承认依赖问题。",
+    "kind": "event",
+    "ownerCharacterId": "manipulator_mei",
+    "relatedCharacterIds": [
+      "ally_wang"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "当提及保命丹或依赖时",
+      "当主角情绪失控时",
+      "当师兄质问主角行为时"
+    ],
+    "introducedIn": 3,
+    "lastReferencedIn": 3,
+    "status": "active",
+    "priority": "high",
+    "visibility": "private",
+    "notes": [
+      "性格弱点暴露",
+      "可能影响后续决策和关系",
+      "为童年成因记忆铺垫"
+    ]
+  },
+  {
+    "id": "chapter-003-memory-2",
+    "title": "追兵袭击的代价",
+    "summary": "三名追兵突袭客栈，主角右肩骨裂，左肋旧伤崩开，失血严重，虽击退追兵但伤势危及生命。",
+    "kind": "event",
+    "ownerCharacterId": "manipulator_mei",
+    "relatedCharacterIds": [
+      "ally_wang"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "当讨论伤势或战斗时",
+      "当提及追兵威胁时"
+    ],
+    "introducedIn": 3,
+    "lastReferencedIn": 3,
+    "status": "active",
+    "priority": "medium",
+    "visibility": "public",
+    "notes": [
+      "右肩骨裂需恢复",
+      "失血导致虚弱",
+      "可能影响后续行动能力"
+    ]
+  },
+  {
+    "id": "chapter-003-memory-3",
+    "title": "师兄的强制救助",
+    "summary": "师兄在主角拒绝用药时强行取出保命丹喂下，知晓主角隐瞒伤势和依赖问题，关系出现信任危机。",
+    "kind": "event",
+    "ownerCharacterId": "ally_wang",
+    "relatedCharacterIds": [
+      "manipulator_mei"
+    ],
+    "relatedLocationIds": [],
+    "triggerConditions": [
+      "当讨论保命丹或救助时",
+      "当主角与师兄互动时"
+    ],
+    "introducedIn": 3,
+    "lastReferencedIn": 3,
+    "status": "active",
+    "priority": "medium",
+    "visibility": "private",
+    "notes": [
+      "师兄信任受损",
+      "可能引发后续冲突或对话",
+      "增加角色动态张力"
+    ]
   }
 ]

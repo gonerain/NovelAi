@@ -1,244 +1,466 @@
 {
-  "compact": {
-    "profileId": "demo-project-author-profile",
-    "summary": "Self-understanding, redemption, emotional depth.",
-    "corePreferences": [
-      "slow-burn with emotional hits",
-      "thematic endings",
-      "restrained damaged characters"
-    ],
-    "favoriteCharacterTypes": [
-      "composed but damaged",
-      "frail and stubborn"
-    ],
-    "favoriteRelationshipPatterns": [
-      "unspoken deep connections",
-      "costly repair"
-    ],
-    "plotBiases": [
-      "emotional causality",
-      "small outcomes to big story"
-    ],
-    "endingBiases": [
-      "thematic completeness",
-      "bitter but held"
-    ],
-    "aestheticMotifs": [
-      "rain at night",
-      "caregiving",
-      "pretended fine near collapse"
-    ],
-    "topConstraints": [
-      {
-        "id": "const_no_fastreconcile",
-        "name": "No Fast Reconciliation",
-        "description": "Avoid fast/easy reconciliation.",
-        "severity": "medium"
-      },
-      {
-        "id": "const_no_toolchars",
-        "name": "No Tool-Like Side Characters",
-        "description": "Develop side characters fully.",
-        "severity": "medium"
-      }
-    ],
-    "activeComponents": [
-      {
-        "id": "comp_theme_redemption",
-        "name": "Costly Redemption",
-        "category": "theme",
-        "planner": [
-          "Plan gradual redemption arcs"
-        ],
-        "writer": [
-          "Write internal conflicts"
-        ],
-        "reviewer": [
-          "Check forgiveness weight"
-        ]
-      },
-      {
-        "id": "comp_character_restrained",
-        "name": "Restrained Damage",
-        "category": "character",
-        "planner": [
-          "Design hidden wounds"
-        ],
-        "writer": [
-          "Show subtle struggle"
-        ],
-        "reviewer": [
-          "Verify restraint consistency"
-        ]
-      },
-      {
-        "id": "comp_plot_slowburn",
-        "name": "Slow-Burn Emotional Causality",
-        "category": "plot",
-        "planner": [
-          "Structure emotional beats"
-        ],
-        "writer": [
-          "Pace for weight"
-        ],
-        "reviewer": [
-          "Ensure impact in key scenes"
-        ]
-      }
-    ]
-  },
-  "planner": {
-    "task": "planner",
-    "profileId": "demo-project-author-profile",
-    "summary": "Self-understanding, redemption, emotional depth.",
-    "hardConstraints": [
-      "Avoid fast/easy reconciliation.",
-      "Develop side characters fully."
-    ],
-    "softPreferences": [
-      "slow-burn with emotional hits",
-      "thematic endings",
-      "restrained damaged characters",
-      "emotional causality",
-      "small outcomes to big story"
-    ],
-    "activeComponents": [
-      {
-        "id": "comp_theme_redemption",
-        "name": "Costly Redemption",
-        "category": "theme",
-        "planner": [
-          "Plan gradual redemption arcs"
-        ]
-      },
-      {
-        "id": "comp_character_restrained",
-        "name": "Restrained Damage",
-        "category": "character",
-        "planner": [
-          "Design hidden wounds"
-        ]
-      },
-      {
-        "id": "comp_plot_slowburn",
-        "name": "Slow-Burn Emotional Causality",
-        "category": "plot",
-        "planner": [
-          "Structure emotional beats"
-        ]
-      }
-    ],
-    "promptCapsule": [
-      "Planner rules: Self-understanding, redemption, emotional depth.",
-      "Hard constraint: Avoid fast/easy reconciliation.",
-      "Hard constraint: Develop side characters fully.",
-      "Soft preference: slow-burn with emotional hits",
-      "Soft preference: thematic endings",
-      "Soft preference: restrained damaged characters",
-      "Soft preference: emotional causality",
-      "Soft preference: small outcomes to big story"
-    ]
-  },
-  "writer": {
-    "task": "writer",
-    "profileId": "demo-project-author-profile",
-    "summary": "Self-understanding, redemption, emotional depth.",
-    "hardConstraints": [
-      "Avoid fast/easy reconciliation.",
-      "Develop side characters fully."
-    ],
-    "softPreferences": [
-      "composed but damaged",
-      "frail and stubborn",
-      "unspoken deep connections",
-      "costly repair",
-      "rain at night"
-    ],
-    "activeComponents": [
-      {
-        "id": "comp_theme_redemption",
-        "name": "Costly Redemption",
-        "category": "theme",
-        "writer": [
-          "Write internal conflicts"
-        ]
-      },
-      {
-        "id": "comp_character_restrained",
-        "name": "Restrained Damage",
-        "category": "character",
-        "writer": [
-          "Show subtle struggle"
-        ]
-      },
-      {
-        "id": "comp_plot_slowburn",
-        "name": "Slow-Burn Emotional Causality",
-        "category": "plot",
-        "writer": [
-          "Pace for weight"
-        ]
-      }
-    ],
-    "promptCapsule": [
-      "Writer rules: Self-understanding, redemption, emotional depth.",
-      "Hard constraint: Avoid fast/easy reconciliation.",
-      "Hard constraint: Develop side characters fully.",
-      "Soft preference: composed but damaged",
-      "Soft preference: frail and stubborn",
-      "Soft preference: unspoken deep connections",
-      "Soft preference: costly repair",
-      "Soft preference: rain at night"
-    ]
-  },
-  "reviewer": {
-    "task": "reviewer",
-    "profileId": "demo-project-author-profile",
-    "summary": "Self-understanding, redemption, emotional depth.",
-    "hardConstraints": [
-      "Avoid fast/easy reconciliation.",
-      "Develop side characters fully."
-    ],
-    "softPreferences": [
-      "No Fast Reconciliation",
-      "No Tool-Like Side Characters",
-      "thematic completeness",
-      "bitter but held"
-    ],
-    "activeComponents": [
-      {
-        "id": "comp_theme_redemption",
-        "name": "Costly Redemption",
-        "category": "theme",
-        "reviewer": [
-          "Check forgiveness weight"
-        ]
-      },
-      {
-        "id": "comp_character_restrained",
-        "name": "Restrained Damage",
-        "category": "character",
-        "reviewer": [
-          "Verify restraint consistency"
-        ]
-      },
-      {
-        "id": "comp_plot_slowburn",
-        "name": "Slow-Burn Emotional Causality",
-        "category": "plot",
-        "reviewer": [
-          "Ensure impact in key scenes"
-        ]
-      }
-    ],
-    "promptCapsule": [
-      "Reviewer rules: Self-understanding, redemption, emotional depth.",
-      "Hard constraint: Avoid fast/easy reconciliation.",
-      "Hard constraint: Develop side characters fully.",
-      "Soft preference: No Fast Reconciliation",
-      "Soft preference: No Tool-Like Side Characters",
-      "Soft preference: thematic completeness",
-      "Soft preference: bitter but held"
-    ]
-  }
+    "compact":  {
+                    "profileId":  "demo-project-author-profile",
+                    "summary":  "Author favors high-scan readability web-novel prose: short paragraphs, fast information unlock, and strong beat-by-beat momentum while keeping ambition, betrayal, and delayed justice themes.",
+                    "corePreferences":  [
+                                            "high-scan readability",
+                                            "short paragraphs with hard breaks",
+                                            "fast information unlock",
+                                            "ambition",
+                                            "betrayal",
+                                            "delayed justice",
+                                            "cost of power"
+                                        ],
+                    "favoriteCharacterTypes":  [
+                                                   "highly competent but morally strained leads",
+                                                   "weaponize calm under pressure"
+                                               ],
+                    "favoriteRelationshipPatterns":  [
+                                                         "alliances built on leverage",
+                                                         "slowly turn into conflicted loyalty"
+                                                     ],
+                    "plotBiases":  [
+                                       "short-beat progression",
+                                       "quick conflict visibility per paragraph",
+                                       "layered conspiracies",
+                                       "hard reversals",
+                                       "tactical wins with strategic losses"
+                                   ],
+                    "endingBiases":  [
+                                         "bitter-precise endings",
+                                         "win the war but lose a private world"
+                                     ],
+                    "aestheticMotifs":  [
+                                            "cold weather",
+                                            "decaying cities",
+                                            "coded messages",
+                                            "debt ledgers",
+                                            "council confrontations"
+                                        ],
+                    "topConstraints":  [
+                                           {
+                                               "id":  "con1",
+                                               "name":  "Protagonist\u0027s Self-Containment",
+                                               "description":  "Must maintain protagonist control-vs-breakdown arc, while keeping prose highly skimmable with short paragraphs and quick information reveals.",
+                                               "severity":  "medium"
+                                           }
+                                       ],
+                    "activeComponents":  [
+                                             {
+                                                 "id":  "comp1",
+                                                 "name":  "Costly Redemption",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Ensure redemption arcs involve significant personal sacrifice or loss",
+                                                                 "Tie redemption to the protagonist\u0027s self-destructive habits"
+                                                             ],
+                                                 "writer":  [
+                                                                "Write scenes where characters pay a high price for redemption",
+                                                                "Emphasize emotional weight of sacrifices"
+                                                            ],
+                                                 "reviewer":  [
+                                                                  "Does redemption feel earned through cost?",
+                                                                  "Is the protagonist\u0027s self-destructive behavior addressed?"
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "comp2",
+                                                 "name":  "Morally Strained Competence",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Design leads with high skill but ethical conflicts",
+                                                                 "Use calm demeanor as a strategic tool"
+                                                             ],
+                                                 "writer":  [
+                                                                "Show internal conflict in decision-making",
+                                                                "Depict calm under pressure as a weapon"
+                                                            ],
+                                                 "reviewer":  [
+                                                                  "Is the lead competent but morally ambiguous?",
+                                                                  "Does calmness serve a purpose in scenes?"
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "comp4",
+                                                 "name":  "Layered Conspiracies",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Plot with hidden agendas and schemes",
+                                                                 "Include reversals that impact tactical outcomes"
+                                                             ],
+                                                 "writer":  [
+                                                                "Reveal conspiracies gradually",
+                                                                "Write scenes with strategic twists"
+                                                            ],
+                                                 "reviewer":  [
+                                                                  "Is the plot driven by conspiracies?",
+                                                                  "Do reversals feel hard and impactful?"
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "comp3",
+                                                 "name":  "Leverage-Based Alliances",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Start relationships as transactional",
+                                                                 "Develop alliances into complex loyalties"
+                                                             ],
+                                                 "writer":  [
+                                                                "Write dialogue and actions based on leverage",
+                                                                "Show gradual shift to conflicted loyalty"
+                                                            ],
+                                                 "reviewer":  [
+                                                                  "Are alliances initially built on leverage?",
+                                                                  "Do relationships evolve beyond transactions?"
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "comp5",
+                                                 "name":  "Bitter-Precise Endings",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "End with characters achieving goals but suffering losses",
+                                                                 "Emphasize cost over victory"
+                                                             ],
+                                                 "writer":  [
+                                                                "Write endings that balance success and personal defeat",
+                                                                "Use precise language to convey bitterness"
+                                                            ],
+                                                 "reviewer":  [
+                                                                  "Does the ending feel bitter-precise?",
+                                                                  "Are there personal losses despite wins?"
+                                                              ]
+                                             },
+                                             {
+                                                 "id":  "comp6",
+                                                 "name":  "Decaying Urban Aesthetics",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Set scenes in cold, decaying environments",
+                                                                 "Use motifs to enhance themes of decay"
+                                                             ],
+                                                 "writer":  [
+                                                                "Describe settings with vivid, bleak imagery",
+                                                                "Incorporate motifs like coded messages naturally"
+                                                            ],
+                                                 "reviewer":  [
+                                                                  "Are aesthetic motifs present and thematic?",
+                                                                  "Do settings reflect decay and redemption?"
+                                                              ]
+                                             }
+                                         ]
+                },
+    "planner":  {
+                    "task":  "planner",
+                    "profileId":  "demo-project-author-profile",
+                    "summary":  "Author favors high-scan readability web-novel prose: short paragraphs, fast information unlock, and strong beat-by-beat momentum while keeping ambition, betrayal, and delayed justice themes.",
+                    "globalPreferences":  [
+                                              "ambition",
+                                              "betrayal",
+                                              "delayed justice",
+                                              "cost of power",
+                                              "bitter-precise endings",
+                                              "win the war but lose a private world"
+                                          ],
+                    "taskSpecificPreferences":  [
+                                                    "short-beat progression",
+                                                    "fast information unlock",
+                                                    "quick conflict visibility per paragraph",
+                                                    "layered conspiracies",
+                                                    "hard reversals",
+                                                    "tactical wins with strategic losses",
+                                                    "alliances built on leverage",
+                                                    "slowly turn into conflicted loyalty"
+                                                ],
+                    "mustRules":  [
+                                      "Must maintain protagonist control-vs-breakdown arc.",
+                                      "Plan chapter beats in short readable blocks; each block should expose one clear conflict or decision."
+                                  ],
+                    "taskRules":  [
+                                      "Ensure redemption arcs involve significant personal sacrifice or loss",
+                                      "Tie redemption to the protagonist\u0027s self-destructive habits",
+                                      "Design leads with high skill but ethical conflicts",
+                                      "Use calm demeanor as a strategic tool",
+                                      "Plot with hidden agendas and schemes",
+                                      "Include reversals that impact tactical outcomes",
+                                      "Start relationships as transactional",
+                                      "Develop alliances into complex loyalties",
+                                      "End with characters achieving goals but suffering losses",
+                                      "Emphasize cost over victory"
+                                  ],
+                    "reviewChecks":  [
+
+                                     ],
+                    "activeComponents":  [
+                                             {
+                                                 "id":  "comp1",
+                                                 "name":  "Costly Redemption",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Ensure redemption arcs involve significant personal sacrifice or loss",
+                                                                 "Tie redemption to the protagonist\u0027s self-destructive habits"
+                                                             ]
+                                             },
+                                             {
+                                                 "id":  "comp2",
+                                                 "name":  "Morally Strained Competence",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Design leads with high skill but ethical conflicts",
+                                                                 "Use calm demeanor as a strategic tool"
+                                                             ]
+                                             },
+                                             {
+                                                 "id":  "comp4",
+                                                 "name":  "Layered Conspiracies",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Plot with hidden agendas and schemes",
+                                                                 "Include reversals that impact tactical outcomes"
+                                                             ]
+                                             },
+                                             {
+                                                 "id":  "comp3",
+                                                 "name":  "Leverage-Based Alliances",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Start relationships as transactional",
+                                                                 "Develop alliances into complex loyalties"
+                                                             ]
+                                             },
+                                             {
+                                                 "id":  "comp5",
+                                                 "name":  "Bitter-Precise Endings",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "End with characters achieving goals but suffering losses",
+                                                                 "Emphasize cost over victory"
+                                                             ]
+                                             },
+                                             {
+                                                 "id":  "comp6",
+                                                 "name":  "Decaying Urban Aesthetics",
+                                                 "category":  "theme",
+                                                 "planner":  [
+                                                                 "Set scenes in cold, decaying environments",
+                                                                 "Use motifs to enhance themes of decay"
+                                                             ]
+                                             }
+                                         ]
+                },
+    "writer":  {
+                   "task":  "writer",
+                   "profileId":  "demo-project-author-profile",
+                   "summary":  "Author favors high-scan readability web-novel prose: short paragraphs, fast information unlock, and strong beat-by-beat momentum while keeping ambition, betrayal, and delayed justice themes.",
+                   "globalPreferences":  [
+                                             "ambition",
+                                             "betrayal",
+                                             "delayed justice",
+                                             "cost of power",
+                                             "bitter-precise endings",
+                                             "win the war but lose a private world"
+                                         ],
+                   "taskSpecificPreferences":  [
+                                                   "short paragraphs with hard breaks",
+                                                   "fast information unlock",
+                                                   "high-scan readability",
+                                                   "highly competent but morally strained leads",
+                                                   "weaponize calm under pressure",
+                                                   "alliances built on leverage",
+                                                   "slowly turn into conflicted loyalty",
+                                                   "cold weather",
+                                                   "decaying cities",
+                                                   "coded messages",
+                                                   "debt ledgers",
+                                                   "council confrontations",
+                                                   "layered conspiracies"
+                                               ],
+                   "mustRules":  [
+                                     "Must maintain protagonist control-vs-breakdown arc.",
+                                     "Prefer short paragraphs (1-3 sentences) and clear break lines for skimmability.",
+                                     "Reveal useful information early in most paragraphs; avoid long setup-only blocks."
+                                 ],
+                   "taskRules":  [
+                                     "Use short paragraphs and fast rhythm; most paragraphs should carry one clear beat.",
+                                     "Front-load useful information in paragraph openings so readers can scan quickly.",
+                                     "When pressure rises, split into shorter lines to increase pace without losing clarity.",
+                                     "Write scenes where characters pay a high price for redemption",
+                                     "Emphasize emotional weight of sacrifices",
+                                     "Show internal conflict in decision-making",
+                                     "Depict calm under pressure as a weapon",
+                                     "Reveal conspiracies gradually",
+                                     "Write scenes with strategic twists",
+                                     "Write dialogue and actions based on leverage",
+                                     "Show gradual shift to conflicted loyalty",
+                                     "Write endings that balance success and personal defeat",
+                                     "Use precise language to convey bitterness"
+                                 ],
+                   "reviewChecks":  [
+
+                                    ],
+                   "activeComponents":  [
+                                            {
+                                                "id":  "comp1",
+                                                "name":  "Costly Redemption",
+                                                "category":  "theme",
+                                                "writer":  [
+                                                               "Write scenes where characters pay a high price for redemption",
+                                                               "Emphasize emotional weight of sacrifices"
+                                                           ]
+                                            },
+                                            {
+                                                "id":  "comp2",
+                                                "name":  "Morally Strained Competence",
+                                                "category":  "theme",
+                                                "writer":  [
+                                                               "Show internal conflict in decision-making",
+                                                               "Depict calm under pressure as a weapon"
+                                                           ]
+                                            },
+                                            {
+                                                "id":  "comp4",
+                                                "name":  "Layered Conspiracies",
+                                                "category":  "theme",
+                                                "writer":  [
+                                                               "Reveal conspiracies gradually",
+                                                               "Write scenes with strategic twists"
+                                                           ]
+                                            },
+                                            {
+                                                "id":  "comp3",
+                                                "name":  "Leverage-Based Alliances",
+                                                "category":  "theme",
+                                                "writer":  [
+                                                               "Write dialogue and actions based on leverage",
+                                                               "Show gradual shift to conflicted loyalty"
+                                                           ]
+                                            },
+                                            {
+                                                "id":  "comp5",
+                                                "name":  "Bitter-Precise Endings",
+                                                "category":  "theme",
+                                                "writer":  [
+                                                               "Write endings that balance success and personal defeat",
+                                                               "Use precise language to convey bitterness"
+                                                           ]
+                                            },
+                                            {
+                                                "id":  "comp6",
+                                                "name":  "Decaying Urban Aesthetics",
+                                                "category":  "theme",
+                                                "writer":  [
+                                                               "Describe settings with vivid, bleak imagery",
+                                                               "Incorporate motifs like coded messages naturally"
+                                                           ]
+                                            }
+                                        ]
+               },
+    "reviewer":  {
+                     "task":  "reviewer",
+                     "profileId":  "demo-project-author-profile",
+                     "summary":  "Author favors high-scan readability web-novel prose: short paragraphs, fast information unlock, and strong beat-by-beat momentum while keeping ambition, betrayal, and delayed justice themes.",
+                     "globalPreferences":  [
+                                               "ambition",
+                                               "betrayal",
+                                               "delayed justice",
+                                               "cost of power",
+                                               "bitter-precise endings",
+                                               "win the war but lose a private world"
+                                           ],
+                     "taskSpecificPreferences":  [
+                                                     "Must maintain the protagonist\u0027s controlled demeanor while showing gradual breakdown and acceptance of rescue.",
+                                                     "Check ending alignment: bitter-precise endings",
+                                                     "Check ending alignment: win the war but lose a private world"
+                                                 ],
+                     "mustRules":  [
+                                       "Must maintain protagonist control-vs-breakdown arc.",
+                                       "Ensure chapter remains highly skimmable: short paragraphs, quick beat recognition, low filler."
+                                   ],
+                     "taskRules":  [
+                                       "Check whether paragraph rhythm is short and scannable rather than dense and monolithic.",
+                                       "Check whether paragraph openings expose useful information quickly.",
+                                       "Check whether long setup-only passages can be split or compressed.",
+                                       "Does redemption feel earned through cost?",
+                                       "Is the protagonist\u0027s self-destructive behavior addressed?",
+                                       "Is the lead competent but morally ambiguous?",
+                                       "Does calmness serve a purpose in scenes?",
+                                       "Is the plot driven by conspiracies?",
+                                       "Do reversals feel hard and impactful?",
+                                       "Are alliances initially built on leverage?",
+                                       "Do relationships evolve beyond transactions?",
+                                       "Does the ending feel bitter-precise?",
+                                       "Are there personal losses despite wins?"
+                                   ],
+                     "reviewChecks":  [
+                                          "Check paragraph scannability: most paragraphs should be concise and beat-focused.",
+                                          "Check information unlock speed: key facts/conflict should appear early, not after long lead-in.",
+                                          "Check skip-read robustness: a reader skimming by paragraph should still track scene progression.",
+                                          "Check whether this requirement is concretely evidenced in scene-level behavior: Does redemption feel earned through cost?",
+                                          "Check whether this requirement is concretely evidenced in scene-level behavior: Is the protagonist\u0027s self-destructive behavior addressed?",
+                                          "Check whether this requirement is concretely evidenced in scene-level behavior: Is the lead competent but morally ambiguous?",
+                                          "Check whether this requirement is concretely evidenced in scene-level behavior: Does calmness serve a purpose in scenes?",
+                                          "Check whether this requirement is concretely evidenced in scene-level behavior: Is the plot driven by conspiracies?",
+                                          "Check whether this requirement is concretely evidenced in scene-level behavior: Do reversals feel hard and impactful?",
+                                          "Check whether this requirement is concretely evidenced in scene-level behavior: Are alliances initially built on leverage?",
+                                          "Check whether this requirement is concretely evidenced in scene-level behavior: Do relationships evolve beyond transactions?",
+                                          "Check whether the chapter progression supports ending pressure: Does the ending feel bitter-precise?",
+                                          "Check whether this requirement is concretely evidenced in scene-level behavior: Are there personal losses despite wins?"
+                                      ],
+                     "activeComponents":  [
+                                              {
+                                                  "id":  "comp1",
+                                                  "name":  "Costly Redemption",
+                                                  "category":  "theme",
+                                                  "reviewer":  [
+                                                                   "Does redemption feel earned through cost?",
+                                                                   "Is the protagonist\u0027s self-destructive behavior addressed?"
+                                                               ]
+                                              },
+                                              {
+                                                  "id":  "comp2",
+                                                  "name":  "Morally Strained Competence",
+                                                  "category":  "theme",
+                                                  "reviewer":  [
+                                                                   "Is the lead competent but morally ambiguous?",
+                                                                   "Does calmness serve a purpose in scenes?"
+                                                               ]
+                                              },
+                                              {
+                                                  "id":  "comp4",
+                                                  "name":  "Layered Conspiracies",
+                                                  "category":  "theme",
+                                                  "reviewer":  [
+                                                                   "Is the plot driven by conspiracies?",
+                                                                   "Do reversals feel hard and impactful?"
+                                                               ]
+                                              },
+                                              {
+                                                  "id":  "comp3",
+                                                  "name":  "Leverage-Based Alliances",
+                                                  "category":  "theme",
+                                                  "reviewer":  [
+                                                                   "Are alliances initially built on leverage?",
+                                                                   "Do relationships evolve beyond transactions?"
+                                                               ]
+                                              },
+                                              {
+                                                  "id":  "comp5",
+                                                  "name":  "Bitter-Precise Endings",
+                                                  "category":  "theme",
+                                                  "reviewer":  [
+                                                                   "Does the ending feel bitter-precise?",
+                                                                   "Are there personal losses despite wins?"
+                                                               ]
+                                              },
+                                              {
+                                                  "id":  "comp6",
+                                                  "name":  "Decaying Urban Aesthetics",
+                                                  "category":  "theme",
+                                                  "reviewer":  [
+                                                                   "Are aesthetic motifs present and thematic?",
+                                                                   "Do settings reflect decay and redemption?"
+                                                               ]
+                                              }
+                                          ]
+                 }
 }

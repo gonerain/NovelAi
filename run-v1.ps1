@@ -6,4 +6,10 @@ if (-not (Test-Path $tsc)) {
 }
 
 & $tsc -p tsconfig.build.json
-& node --env-file=.env dist/v1.js @args
+
+$envFile = Join-Path $PSScriptRoot ".env"
+if (Test-Path $envFile) {
+  & node --env-file=$envFile dist/v1.js @args
+} else {
+  & node dist/v1.js @args
+}

@@ -32,7 +32,8 @@ type CommandName =
   | "chapter:generate"
   | "chapter:generate-first"
   | "chapter:inspect"
-  | "chapter:invalidate-from";
+  | "chapter:invalidate-from"
+  | "chapter:reset-all";
 
 interface ParsedArgs {
   command: CommandName;
@@ -91,6 +92,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     "chapter:generate-first",
     "chapter:inspect",
     "chapter:invalidate-from",
+    "chapter:reset-all",
   ]);
 
   if (!allowed.has(command)) {
@@ -233,6 +235,7 @@ function usage(): string {
     "  chapter generate-first --project <id> --count <n>",
     "  chapter inspect --project <id> --chapter <n>",
     "  chapter invalidate-from --project <id> --chapter <n>",
+    "  chapter reset-all --project <id>",
   ].join("\n");
 }
 
@@ -368,6 +371,15 @@ async function main(): Promise<void> {
       const result = await invalidateFromChapter({
         projectId: parsed.projectId,
         chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatInvalidateResult(result));
+      return;
+    }
+
+    case "chapter:reset-all": {
+      const result = await invalidateFromChapter({
+        projectId: parsed.projectId,
+        chapterNumber: 1,
       });
       console.log(formatInvalidateResult(result));
       return;

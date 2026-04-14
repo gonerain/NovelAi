@@ -21,6 +21,8 @@ interface DeepSeekClientOptions {
 
 export class DeepSeekClient implements LlmClient {
   readonly provider = "deepseek" as const;
+  private readonly maxAttempts = 3;
+  private readonly baseRetryDelayMs = 800;
 
   private readonly apiKey: string;
   private readonly baseUrl: string;
@@ -38,23 +40,14 @@ export class DeepSeekClient implements LlmClient {
 
   async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
     const model = input.options?.model ?? this.defaultModel;
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: input.messages,
-        temperature: input.options?.temperature,
-        max_tokens: input.options?.maxTokens,
-      }),
+    const data = (await this.requestChatCompletionWithRetry({
+      model,
+      messages: input.messages,
+      temperature: input.options?.temperature,
+      maxTokens: input.options?.maxTokens,
       signal: input.options?.signal,
-    });
-
-    await ensureOk(response, this.provider);
-    const data = (await parseJsonResponse(response, this.provider)) as {
+      stage: "generateText",
+    })) as {
       choices: Array<{ message?: { content?: string } }>;
       usage?: {
         prompt_tokens?: number;
@@ -142,29 +135,20 @@ export class DeepSeekClient implements LlmClient {
       total_tokens?: number;
     };
   }> {
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
+    return (await this.requestChatCompletionWithRetry({
+      model: args.model,
+      messages: [
+        ...args.messages,
+        { role: "system", content: buildJsonInstruction(args.schema) },
+      ],
+      temperature: args.temperature,
+      maxTokens: args.maxTokens,
+      responseFormat: {
+        type: "json_object",
       },
-      body: JSON.stringify({
-        model: args.model,
-        messages: [
-          ...args.messages,
-          { role: "system", content: buildJsonInstruction(args.schema) },
-        ],
-        temperature: args.temperature,
-        max_tokens: args.maxTokens,
-        response_format: {
-          type: "json_object",
-        },
-      }),
       signal: args.signal,
-    });
-
-    await ensureOk(response, this.provider);
-    return (await parseJsonResponse(response, this.provider)) as {
+      stage: "generateObject",
+    })) as {
       choices: Array<{ message?: { content?: string }; finish_reason?: string }>;
       usage?: {
         prompt_tokens?: number;
@@ -185,5 +169,78 @@ export class DeepSeekClient implements LlmClient {
       return 3200;
     }
     return Math.min(Math.max(maxTokens * 2, 3200), 6400);
+  }
+
+  private async requestChatCompletionWithRetry(args: {
+    model: string;
+    messages: StructuredGenerationInput<object>["messages"];
+    temperature?: number;
+    maxTokens?: number;
+    responseFormat?: { type: "json_object" };
+    signal?: AbortSignal;
+    stage: "generateText" | "generateObject";
+  }): Promise<unknown> {
+    const url = `${this.baseUrl}/chat/completions`;
+
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${this.apiKey}`,
+          },
+          body: JSON.stringify({
+            model: args.model,
+            messages: args.messages,
+            temperature: args.temperature,
+            max_tokens: args.maxTokens,
+            response_format: args.responseFormat,
+          }),
+          signal: args.signal,
+        });
+      } catch (error) {
+        if (args.signal?.aborted) {
+          throw error;
+        }
+
+        if (attempt < this.maxAttempts) {
+          await this.sleep(this.baseRetryDelayMs * attempt);
+          continue;
+        }
+
+        throw new LlmRequestError({
+          provider: this.provider,
+          message: `Network error from ${this.provider} at ${args.stage} after ${attempt} attempts`,
+          details: {
+            url,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      }
+
+      if (this.isRetryableStatus(response.status) && attempt < this.maxAttempts) {
+        await this.sleep(this.baseRetryDelayMs * attempt);
+        continue;
+      }
+
+      await ensureOk(response, this.provider);
+      return await parseJsonResponse(response, this.provider);
+    }
+
+    throw new LlmRequestError({
+      provider: this.provider,
+      message: `Unknown request failure from ${this.provider}`,
+      details: { url, stage: args.stage },
+    });
+  }
+
+  private isRetryableStatus(status: number): boolean {
+    return status === 429 || (status >= 500 && status < 600);
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

@@ -275,6 +275,9 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
     mustRules: uniqueTrimmed(
       [
         ...input.authorPack.mustRules,
+        ...(input.chapterPlan.beatConstraints ?? []).map(
+          (item) => `Honor beat constraint: ${item}`,
+        ),
         ...input.chapterPlan.disallowedMoves.map(asForbiddenRule),
       ],
       10,
@@ -303,7 +306,6 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
     avoidRules: uniqueTrimmed(
       [
         ...input.styleBible.antiPatterns.map((item) => `Avoid: ${item}`),
-        ...input.chapterPlan.disallowedMoves.map(asForbiddenRule),
       ],
       10,
     ),

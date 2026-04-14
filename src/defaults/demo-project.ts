@@ -86,9 +86,9 @@ export const demoStyleBible: StyleBible = {
 export const demoStorySetup: StorySetup = {
   premise: demoPremise,
   currentArcGoal:
-    "Force the protagonist to decide whether survival is worth exposing his hidden lifeline and dependence on someone else.",
+    "Through daily travel frictions, push the protagonist from habitual self-control toward one small but real act of accepting help.",
   openingSituation:
-    "After escaping pursuers, the protagonist is badly injured in a temporary inn refuge. His senior brother notices that something is wrong, but the protagonist still tries to hide both the wound and the existence of a last-resort pill.",
+    "After a tense night on the road, the protagonist and senior brother stop at a temporary inn. On the surface they are handling ordinary chores, but the protagonist keeps hiding a worsening old injury and refuses even low-stakes care.",
   defaultActiveCharacterIds: ["protagonist", "senior_brother"],
   storyOutlineId: "story-outline-demo",
   currentArcId: "arc-1",
@@ -102,9 +102,9 @@ export const demoStoryOutline: StoryOutline = {
   endingTarget: demoThemeBible.endingTarget,
   majorArcIds: ["arc-1"],
   keyTurningPoints: [
-    "The protagonist is forced to reveal his hidden survival resource.",
-    "Trust between the protagonist and senior brother fractures before it can deepen.",
-    "The protagonist must choose between secrecy and shared survival.",
+    "Small daily incidents repeatedly expose the protagonist's over-control and avoidance.",
+    "The senior brother stops arguing in big speeches and starts intervening through practical, ordinary actions.",
+    "The protagonist makes a small but meaningful choice to accept help in public, shifting the relationship baseline.",
   ],
 };
 
@@ -112,23 +112,23 @@ export const demoArcOutlines: ArcOutline[] = [
   {
     id: "arc-1",
     storyOutlineId: demoStoryOutline.id,
-    name: "The Cost of Survival",
+    name: "Daily Friction, Slow Softening",
     arcGoal:
-      "Push the protagonist from private self-destruction toward a first irreversible act of accepting rescue.",
+      "Use ordinary co-travel scenes to reveal both the protagonist's likable competence and his stubborn self-denial, then land a believable first step toward shared trust.",
     startState:
-      "The protagonist believes secrecy and self-control are safer than dependence on anyone else.",
+      "The protagonist handles everything efficiently, appears reliable, and refuses visible vulnerability.",
     endState:
-      "The protagonist survives by exposing a hidden resource, but the relationship with senior brother becomes strained and unstable.",
+      "The protagonist still resists dependence, but now accepts one concrete form of help without framing it as defeat.",
     requiredTurns: [
-      "The hidden wound becomes impossible to conceal.",
-      "The pill moves from secret resource to active choice.",
-      "Senior brother shifts from suspicion to confirmed knowledge.",
+      "A mundane task (meal, medicine, route, lodging) becomes a pressure point for hidden pain.",
+      "The protagonist's competence makes him more attractive, but also shows how he isolates himself.",
+      "Senior brother switches from confrontation to precise, practical care that cannot be brushed off.",
     ],
     relationshipChanges: [
-      "Senior brother moves from concern to intervention.",
-      "The protagonist's defensive distance turns into visible vulnerability.",
+      "Senior brother moves from verbal pressure to action-based support.",
+      "The protagonist's defensive distance gains small cracks rather than dramatic collapse.",
     ],
-    memoryRequirements: ["memory-pill-001", "memory-wound-003", "memory-secret-002"],
+    memoryRequirements: ["memory-pill-001", "memory-wound-003", "memory-vow-002"],
     beatIds: ["beat-1", "beat-2", "beat-3"],
     primaryPayoffPatternIds: [
       "payoff-forced-exposure",
@@ -147,78 +147,88 @@ export const demoBeatOutlines: BeatOutline[] = [
     id: "beat-1",
     arcId: "arc-1",
     order: 1,
-    beatGoal: "Establish the protagonist, the senior brother, the temporary refuge, and the hidden injury.",
-    conflict: "The protagonist tries to hold control while the senior brother starts noticing the crack in that control.",
+    beatGoal:
+      "Establish daily co-travel rhythm, show why the protagonist is likable and useful, and quietly plant the hidden injury.",
+    conflict:
+      "The protagonist keeps things smooth and efficient, while the senior brother notices that this smoothness is also avoidance.",
     expectedChange:
-      "The reader understands the immediate danger, the relationship tension, and the existence of a hidden resource.",
+      "The reader understands the duo dynamic through small actions, and sees the first subtle mismatch between reliability and self-neglect.",
     requiredCharacters: ["protagonist", "senior_brother"],
-    requiredMemories: ["memory-wound-003", "memory-pill-001", "memory-secret-002"],
+    requiredMemories: ["memory-wound-003", "memory-pill-001", "memory-vow-002"],
     payoffPatternIds: [
       "payoff-forced-exposure",
       "payoff-old-setup-payoff",
     ],
     revealTargets: [
-      "Who the protagonist is in one strong impression",
-      "Who the senior brother is relative to him",
-      "Why this refuge is temporary and dangerous",
+      "Protagonist's competence and charm in ordinary interactions",
+      "How senior brother reads him better than others do",
+      "A small physical or behavioral tell that hints at hidden strain",
     ],
     constraints: [
       "Do not dump the whole backstory.",
-      "Do not treat Chapter 1 like a mid-arc continuation scene.",
+      "Do not open with immediate life-or-death escalation.",
     ],
     openingAnchor: {
       readerAnchor: [
-        "The protagonist is injured and hiding it.",
-        "Senior brother is an ally with emotional authority to intervene.",
+        "The protagonist appears capable and collected in ordinary routines.",
+        "Tiny mismatches suggest he is hiding pain or exhaustion.",
       ],
       relationshipAnchor: [
-        "They are close enough for tension, but not honest with each other.",
+        "They are close enough to bicker over details, but still avoid direct honesty.",
       ],
       worldAnchor: [
         "They are hiding in a temporary refuge after pursuit.",
       ],
-      hook: "Before dawn, the protagonist must decide whether survival is worth exposure.",
+      hook: "In everyday moments, the protagonist keeps proving he is dependable while quietly proving he is unwell.",
     },
   },
   {
     id: "beat-2",
     arcId: "arc-1",
     order: 2,
-    beatGoal: "Increase urgency and turn the hidden pill into an unavoidable decision point.",
+    beatGoal:
+      "Increase emotional pressure through daily frictions and force the pair to negotiate boundaries around care and control.",
     conflict:
-      "The protagonist's vow against dependence collides with worsening physical collapse and the senior brother's pressure.",
+      "The protagonist insists on handling everything alone, while the senior brother starts using practical interventions instead of arguments.",
     expectedChange:
-      "The protagonist can no longer treat the pill as abstract insurance; it becomes the center of the scene.",
+      "Their tension moves from abstract disagreement to concrete behavior, and each gains clearer leverage over the other.",
     requiredCharacters: ["protagonist", "senior_brother"],
-    requiredMemories: ["memory-pill-001", "memory-wound-003", "memory-secret-002"],
+    requiredMemories: ["memory-pill-001", "memory-wound-003", "memory-vow-002"],
     payoffPatternIds: [
       "payoff-costly-rescue",
       "payoff-delayed-confession",
     ],
-    revealTargets: ["The true cost of using the pill", "The emotional source of the protagonist's refusal"],
+    revealTargets: [
+      "A likable but self-damaging habit in the protagonist",
+      "The senior brother's care style under frustration",
+    ],
     constraints: [
-      "Do not resolve the decision too early if this beat is used for a middle chapter.",
+      "Do not resolve the relationship in a big confession scene.",
     ],
   },
   {
     id: "beat-3",
     arcId: "arc-1",
     order: 3,
-    beatGoal: "Force the protagonist into an irreversible choice that saves his life but damages trust.",
+    beatGoal:
+      "Land one small irreversible trust shift through a concrete everyday decision.",
     conflict:
-      "The protagonist must choose between secrecy and survival under immediate threat.",
+      "The protagonist must choose between preserving his self-image and accepting practical help in front of someone he cannot fully shut out.",
     expectedChange:
-      "The pill is used or revealed, and the senior brother's suspicion becomes knowledge.",
+      "A minor but real act of acceptance happens, setting a new baseline for future chapters.",
     requiredCharacters: ["protagonist", "senior_brother"],
-    requiredMemories: ["memory-pill-001", "memory-wound-003", "memory-secret-002"],
+    requiredMemories: ["memory-pill-001", "memory-wound-003", "memory-vow-002"],
     payoffPatternIds: [
       "payoff-forced-exposure",
       "payoff-relationship-breakpoint",
       "payoff-costly-rescue",
     ],
-    revealTargets: ["The pill is no longer only hidden", "Trust damage becomes part of the arc state"],
+    revealTargets: [
+      "The protagonist can accept a small rescue without full surrender",
+      "The pair gains workable, imperfect cooperation",
+    ],
     constraints: [
-      "Do not resolve the relationship cleanly in the same beat.",
+      "Do not jump from small acceptance to complete emotional resolution.",
     ],
   },
 ];
@@ -282,13 +292,13 @@ export const demoStoryMemories: StoryMemory[] = [
   {
     id: "memory-pill-001",
     kind: "resource",
-    title: "Unused life-saving pill",
+    title: "Rare stabilizing pill",
     summary:
-      "The protagonist once obtained a rare pill that can keep him alive in a near-death moment. He has not used it yet.",
+      "The protagonist carries a rare stabilizing pill that can quickly suppress injury flare-ups, but using it may expose traces and deepen his psychological dependence on external rescue.",
     ownerCharacterId: "protagonist",
     relatedCharacterIds: ["protagonist"],
     relatedLocationIds: [],
-    triggerConditions: ["near death", "severe injury", "cannot escape"],
+    triggerConditions: ["injury flare-up", "sustained strain", "cannot maintain facade"],
     introducedIn: 12,
     lastReferencedIn: 12,
     status: "active",
@@ -347,9 +357,9 @@ export const demoWorldFacts: WorldFact[] = [
   {
     id: "fact-pill-002",
     category: "resource_rule",
-    title: "Using the pill reveals abnormal spiritual traces",
+    title: "Using the pill leaves abnormal traces",
     description:
-      "The rare pill releases an abnormal pulse when used, making the user's background and value easier to trace.",
+      "The rare pill leaves a traceable pulse after use, increasing long-term exposure risk even when it solves short-term instability.",
     scope: "character_specific",
     visibility: "hidden",
     relatedCharacterIds: ["protagonist"],

@@ -7,7 +7,8 @@ import type { ChatMessage } from "../llm/types.js";
 interface RewriterInput {
   title?: string;
   draft: string;
-  mode: "repair_first" | "literary_polish";
+  mode: "repair_first" | "hybrid_upgrade" | "quality_boost";
+  objective?: string;
   missingResourceReview: MissingResourceReviewerResult;
   factConsistencyReview: FactConsistencyReviewerResult;
 }
@@ -32,22 +33,32 @@ function summarizeFindings(args: RewriterInput): string {
 }
 
 export function buildRewriterMessages(input: RewriterInput): ChatMessage[] {
-  const modeInstruction =
-    input.mode === "repair_first"
-      ? [
-          "Mode: repair_first.",
-          "First priority: resolve reviewer findings while preserving chapter intent.",
-          "Treat every finding in Review summary as hard constraints to fix.",
-          "List each fixed finding briefly in fixedFindings.",
-          "Do not introduce new lore contradictions.",
-          "After repairs, keep prose readable and controlled.",
-        ].join("\n")
-      : [
-          "Mode: literary_polish.",
-          "Reviewer issues are minor. Keep plot facts unchanged and focus on readability + literary quality.",
-          "Improve rhythm, sentence variety, image precision, and emotional subtext.",
-          "Do not add new plot events or world facts.",
-        ].join("\n");
+  const modeInstruction = (() => {
+    if (input.mode === "repair_first") {
+      return [
+        "Mode: repair_first.",
+        "Primary objective: fix reviewer findings first, then keep prose readable.",
+        "Treat high-severity findings as mandatory fixes.",
+        "Do not introduce new lore contradictions.",
+      ].join("\n");
+    }
+
+    if (input.mode === "hybrid_upgrade") {
+      return [
+        "Mode: hybrid_upgrade.",
+        "Primary objective: fix important reviewer findings and improve excitement/readability together.",
+        "Prioritize consistency first, then rhythm, tension, and hook quality.",
+        "Do not add new plot events or world facts that break continuity.",
+      ].join("\n");
+    }
+
+    return [
+      "Mode: quality_boost.",
+      "Primary objective: improve excitement, rhythm, emotional pressure, and chapter hook.",
+      "Keep plot facts, core events, and outcomes unchanged.",
+      "Do not add new plot events or world facts.",
+    ].join("\n");
+  })();
 
   return [
     {
@@ -59,6 +70,7 @@ export function buildRewriterMessages(input: RewriterInput): ChatMessage[] {
         "Do not output analysis or bullet points.",
         "Return valid JSON only.",
         modeInstruction,
+        input.objective ? `Execution objective: ${input.objective}` : "",
       ].join("\n"),
     },
     {

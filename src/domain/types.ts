@@ -184,6 +184,7 @@ export interface ChapterPlan {
   sceneTags: string[];
   requiredCharacters: EntityId[];
   requiredMemories: EntityId[];
+  beatConstraints?: string[];
   mustHitConflicts: string[];
   disallowedMoves: string[];
   styleReminders: string[];

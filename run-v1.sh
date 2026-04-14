@@ -16,4 +16,9 @@ if [[ ! -f "$TSC_JS" ]]; then
 fi
 
 node "$TSC_JS" -p "$ROOT_DIR/tsconfig.build.json"
-node --env-file="$ROOT_DIR/.env" "$ROOT_DIR/dist/v1.js" "$@"
+
+if [[ -f "$ROOT_DIR/.env" ]]; then
+  node --env-file="$ROOT_DIR/.env" "$ROOT_DIR/dist/v1.js" "$@"
+else
+  node "$ROOT_DIR/dist/v1.js" "$@"
+fi

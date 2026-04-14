@@ -1,4 +1,4 @@
-export type LlmProvider = "openai" | "deepseek" | "anthropic" | "ollama" | "glm";
+export type LlmProvider = "openai" | "deepseek" | "anthropic" | "ollama";
 
 export type MessageRole = "system" | "user" | "assistant";
 

@@ -6,8 +6,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "check": "tsc --noEmit -p tsconfig.json",
-    "demo": "node --env-file=.env dist/demo.js",
-    "v1": "node --env-file=.env dist/v1.js"
+    "demo": "node dist/demo.js",
+    "v1": "node dist/v1.js"
   },
   "devDependencies": {
     "@types/node": "^24.6.0",

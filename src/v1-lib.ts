@@ -177,6 +177,7 @@ function assertChapterPlanningAnchors(args: {
       [
         `No arc outline found for project=${args.projectId}, chapter=${args.chapterNumber}.`,
         `Run: ./run-v1.sh outline generate-stack --project ${args.projectId} --count 250`,
+        `or:  .\\run-v1.ps1 outline generate-stack --project ${args.projectId} --count 250`,
       ].join("\n"),
     );
   }
@@ -187,6 +188,7 @@ function assertChapterPlanningAnchors(args: {
       [
         `No beat outline found for project=${args.projectId}, arc=${args.currentArc.id}, chapter=${args.chapterNumber}.`,
         `Run: ./run-v1.sh outline generate-stack --project ${args.projectId} --count 250`,
+        `or:  .\\run-v1.ps1 outline generate-stack --project ${args.projectId} --count 250`,
       ].join("\n"),
     );
   }
@@ -308,17 +310,13 @@ function buildRecentConsequences(
   );
 }
 
-function hasImportantReviewerIssues(args: {
+function hasBlockingReviewerIssues(args: {
   missing: MissingResourceReviewerResult;
   fact: FactConsistencyReviewerResult;
 }): boolean {
-  const hasImportantMissing = args.missing.findings.some(
-    (item) => item.severity === "medium" || item.severity === "high",
-  );
-  const hasImportantFact = args.fact.findings.some(
-    (item) => item.severity === "medium" || item.severity === "high",
-  );
-  return hasImportantMissing || hasImportantFact;
+  const hasHighMissing = args.missing.findings.some((item) => item.severity === "high");
+  const hasHighFact = args.fact.findings.some((item) => item.severity === "high");
+  return hasHighMissing || hasHighFact;
 }
 
 function normalizeReviewerResults(args: {
@@ -362,37 +360,48 @@ function normalizeReviewerResults(args: {
   };
 }
 
-function hasHighReviewerIssues(args: {
+function countReviewerFindingsBySeverity(args: {
   missing: MissingResourceReviewerResult;
   fact: FactConsistencyReviewerResult;
-}): boolean {
-  const missingHigh = args.missing.findings.some((item) => item.severity === "high");
-  const factHigh = args.fact.findings.some((item) => item.severity === "high");
-  return missingHigh || factHigh;
+}): { high: number; medium: number; low: number } {
+  const allFindings = [...args.missing.findings, ...args.fact.findings];
+  return {
+    high: allFindings.filter((item) => item.severity === "high").length,
+    medium: allFindings.filter((item) => item.severity === "medium").length,
+    low: allFindings.filter((item) => item.severity === "low").length,
+  };
 }
 
-function countLowMediumIssues(args: {
+function buildRewritePlan(args: {
   missing: MissingResourceReviewerResult;
   fact: FactConsistencyReviewerResult;
-}): number {
-  const missingCount = args.missing.findings.filter(
-    (item) => item.severity === "low" || item.severity === "medium",
-  ).length;
-  const factCount = args.fact.findings.filter(
-    (item) => item.severity === "low" || item.severity === "medium",
-  ).length;
-  return missingCount + factCount;
-}
+}): {
+  mode: "repair_first" | "hybrid_upgrade" | "quality_boost";
+  objective: string;
+} {
+  const severity = countReviewerFindingsBySeverity(args);
 
-function pickRewriteMode(args: {
-  missing: MissingResourceReviewerResult;
-  fact: FactConsistencyReviewerResult;
-}): "repair_first" | "literary_polish" {
-  if (hasHighReviewerIssues(args)) {
-    return "repair_first";
+  if (severity.high > 0) {
+    return {
+      mode: "repair_first",
+      objective:
+        "Fix all high-severity consistency issues first; keep chapter events and outcomes unchanged.",
+    };
   }
 
-  return countLowMediumIssues(args) <= 1 ? "literary_polish" : "repair_first";
+  if (severity.medium > 0 || severity.low >= 2) {
+    return {
+      mode: "hybrid_upgrade",
+      objective:
+        "Resolve reviewer issues while strengthening pacing, emotional pressure, and chapter-end hook.",
+    };
+  }
+
+  return {
+    mode: "quality_boost",
+    objective:
+      "Keep facts unchanged, then maximize readability, tension rhythm, and reader hook for this chapter.",
+  };
 }
 
 async function ensureBootstrappedProject(
@@ -767,6 +776,7 @@ async function generateChapterArtifact(args: {
       [...planned.requiredMemories, ...(currentBeat?.requiredMemories ?? [])],
       12,
     ),
+    beatConstraints: uniqueStrings([...(currentBeat?.constraints ?? [])], 6),
     mustHitConflicts: uniqueStrings(
       [
         ...planned.mustHitConflicts,
@@ -777,10 +787,7 @@ async function generateChapterArtifact(args: {
       ],
       6,
     ),
-    disallowedMoves: uniqueStrings(
-      [...planned.disallowedMoves, ...(currentBeat?.constraints ?? [])],
-      6,
-    ),
+    disallowedMoves: uniqueStrings([...planned.disallowedMoves], 6),
     payoffPatternIds: normalizePayoffPatternIds({
       plannerIds: planned.payoffPatternIds,
       currentArc,
@@ -860,174 +867,82 @@ async function generateChapterArtifact(args: {
   });
   const initialMissing = initialNormalized.missing;
   const initialFact = initialNormalized.fact;
-  const initialRewriteMode = pickRewriteMode({
+  const rewritePlan = buildRewritePlan({
     missing: initialMissing,
     fact: initialFact,
   });
-
+  const originalDraft = writerResult.object.draft;
+  const originalTitle = writerResult.object.title;
   let rewrittenDraft = writerResult.object.draft;
   let rewrittenTitle = writerResult.object.title;
   let activeMissing = initialMissing;
   let activeFact = initialFact;
-  const maxRewritePasses = 2;
+  const rewriteTemp =
+    rewritePlan.mode === "repair_first"
+      ? 0.35
+      : rewritePlan.mode === "hybrid_upgrade"
+        ? 0.5
+        : 0.65;
+  logStage("chapter", `llm: rewriter chapter=${args.chapterNumber} mode=${rewritePlan.mode} pass=1`);
+  const rewritten = await args.service.generateObjectForTask({
+    task: "rewriter",
+    messages: buildRewriterMessages({
+      title: rewrittenTitle,
+      draft: rewrittenDraft,
+      mode: rewritePlan.mode,
+      objective: rewritePlan.objective,
+      missingResourceReview: activeMissing,
+      factConsistencyReview: activeFact,
+    }),
+    schema: rewriterResultSchema,
+    temperature: rewriteTemp,
+    maxTokens: 3000,
+  });
+  rewrittenDraft = rewritten.object.draft;
+  rewrittenTitle = rewritten.object.title ?? rewrittenTitle;
 
-  for (let pass = 1; pass <= maxRewritePasses; pass += 1) {
-    const passMode = pass === 1 ? initialRewriteMode : "repair_first";
-    logStage(
-      "chapter",
-      `llm: rewriter chapter=${args.chapterNumber} mode=${passMode} pass=${pass}`,
-    );
-    const rewritten = await args.service.generateObjectForTask({
-      task: "rewriter",
-      messages: buildRewriterMessages({
-        title: rewrittenTitle,
-        draft: rewrittenDraft,
-        mode: passMode,
-        missingResourceReview: activeMissing,
-        factConsistencyReview: activeFact,
-      }),
-      schema: rewriterResultSchema,
-      temperature: passMode === "literary_polish" ? 0.65 : 0.35,
-      maxTokens: 3000,
-    });
-    rewrittenDraft = rewritten.object.draft;
-    rewrittenTitle = rewritten.object.title ?? rewrittenTitle;
+  logStage("chapter", `llm: review_missing_resource_final chapter=${args.chapterNumber} pass=1`);
+  const missingResourceReviewFinal = await args.service.generateObjectForTask({
+    task: "review_missing_resource",
+    messages: buildMissingResourceReviewMessages({
+      contextPack: reviewerContextPack,
+      draft: rewrittenDraft,
+      storyMemories: args.base.storyMemories,
+    }),
+    schema: missingResourceReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1800,
+  });
 
-    logStage("chapter", `llm: review_missing_resource_final chapter=${args.chapterNumber} pass=${pass}`);
-    const missingResourceReviewFinal = await args.service.generateObjectForTask({
-      task: "review_missing_resource",
-      messages: buildMissingResourceReviewMessages({
-        contextPack: reviewerContextPack,
-        draft: rewrittenDraft,
-        storyMemories: args.base.storyMemories,
-      }),
-      schema: missingResourceReviewerResultSchema,
-      temperature: 0.2,
-      maxTokens: 1800,
-    });
+  logStage("chapter", `llm: review_fact_final chapter=${args.chapterNumber} pass=1`);
+  const factConsistencyReviewFinal = await args.service.generateObjectForTask({
+    task: "review_fact",
+    messages: buildFactConsistencyReviewMessages({
+      contextPack: reviewerContextPack,
+      draft: rewrittenDraft,
+      storyMemories: args.base.storyMemories,
+      worldFacts: args.base.worldFacts,
+    }),
+    schema: factConsistencyReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1800,
+  });
 
-    logStage("chapter", `llm: review_fact_final chapter=${args.chapterNumber} pass=${pass}`);
-    const factConsistencyReviewFinal = await args.service.generateObjectForTask({
-      task: "review_fact",
-      messages: buildFactConsistencyReviewMessages({
-        contextPack: reviewerContextPack,
-        draft: rewrittenDraft,
-        storyMemories: args.base.storyMemories,
-        worldFacts: args.base.worldFacts,
-      }),
-      schema: factConsistencyReviewerResultSchema,
-      temperature: 0.2,
-      maxTokens: 1800,
-    });
+  const normalizedFinal = normalizeReviewerResults({
+    missing: missingResourceReviewFinal.object as MissingResourceReviewerResult,
+    fact: factConsistencyReviewFinal.object as FactConsistencyReviewerResult,
+  });
+  activeMissing = normalizedFinal.missing;
+  activeFact = normalizedFinal.fact;
 
-    const normalizedFinal = normalizeReviewerResults({
-      missing: missingResourceReviewFinal.object as MissingResourceReviewerResult,
-      fact: factConsistencyReviewFinal.object as FactConsistencyReviewerResult,
-    });
-    activeMissing = normalizedFinal.missing;
-    activeFact = normalizedFinal.fact;
-
-    if (!hasImportantReviewerIssues({ missing: activeMissing, fact: activeFact })) {
-      break;
-    }
-  }
-
-  if (!hasImportantReviewerIssues({ missing: activeMissing, fact: activeFact })) {
-    logStage("chapter", `llm: rewriter chapter=${args.chapterNumber} mode=literary_polish pass=final`);
-    const polished = await args.service.generateObjectForTask({
-      task: "rewriter",
-      messages: buildRewriterMessages({
-        title: rewrittenTitle,
-        draft: rewrittenDraft,
-        mode: "literary_polish",
-        missingResourceReview: { findings: [], notes: [] },
-        factConsistencyReview: { findings: [], notes: [] },
-      }),
-      schema: rewriterResultSchema,
-      temperature: 0.65,
-      maxTokens: 3000,
-    });
-
-    const polishedDraft = polished.object.draft;
-    const polishedTitle = polished.object.title ?? rewrittenTitle;
-    logStage("chapter", `llm: review_missing_resource_final chapter=${args.chapterNumber} pass=polish`);
-    const polishedMissing = await args.service.generateObjectForTask({
-      task: "review_missing_resource",
-      messages: buildMissingResourceReviewMessages({
-        contextPack: reviewerContextPack,
-        draft: polishedDraft,
-        storyMemories: args.base.storyMemories,
-      }),
-      schema: missingResourceReviewerResultSchema,
-      temperature: 0.2,
-      maxTokens: 1800,
-    });
-    logStage("chapter", `llm: review_fact_final chapter=${args.chapterNumber} pass=polish`);
-    const polishedFact = await args.service.generateObjectForTask({
-      task: "review_fact",
-      messages: buildFactConsistencyReviewMessages({
-        contextPack: reviewerContextPack,
-        draft: polishedDraft,
-        storyMemories: args.base.storyMemories,
-        worldFacts: args.base.worldFacts,
-      }),
-      schema: factConsistencyReviewerResultSchema,
-      temperature: 0.2,
-      maxTokens: 1800,
-    });
-    const polishedNormalized = normalizeReviewerResults({
-      missing: polishedMissing.object as MissingResourceReviewerResult,
-      fact: polishedFact.object as FactConsistencyReviewerResult,
-    });
-
-    if (!hasImportantReviewerIssues(polishedNormalized)) {
-      rewrittenDraft = polishedDraft;
-      rewrittenTitle = polishedTitle;
-      activeMissing = polishedNormalized.missing;
-      activeFact = polishedNormalized.fact;
-    }
-  }
-
-  // Missing-only fallback: when fact is already clean, run one more targeted repair for missing resource.
-  if (activeMissing.findings.length > 0 && activeFact.findings.length === 0) {
-    logStage("chapter", `llm: rewriter chapter=${args.chapterNumber} mode=repair_first pass=missing_only`);
-    const missingOnly = await args.service.generateObjectForTask({
-      task: "rewriter",
-      messages: buildRewriterMessages({
-        title: rewrittenTitle,
-        draft: rewrittenDraft,
-        mode: "repair_first",
-        missingResourceReview: activeMissing,
-        factConsistencyReview: { findings: [], notes: [] },
-      }),
-      schema: rewriterResultSchema,
-      temperature: 0.3,
-      maxTokens: 2800,
-    });
-    const missingOnlyDraft = missingOnly.object.draft;
-    const missingOnlyTitle = missingOnly.object.title ?? rewrittenTitle;
-    logStage("chapter", `llm: review_missing_resource_final chapter=${args.chapterNumber} pass=missing_only`);
-    const missingOnlyReview = await args.service.generateObjectForTask({
-      task: "review_missing_resource",
-      messages: buildMissingResourceReviewMessages({
-        contextPack: reviewerContextPack,
-        draft: missingOnlyDraft,
-        storyMemories: args.base.storyMemories,
-      }),
-      schema: missingResourceReviewerResultSchema,
-      temperature: 0.2,
-      maxTokens: 1800,
-    });
-    const normalizedMissingOnly = normalizeReviewerResults({
-      missing: missingOnlyReview.object as MissingResourceReviewerResult,
-      fact: activeFact,
-    });
-    if (normalizedMissingOnly.missing.findings.length < activeMissing.findings.length) {
-      rewrittenDraft = missingOnlyDraft;
-      rewrittenTitle = missingOnlyTitle;
-      activeMissing = normalizedMissingOnly.missing;
-      activeFact = normalizedMissingOnly.fact;
-    }
+  if (
+    rewritePlan.mode === "quality_boost" &&
+    hasBlockingReviewerIssues({ missing: activeMissing, fact: activeFact })
+  ) {
+    rewrittenDraft = originalDraft;
+    rewrittenTitle = originalTitle;
+    activeMissing = initialMissing;
+    activeFact = initialFact;
   }
 
   logStage("chapter", `llm: memory_updater chapter=${args.chapterNumber}`);
