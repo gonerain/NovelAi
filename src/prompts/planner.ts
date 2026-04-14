@@ -3,7 +3,7 @@ import type { ChatMessage } from "../llm/types.js";
 
 export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
   const storyLine = input.storyOutline
-    ? `Story outline: theme=${input.storyOutline.coreTheme}; ending=${input.storyOutline.endingTarget}; turns=${input.storyOutline.keyTurningPoints.join(" | ")}`
+    ? `Story outline: theme=${input.storyOutline.coreTheme}; ending=${input.storyOutline.endingTarget}`
     : undefined;
 
   const arcLine = input.arcOutline
@@ -74,17 +74,12 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         `Current arc goal: ${input.currentArcGoal}`,
         `Current situation: ${input.currentSituation}`,
         input.chapterNumber ? `Chapter number: ${input.chapterNumber}` : undefined,
-        input.arcId ? `Arc id: ${input.arcId}` : undefined,
-        input.beatOutline ? `Beat id: ${input.beatOutline.id}` : undefined,
         input.beatOutline?.chapterRangeHint
           ? `Beat chapter range: ${input.beatOutline.chapterRangeHint.start}-${input.beatOutline.chapterRangeHint.end}`
           : undefined,
         `Active characters: ${input.activeCharacterIds.join(", ")}`,
         input.beatOutline?.requiredCharacters.length
           ? `Beat required characters: ${input.beatOutline.requiredCharacters.join(", ")}`
-          : undefined,
-        input.candidateMemoryIds.length > 0
-          ? `Candidate memory ids: ${input.candidateMemoryIds.join(", ")}`
           : undefined,
         input.beatOutline?.requiredMemories.length
           ? `Beat required memories: ${input.beatOutline.requiredMemories.join(", ")}`

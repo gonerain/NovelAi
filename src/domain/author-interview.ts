@@ -21,6 +21,7 @@ export interface AuthorInterviewSessionInput {
   userRawAnswers: InterviewAnswer[];
   priorProfile?: Partial<AuthorProfile>;
   targetProject?: InterviewTargetProject;
+  smallModel?: boolean;
 }
 
 export interface AuthorInterviewQuestion {

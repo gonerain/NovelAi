@@ -257,7 +257,6 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       input.arcOutline?.arcSellingPoint ? `Arc selling point: ${input.arcOutline.arcSellingPoint}` : "",
       input.arcOutline?.arcHook ? `Arc hook: ${input.arcOutline.arcHook}` : "",
       input.arcOutline?.arcPayoff ? `Arc payoff: ${input.arcOutline.arcPayoff}` : "",
-      ...(input.beatOutline?.constraints ?? []).map((item) => `Beat constraint: ${item}`),
     ],
     8,
   );
@@ -277,7 +276,6 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       [
         ...input.authorPack.mustRules,
         ...input.chapterPlan.disallowedMoves.map(asForbiddenRule),
-        ...(input.beatOutline?.constraints ?? []).map(asForbiddenRule),
       ],
       10,
     ),
@@ -290,7 +288,7 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       12,
     ),
     chapterExecutionReminders: uniqueTrimmed(
-      [...input.chapterPlan.styleReminders, ...(input.beatOutline?.constraints ?? [])],
+      [...input.chapterPlan.styleReminders],
       8,
     ),
     themePressure: uniqueTrimmed(

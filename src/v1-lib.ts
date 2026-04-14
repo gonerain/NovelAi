@@ -43,6 +43,7 @@ import {
   authorInterviewNormalizedDraftSchema,
   buildAuthorInterviewDisplayMessages,
   buildAuthorInterviewNormalizeMessages,
+  buildAuthorInterviewSmallModelNormalizeMessages,
   buildFactConsistencyReviewMessages,
   buildMemoryUpdaterMessages,
   buildMissingResourceReviewMessages,
@@ -314,29 +315,62 @@ async function ensureBootstrappedProject(
   const validationIssues: string[] = [];
 
   if (!authorProfile) {
-    const displayMessages = buildAuthorInterviewDisplayMessages(demoInterviewInput);
-    const displayResult = await service.generateObjectForTask({
-      task: "author_interview",
-      messages: displayMessages,
-      schema: authorInterviewDisplayDraftSchema,
-      temperature: 0.2,
-      maxTokens: 2200,
-    });
-    const normalizedMessages = buildAuthorInterviewNormalizeMessages({
-      input: demoInterviewInput,
-      display: displayResult.object.display,
-    });
-    const normalizedResult = await service.generateObjectForTask({
-      task: "author_interview",
-      messages: normalizedMessages,
-      schema: authorInterviewNormalizedDraftSchema,
-      temperature: 0.2,
-      maxTokens: 2600,
-    });
-    const interviewCombined = {
-      display: displayResult.object.display,
-      normalized: normalizedResult.object.normalized,
-    };
+    const interviewCombined = demoInterviewInput.smallModel
+      ? await (async () => {
+          const normalizedOnlyMessages =
+            buildAuthorInterviewSmallModelNormalizeMessages(demoInterviewInput);
+          const normalizedOnlyResult = await service.generateObjectForTask({
+            task: "author_interview",
+            messages: normalizedOnlyMessages,
+            schema: authorInterviewNormalizedDraftSchema,
+            temperature: 0.2,
+            maxTokens: 2200,
+          });
+
+          return {
+            display: {
+              summary: normalizedOnlyResult.object.normalized.authorProfile.summary,
+              authorProfile: normalizedOnlyResult.object.normalized.authorProfile,
+              components: normalizedOnlyResult.object.normalized.components.map((component) => ({
+                id: component.id,
+                name: component.name,
+                category: component.category,
+                description: component.name,
+                priority: component.priority,
+              })),
+              constraints: normalizedOnlyResult.object.normalized.constraints,
+              openQuestions: [],
+              conflictsDetected: [],
+            },
+            normalized: normalizedOnlyResult.object.normalized,
+          };
+        })()
+      : await (async () => {
+          const displayMessages = buildAuthorInterviewDisplayMessages(demoInterviewInput);
+          const displayResult = await service.generateObjectForTask({
+            task: "author_interview",
+            messages: displayMessages,
+            schema: authorInterviewDisplayDraftSchema,
+            temperature: 0.2,
+            maxTokens: 2200,
+          });
+          const normalizedMessages = buildAuthorInterviewNormalizeMessages({
+            input: demoInterviewInput,
+            display: displayResult.object.display,
+          });
+          const normalizedResult = await service.generateObjectForTask({
+            task: "author_interview",
+            messages: normalizedMessages,
+            schema: authorInterviewNormalizedDraftSchema,
+            temperature: 0.2,
+            maxTokens: 2600,
+          });
+
+          return {
+            display: displayResult.object.display,
+            normalized: normalizedResult.object.normalized,
+          };
+        })();
     const normalizedInterview = normalizeAuthorInterviewResult(interviewCombined);
     validationIssues.push(
       ...validateAuthorInterviewResult(normalizedInterview).map(

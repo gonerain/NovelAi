@@ -138,6 +138,30 @@ export function buildAuthorInterviewNormalizeMessages(args: {
   ];
 }
 
+export function buildAuthorInterviewSmallModelNormalizeMessages(
+  input: AuthorInterviewSessionInput,
+): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: [
+        "You are an author preference normalizer.",
+        "Small-model mode: output normalized only.",
+        "Do not output display.",
+        "Keep normalized authorProfile arrays concise and operational.",
+        "Keep component fields minimal and operational.",
+        "component.category must stay within the allowed category list.",
+        "Prefer concrete operational checks in reviewerChecks.",
+        "Return valid JSON only.",
+      ].join("\n"),
+    },
+    {
+      role: "user",
+      content: buildInterviewSharedContext(input),
+    },
+  ];
+}
+
 export const authorInterviewDisplayDraftSchema: AuthorInterviewDisplayDraftResult = {
   display: {
     summary: "string",
