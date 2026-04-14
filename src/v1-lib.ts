@@ -39,8 +39,10 @@ import {
 } from "./defaults/demo-project.js";
 import { LlmService } from "./llm/service.js";
 import {
-  authorInterviewResultSchema,
-  buildAuthorInterviewMessages,
+  authorInterviewDisplayDraftSchema,
+  authorInterviewNormalizedDraftSchema,
+  buildAuthorInterviewDisplayMessages,
+  buildAuthorInterviewNormalizeMessages,
   buildFactConsistencyReviewMessages,
   buildMemoryUpdaterMessages,
   buildMissingResourceReviewMessages,
@@ -312,16 +314,30 @@ async function ensureBootstrappedProject(
   const validationIssues: string[] = [];
 
   if (!authorProfile) {
-    const interviewMessages = buildAuthorInterviewMessages(demoInterviewInput);
-    const interviewResult = await service.generateObjectForTask({
+    const displayMessages = buildAuthorInterviewDisplayMessages(demoInterviewInput);
+    const displayResult = await service.generateObjectForTask({
       task: "author_interview",
-      messages: interviewMessages,
-      schema: authorInterviewResultSchema,
+      messages: displayMessages,
+      schema: authorInterviewDisplayDraftSchema,
       temperature: 0.2,
-      maxTokens: 3200,
+      maxTokens: 2200,
     });
-
-    const normalizedInterview = normalizeAuthorInterviewResult(interviewResult.object);
+    const normalizedMessages = buildAuthorInterviewNormalizeMessages({
+      input: demoInterviewInput,
+      display: displayResult.object.display,
+    });
+    const normalizedResult = await service.generateObjectForTask({
+      task: "author_interview",
+      messages: normalizedMessages,
+      schema: authorInterviewNormalizedDraftSchema,
+      temperature: 0.2,
+      maxTokens: 2600,
+    });
+    const interviewCombined = {
+      display: displayResult.object.display,
+      normalized: normalizedResult.object.normalized,
+    };
+    const normalizedInterview = normalizeAuthorInterviewResult(interviewCombined);
     validationIssues.push(
       ...validateAuthorInterviewResult(normalizedInterview).map(
         (issue) => `${issue.path}: ${issue.message}`,

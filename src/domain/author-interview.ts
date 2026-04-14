@@ -39,15 +39,6 @@ export interface AuthorInterviewDisplayComponent {
   name: string;
   category: AuthorComponentCategory;
   description: string;
-  strengthens: string[];
-  suppresses: string[];
-  effects: {
-    planner?: string[];
-    writer?: string[];
-    reviewer?: string[];
-    memory?: string[];
-  };
-  validationHints: string[];
   priority: number;
 }
 
@@ -55,8 +46,6 @@ export interface AuthorInterviewNormalizedComponent {
   id: EntityId;
   name: string;
   category: AuthorComponentCategory;
-  strengthens: string[];
-  suppresses: string[];
   plannerEffects: string[];
   writerEffects: string[];
   reviewerChecks: string[];
@@ -91,5 +80,13 @@ export interface AuthorInterviewNormalizedResult {
 
 export interface AuthorInterviewResult {
   display: AuthorInterviewDisplayResult;
+  normalized: AuthorInterviewNormalizedResult;
+}
+
+export interface AuthorInterviewDisplayDraftResult {
+  display: AuthorInterviewDisplayResult;
+}
+
+export interface AuthorInterviewNormalizedDraftResult {
   normalized: AuthorInterviewNormalizedResult;
 }

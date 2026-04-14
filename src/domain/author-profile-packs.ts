@@ -48,6 +48,8 @@ export interface DerivedAuthorProfilePacks {
   reviewer: TaskAuthorPack;
 }
 
+const ACTIVE_COMPONENT_LIMIT = 6;
+
 function uniqueTrimmed(items: string[], limit: number): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -81,7 +83,7 @@ function topConstraints(profile: AuthorProfile, limit: number): ConstraintRule[]
     .slice(0, limit);
 }
 
-function componentApply(profile: AuthorProfile, limit = 4): AuthorPackComponent[] {
+function componentApply(profile: AuthorProfile, limit = ACTIVE_COMPONENT_LIMIT): AuthorPackComponent[] {
   return profile.components
     .filter((component) => component.enabled)
     .sort((left, right) => left.priority - right.priority)
@@ -99,6 +101,26 @@ function componentApply(profile: AuthorProfile, limit = 4): AuthorPackComponent[
     }));
 }
 
+function asExecutableReviewCheck(text: string): string {
+  const normalized = text.trim();
+  if (!normalized) {
+    return normalized;
+  }
+  if (/^check whether\b/i.test(normalized)) {
+    return normalized;
+  }
+  if (/reconcil|repair|forgiv|trust/i.test(normalized)) {
+    return "Check whether reconciliation is earned through prior fracture, visible cost, and changed behavior.";
+  }
+  if (/side character|supporting|配角/i.test(normalized)) {
+    return "Check whether side characters have independent motive, pressure, and consequence.";
+  }
+  if (/ending|closure|payoff/i.test(normalized)) {
+    return `Check whether the chapter progression supports ending pressure: ${normalized}`;
+  }
+  return `Check whether this requirement is concretely evidenced in scene-level behavior: ${normalized}`;
+}
+
 function componentTaskRules(task: AuthorPackTask, components: AuthorPackComponent[]): string[] {
   return uniqueTrimmed(
     components.flatMap((component) =>
@@ -113,7 +135,7 @@ function componentTaskRules(task: AuthorPackTask, components: AuthorPackComponen
 }
 
 function buildTaskPack(task: AuthorPackTask, profile: AuthorProfile): TaskAuthorPack {
-  const activeComponents = componentApply(profile, 6).map((component) => ({
+  const activeComponents = componentApply(profile, ACTIVE_COMPONENT_LIMIT).map((component) => ({
     ...component,
     planner: task === "planner" ? component.planner : undefined,
     writer: task === "writer" ? component.writer : undefined,
@@ -158,9 +180,9 @@ function buildTaskPack(task: AuthorPackTask, profile: AuthorProfile): TaskAuthor
     task === "reviewer"
       ? uniqueTrimmed(
           [
-            ...taskRules,
-            ...profile.constraints.map((constraint) => constraint.description),
-            ...profile.endingBiases.map((bias) => `Check whether draft supports ending tendency: ${bias}`),
+            ...taskRules.map(asExecutableReviewCheck),
+            ...profile.constraints.map((constraint) => asExecutableReviewCheck(constraint.description)),
+            ...profile.endingBiases.map((bias) => asExecutableReviewCheck(`ending tendency: ${bias}`)),
           ],
           12,
         )
@@ -193,7 +215,7 @@ export function buildDerivedAuthorProfilePacks(
       endingBiases: uniqueTrimmed(profile.endingBiases, 8),
       aestheticMotifs: uniqueTrimmed(profile.aestheticMotifs, 8),
       topConstraints: topConstraints(profile, 5),
-      activeComponents: componentApply(profile),
+      activeComponents: componentApply(profile, ACTIVE_COMPONENT_LIMIT),
     },
     planner: buildTaskPack("planner", profile),
     writer: buildTaskPack("writer", profile),

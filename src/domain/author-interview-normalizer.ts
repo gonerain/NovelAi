@@ -52,15 +52,6 @@ function normalizeDisplayComponent(
   return {
     ...component,
     category: normalizeCategory(component.category),
-    strengthens: uniqueTrimmed(component.strengthens, 4),
-    suppresses: uniqueTrimmed(component.suppresses, 4),
-    validationHints: uniqueTrimmed(component.validationHints, 4),
-    effects: {
-      planner: uniqueTrimmed(component.effects.planner ?? [], 4),
-      writer: uniqueTrimmed(component.effects.writer ?? [], 4),
-      reviewer: uniqueTrimmed(component.effects.reviewer ?? [], 4),
-      memory: uniqueTrimmed(component.effects.memory ?? [], 4),
-    },
   };
 }
 
@@ -70,8 +61,6 @@ function normalizeNormalizedComponent(
   return {
     ...component,
     category: normalizeCategory(component.category),
-    strengthens: uniqueTrimmed(component.strengthens, 4),
-    suppresses: uniqueTrimmed(component.suppresses, 4),
     plannerEffects: uniqueTrimmed(component.plannerEffects, 4),
     writerEffects: uniqueTrimmed(component.writerEffects, 4),
     reviewerChecks: uniqueTrimmed(component.reviewerChecks, 4),
