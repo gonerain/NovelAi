@@ -14,8 +14,10 @@
 ## 运行环境
 
 - Node.js 22+
-- Windows PowerShell
-- 已安装依赖：`cmd /c npm install`
+- Windows PowerShell 或 Ubuntu Bash
+- 已安装依赖：
+  - Windows：`cmd /c npm install`
+  - Ubuntu：`npm install`
 - `.env` 中至少配置一个可用模型，目前默认走 `DeepSeek`
 
 ## 环境变量
@@ -36,20 +38,24 @@ ANTHROPIC_VERSION=2023-06-01
 OLLAMA_BASE_URL=http://localhost:11434
 ```
 
-当前默认任务路由在 [src/llm/config.ts](D:\Code\NovelAi\src\llm\config.ts)。
+当前默认任务路由在 [src/llm/config.ts](./src/llm/config.ts)。
 
 ## 启动方式
 
 不要直接依赖全局 `npm` 或全局 `tsx`。
 
-项目已经提供 PowerShell 入口脚本：
+项目已经提供入口脚本：
 
-- [run-v1.ps1](D:\Code\NovelAi\run-v1.ps1)
-- [run-demo.ps1](D:\Code\NovelAi\run-demo.ps1)
+- Windows:
+  - [run-v1.ps1](./run-v1.ps1)
+  - [run-demo.ps1](./run-demo.ps1)
+- Ubuntu:
+  - [run-v1.sh](./run-v1.sh)
+  - [run-demo.sh](./run-demo.sh)
 
 它们会：
 
-1. 使用本地 `tsc.cmd` 编译
+1. 使用本地 `tsc` 编译
 2. 用 `node --env-file=.env` 运行编译后的 `dist/*.js`
 
 ## 最小检查
@@ -60,16 +66,29 @@ OLLAMA_BASE_URL=http://localhost:11434
 cmd /c npm install
 ```
 
+```bash
+npm install
+```
+
 类型检查：
 
 ```powershell
 cmd /c npm run check
 ```
 
+```bash
+npm run check
+```
+
 跑 demo：
 
 ```powershell
 .\run-demo.ps1
+```
+
+```bash
+chmod +x ./run-v1.sh ./run-demo.sh
+./run-demo.sh
 ```
 
 ## 项目模型
@@ -137,17 +156,30 @@ cmd /c npm run check
 - arc outlines
 - beat outlines
 
+### 4.1 校验 outline 完整性
+
+```bash
+./run-v1.sh outline validate --project demo-project
+```
+
+会检查：
+
+- story / arc / beat 是否齐全
+- arc 章节范围是否连续覆盖
+- beat 是否按 arc 连续覆盖且顺序合法
+
 ### 5. 生成分层大纲
 
 ```powershell
 .\run-v1.ps1 outline generate-stack --project demo-project --count 250
 ```
 
-当前实现会按三层生成：
+当前实现会按四层生成：
 
 1. `StoryOutline`
 2. `CastExpansion`
 3. `ArcOutline`
+4. `BeatOutline`
 
 产物会保存到项目目录：
 

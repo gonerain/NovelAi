@@ -59,6 +59,7 @@ export type TaskName =
   | "story_outline"
   | "cast_expansion"
   | "arc_outline"
+  | "beat_outline"
   | "planner"
   | "writer"
   | "review_missing_resource"

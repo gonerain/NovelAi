@@ -17,6 +17,10 @@ export const defaultTaskRoutes: Record<TaskName, ModelRoute> = {
     provider: "deepseek",
     model: "deepseek-chat",
   },
+  beat_outline: {
+    provider: "deepseek",
+    model: "deepseek-chat",
+  },
   planner: {
     provider: "deepseek",
     model: "deepseek-chat",

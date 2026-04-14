@@ -1,5 +1,6 @@
 import type {
   ArcOutline,
+  BeatOutline,
   CastCharacterOutline,
   StoryOutline,
   StoryProject,
@@ -8,7 +9,9 @@ import { buildDerivedAuthorProfilePacks } from "./domain/index.js";
 import { LlmService } from "./llm/service.js";
 import {
   arcOutlineGenerationResultSchema,
+  beatOutlineGenerationResultSchema,
   buildArcOutlineMessages,
+  buildBeatOutlineMessages,
   buildCastExpansionMessages,
   buildStoryOutlineMessages,
   castExpansionResultSchema,
@@ -30,6 +33,16 @@ export interface GenerateOutlineStackResult {
   storyOutline: StoryOutline;
   cast: CastCharacterOutline[];
   arcOutlines: ArcOutline[];
+  beatOutlines: BeatOutline[];
+}
+
+export interface OutlineValidationResult {
+  projectId: string;
+  ok: boolean;
+  arcCount: number;
+  beatCount: number;
+  targetChapterCount: number;
+  issues: string[];
 }
 
 function validateArcCoverage(
@@ -81,6 +94,76 @@ function validateCastSize(cast: CastCharacterOutline[], desiredLongTermCastSize:
       `Cast generation failed validation: expected ${desiredLongTermCastSize} long-term characters, got ${cast.length}.`,
     );
   }
+}
+
+function validateBeatCoverage(beatOutlines: BeatOutline[], arcOutlines: ArcOutline[]): void {
+  for (const arc of arcOutlines) {
+    if (!arc.chapterRangeHint) {
+      throw new Error(`Arc outline ${arc.id} is missing chapterRangeHint.`);
+    }
+
+    const beats = beatOutlines
+      .filter((beat) => beat.arcId === arc.id)
+      .sort((left, right) => left.order - right.order);
+
+    if (beats.length === 0) {
+      throw new Error(`Beat outline generation failed validation: arc ${arc.id} has no beats.`);
+    }
+
+    let expectedOrder = 1;
+    let expectedStart = arc.chapterRangeHint.start;
+    for (const beat of beats) {
+      if (beat.order !== expectedOrder) {
+        throw new Error(
+          `Beat outline generation failed validation: arc ${arc.id} expected beat order ${expectedOrder}, got ${beat.order}.`,
+        );
+      }
+      expectedOrder += 1;
+
+      if (!beat.chapterRangeHint) {
+        throw new Error(
+          `Beat outline generation failed validation: beat ${beat.id} is missing chapterRangeHint.`,
+        );
+      }
+
+      if (beat.chapterRangeHint.start !== expectedStart) {
+        throw new Error(
+          `Beat outline generation failed validation: arc ${arc.id} expected beat ${beat.id} to start at chapter ${expectedStart}, got ${beat.chapterRangeHint.start}.`,
+        );
+      }
+
+      if (beat.chapterRangeHint.end < beat.chapterRangeHint.start) {
+        throw new Error(
+          `Beat outline generation failed validation: beat ${beat.id} has invalid range ${beat.chapterRangeHint.start}-${beat.chapterRangeHint.end}.`,
+        );
+      }
+
+      expectedStart = beat.chapterRangeHint.end + 1;
+    }
+
+    if (expectedStart - 1 !== arc.chapterRangeHint.end) {
+      throw new Error(
+        `Beat outline generation failed validation: arc ${arc.id} expected final covered chapter ${arc.chapterRangeHint.end}, got ${expectedStart - 1}.`,
+      );
+    }
+  }
+}
+
+function attachBeatIdsToArcs(
+  arcOutlines: ArcOutline[],
+  beatOutlines: BeatOutline[],
+): ArcOutline[] {
+  return arcOutlines.map((arc) => {
+    const beatIds = beatOutlines
+      .filter((beat) => beat.arcId === arc.id)
+      .sort((left, right) => left.order - right.order)
+      .map((beat) => beat.id);
+
+    return {
+      ...arc,
+      beatIds,
+    };
+  });
 }
 
 function coreCharacters(project: StoryProject): Array<{ id: string; name: string; role: string }> {
@@ -153,6 +236,18 @@ export async function generateOutlineStack(
     temperature: 0.2,
     maxTokens: 3200,
   });
+  const beatResult = await service.generateObjectForTask({
+    task: "beat_outline",
+    messages: buildBeatOutlineMessages({
+      projectTitle: project.title,
+      storyOutline,
+      arcOutlines: arcResult.object.arcOutlines,
+      targetChapterCount: options.targetChapterCount ?? 250,
+    }),
+    schema: beatOutlineGenerationResultSchema,
+    temperature: 0.2,
+    maxTokens: 3800,
+  });
 
   validateCastSize(castResult.object.cast, options.desiredLongTermCastSize ?? 6);
   validateArcCoverage(
@@ -160,16 +255,23 @@ export async function generateOutlineStack(
     options.targetArcCount ?? 10,
     options.targetChapterCount ?? 250,
   );
+  validateBeatCoverage(beatResult.object.beatOutlines, arcResult.object.arcOutlines);
+  const arcOutlinesWithBeatIds = attachBeatIdsToArcs(
+    arcResult.object.arcOutlines,
+    beatResult.object.beatOutlines,
+  );
 
   await repository.saveStoryOutline(options.projectId, storyOutline);
   await repository.saveCastOutlines(options.projectId, castResult.object.cast);
-  await repository.saveArcOutlines(options.projectId, arcResult.object.arcOutlines);
+  await repository.saveArcOutlines(options.projectId, arcOutlinesWithBeatIds);
+  await repository.saveBeatOutlines(options.projectId, beatResult.object.beatOutlines);
 
   return {
     projectId: options.projectId,
     storyOutline,
     cast: castResult.object.cast,
-    arcOutlines: arcResult.object.arcOutlines,
+    arcOutlines: arcOutlinesWithBeatIds,
+    beatOutlines: beatResult.object.beatOutlines,
   };
 }
 
@@ -182,6 +284,7 @@ export function formatOutlineStackResult(result: GenerateOutlineStackResult): st
   lines.push(`Ending target: ${result.storyOutline.endingTarget}`);
   lines.push(`Cast generated: ${result.cast.length}`);
   lines.push(`Arc outlines generated: ${result.arcOutlines.length}`);
+  lines.push(`Beat outlines generated: ${result.beatOutlines.length}`);
 
   lines.push("");
   lines.push("Long-term cast:");
@@ -197,6 +300,82 @@ export function formatOutlineStackResult(result: GenerateOutlineStackResult): st
       : "unspecified";
     lines.push(`- ${arc.id} (${range}): ${arc.name}`);
     lines.push(`  Goal: ${arc.arcGoal}`);
+  }
+
+  return lines.join("\n");
+}
+
+export async function validateOutlineStack(options: {
+  projectId: string;
+}): Promise<OutlineValidationResult> {
+  const repository = new FileProjectRepository();
+  const project = await loadStoryProject(repository, options.projectId);
+  if (!project) {
+    throw new Error(`Project not found or incomplete: ${options.projectId}`);
+  }
+
+  const issues: string[] = [];
+  const arcOutlines = project.arcOutlines;
+  const beatOutlines = project.beatOutlines;
+  const sortedArcs = [...arcOutlines].sort(
+    (left, right) => (left.chapterRangeHint?.start ?? 0) - (right.chapterRangeHint?.start ?? 0),
+  );
+  const targetChapterCount = sortedArcs[sortedArcs.length - 1]?.chapterRangeHint?.end ?? 0;
+
+  if (!project.storyOutline) {
+    issues.push("story-outline.json is missing.");
+  }
+  if (arcOutlines.length === 0) {
+    issues.push("arc-outlines.json is empty.");
+  }
+  if (beatOutlines.length === 0) {
+    issues.push("beat-outlines.json is empty.");
+  }
+  if (targetChapterCount < 1) {
+    issues.push("Cannot infer target chapter count from arc outlines.");
+  }
+
+  if (arcOutlines.length > 0 && targetChapterCount > 0) {
+    try {
+      validateArcCoverage(arcOutlines, arcOutlines.length, targetChapterCount);
+    } catch (error) {
+      issues.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (arcOutlines.length > 0 && beatOutlines.length > 0) {
+    try {
+      validateBeatCoverage(beatOutlines, arcOutlines);
+    } catch (error) {
+      issues.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  return {
+    projectId: options.projectId,
+    ok: issues.length === 0,
+    arcCount: arcOutlines.length,
+    beatCount: beatOutlines.length,
+    targetChapterCount,
+    issues,
+  };
+}
+
+export function formatOutlineValidationResult(result: OutlineValidationResult): string {
+  const lines: string[] = [];
+
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Outline valid: ${result.ok ? "yes" : "no"}`);
+  lines.push(`Arcs: ${result.arcCount}`);
+  lines.push(`Beats: ${result.beatCount}`);
+  lines.push(`Target chapters: ${result.targetChapterCount}`);
+
+  if (result.issues.length > 0) {
+    lines.push("");
+    lines.push("Issues:");
+    for (const issue of result.issues) {
+      lines.push(`- ${issue}`);
+    }
   }
 
   return lines.join("\n");

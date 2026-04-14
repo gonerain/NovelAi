@@ -33,10 +33,12 @@ export interface TaskAuthorPack {
   task: AuthorPackTask;
   profileId: EntityId;
   summary: string;
-  hardConstraints: string[];
-  softPreferences: string[];
+  globalPreferences: string[];
+  taskSpecificPreferences: string[];
+  mustRules: string[];
+  taskRules: string[];
+  reviewChecks: string[];
   activeComponents: AuthorPackComponent[];
-  promptCapsule: string[];
 }
 
 export interface DerivedAuthorProfilePacks {
@@ -97,35 +99,41 @@ function componentApply(profile: AuthorProfile, limit = 4): AuthorPackComponent[
     }));
 }
 
-function buildPromptCapsule(task: AuthorPackTask, pack: TaskAuthorPack): string[] {
-  const label =
-    task === "planner" ? "Planner rules" : task === "writer" ? "Writer rules" : "Reviewer rules";
-
-  return [
-    `${label}: ${pack.summary}`,
-    ...pack.hardConstraints.map((item) => `Hard constraint: ${item}`),
-    ...pack.softPreferences.map((item) => `Soft preference: ${item}`),
-  ].slice(0, 8);
+function componentTaskRules(task: AuthorPackTask, components: AuthorPackComponent[]): string[] {
+  return uniqueTrimmed(
+    components.flatMap((component) =>
+      task === "planner"
+        ? component.planner ?? []
+        : task === "writer"
+          ? component.writer ?? []
+          : component.reviewer ?? [],
+    ),
+    10,
+  );
 }
 
 function buildTaskPack(task: AuthorPackTask, profile: AuthorProfile): TaskAuthorPack {
-  const activeComponents = componentApply(profile, 3).map((component) => ({
+  const activeComponents = componentApply(profile, 6).map((component) => ({
     ...component,
     planner: task === "planner" ? component.planner : undefined,
     writer: task === "writer" ? component.writer : undefined,
     reviewer: task === "reviewer" ? component.reviewer : undefined,
   }));
 
-  const hardConstraints = uniqueTrimmed(
-    topConstraints(profile, 3).map((constraint) => constraint.description),
-    3,
+  const mustRules = uniqueTrimmed(
+    topConstraints(profile, 5).map((constraint) => constraint.description),
+    8,
+  );
+  const globalPreferences = uniqueTrimmed(
+    [...profile.corePreferences, ...profile.endingBiases],
+    10,
   );
 
-  const softPreferences =
+  const taskSpecificPreferences =
     task === "planner"
       ? uniqueTrimmed(
-          [...profile.corePreferences, ...profile.plotBiases, ...profile.endingBiases],
-          5,
+          [...profile.plotBiases, ...profile.favoriteRelationshipPatterns],
+          8,
         )
       : task === "writer"
         ? uniqueTrimmed(
@@ -133,27 +141,41 @@ function buildTaskPack(task: AuthorPackTask, profile: AuthorProfile): TaskAuthor
               ...profile.favoriteCharacterTypes,
               ...profile.favoriteRelationshipPatterns,
               ...profile.aestheticMotifs,
+              ...profile.plotBiases,
             ],
-            5,
+            10,
           )
         : uniqueTrimmed(
-            [...profile.constraints.map((constraint) => constraint.name), ...profile.endingBiases],
-            5,
+            [
+              ...profile.constraints.map((constraint) => constraint.description),
+              ...profile.endingBiases.map((bias) => `Check ending alignment: ${bias}`),
+            ],
+            10,
           );
 
-  const pack: TaskAuthorPack = {
+  const taskRules = componentTaskRules(task, activeComponents);
+  const reviewChecks =
+    task === "reviewer"
+      ? uniqueTrimmed(
+          [
+            ...taskRules,
+            ...profile.constraints.map((constraint) => constraint.description),
+            ...profile.endingBiases.map((bias) => `Check whether draft supports ending tendency: ${bias}`),
+          ],
+          12,
+        )
+      : [];
+
+  return {
     task,
     profileId: profile.id,
     summary: profile.summary,
-    hardConstraints,
-    softPreferences,
+    globalPreferences,
+    taskSpecificPreferences,
+    mustRules,
+    taskRules,
+    reviewChecks,
     activeComponents,
-    promptCapsule: [],
-  };
-
-  return {
-    ...pack,
-    promptCapsule: buildPromptCapsule(task, pack),
   };
 }
 
@@ -164,13 +186,13 @@ export function buildDerivedAuthorProfilePacks(
     compact: {
       profileId: profile.id,
       summary: profile.summary,
-      corePreferences: uniqueTrimmed(profile.corePreferences, 3),
-      favoriteCharacterTypes: uniqueTrimmed(profile.favoriteCharacterTypes, 3),
-      favoriteRelationshipPatterns: uniqueTrimmed(profile.favoriteRelationshipPatterns, 3),
-      plotBiases: uniqueTrimmed(profile.plotBiases, 3),
-      endingBiases: uniqueTrimmed(profile.endingBiases, 3),
-      aestheticMotifs: uniqueTrimmed(profile.aestheticMotifs, 3),
-      topConstraints: topConstraints(profile, 3),
+      corePreferences: uniqueTrimmed(profile.corePreferences, 8),
+      favoriteCharacterTypes: uniqueTrimmed(profile.favoriteCharacterTypes, 8),
+      favoriteRelationshipPatterns: uniqueTrimmed(profile.favoriteRelationshipPatterns, 8),
+      plotBiases: uniqueTrimmed(profile.plotBiases, 8),
+      endingBiases: uniqueTrimmed(profile.endingBiases, 8),
+      aestheticMotifs: uniqueTrimmed(profile.aestheticMotifs, 8),
+      topConstraints: topConstraints(profile, 5),
       activeComponents: componentApply(profile),
     },
     planner: buildTaskPack("planner", profile),

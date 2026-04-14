@@ -151,6 +151,33 @@ function pickBeatForChapter(
   return arcBeats[beatIndex];
 }
 
+function assertChapterPlanningAnchors(args: {
+  projectId: string;
+  chapterNumber: number;
+  beatOutlines: BeatOutline[];
+  currentArc: ArcOutline | undefined;
+  currentBeat: BeatOutline | undefined;
+}): void {
+  if (!args.currentArc) {
+    throw new Error(
+      [
+        `No arc outline found for project=${args.projectId}, chapter=${args.chapterNumber}.`,
+        `Run: ./run-v1.sh outline generate-stack --project ${args.projectId} --count 250`,
+      ].join("\n"),
+    );
+  }
+
+  const beatsInArc = args.beatOutlines.filter((beat) => beat.arcId === args.currentArc?.id);
+  if (beatsInArc.length === 0 || !args.currentBeat) {
+    throw new Error(
+      [
+        `No beat outline found for project=${args.projectId}, arc=${args.currentArc.id}, chapter=${args.chapterNumber}.`,
+        `Run: ./run-v1.sh outline generate-stack --project ${args.projectId} --count 250`,
+      ].join("\n"),
+    );
+  }
+}
+
 function uniqueStrings(items: string[], limit: number): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -450,6 +477,13 @@ async function generateChapterArtifact(args: {
     args.base.storySetup.currentArcId,
   );
   const currentBeat = pickBeatForChapter(args.base.beatOutlines, currentArc, args.chapterNumber);
+  assertChapterPlanningAnchors({
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    beatOutlines: args.base.beatOutlines,
+    currentArc,
+    currentBeat,
+  });
 
   const plannerMessages = buildPlannerMessages({
     authorPack: args.base.authorPacks.planner,
@@ -483,21 +517,56 @@ async function generateChapterArtifact(args: {
     maxTokens: 2200,
   });
 
+  const planned = plannerResult.object.chapterPlan;
   const chapterPlan = {
-    ...plannerResult.object.chapterPlan,
+    ...planned,
     chapterNumber: args.chapterNumber,
-    arcId: currentArc?.id ?? plannerResult.object.chapterPlan.arcId ?? "arc-1",
-    beatId: currentBeat?.id ?? plannerResult.object.chapterPlan.beatId,
+    arcId: currentArc?.id ?? planned.arcId ?? "arc-1",
+    beatId: currentBeat?.id ?? planned.beatId,
+    requiredCharacters: uniqueStrings(
+      [...planned.requiredCharacters, ...(currentBeat?.requiredCharacters ?? [])],
+      8,
+    ),
+    requiredMemories: uniqueStrings(
+      [...planned.requiredMemories, ...(currentBeat?.requiredMemories ?? [])],
+      12,
+    ),
+    mustHitConflicts: uniqueStrings(
+      [
+        ...planned.mustHitConflicts,
+        planned.chapterGoal,
+        planned.emotionalGoal,
+        planned.plannedOutcome,
+        currentBeat?.conflict ?? "",
+      ],
+      6,
+    ),
+    disallowedMoves: uniqueStrings(
+      [...planned.disallowedMoves, ...(currentBeat?.constraints ?? [])],
+      6,
+    ),
     payoffPatternIds: normalizePayoffPatternIds({
-      plannerIds: plannerResult.object.chapterPlan.payoffPatternIds,
+      plannerIds: planned.payoffPatternIds,
       currentArc,
       currentBeat,
     }),
   };
 
-  const contextPack = buildContextPack({
+  const writerContextPack = buildContextPack({
     task: "writer",
     authorPack: args.base.authorPacks.writer,
+    themeBible: args.base.themeBible,
+    styleBible: args.base.styleBible,
+    chapterPlan,
+    arcOutline: currentArc,
+    beatOutline: currentBeat,
+    characterStates: args.base.characterStates,
+    storyMemories: args.base.storyMemories,
+    worldFacts: args.base.worldFacts,
+  });
+  const reviewerContextPack = buildContextPack({
+    task: "reviewer",
+    authorPack: args.base.authorPacks.reviewer,
     themeBible: args.base.themeBible,
     styleBible: args.base.styleBible,
     chapterPlan,
@@ -511,7 +580,7 @@ async function generateChapterArtifact(args: {
   const writerResult = await args.service.generateObjectForTask({
     task: "writer",
     messages: buildWriterMessages({
-      contextPack,
+      contextPack: writerContextPack,
       minParagraphs: 5,
       maxParagraphs: 8,
     }),
@@ -523,7 +592,7 @@ async function generateChapterArtifact(args: {
   const missingResourceReview = await args.service.generateObjectForTask({
     task: "review_missing_resource",
     messages: buildMissingResourceReviewMessages({
-      contextPack,
+      contextPack: reviewerContextPack,
       draft: writerResult.object.draft,
       storyMemories: args.base.storyMemories,
     }),
@@ -535,7 +604,7 @@ async function generateChapterArtifact(args: {
   const factConsistencyReview = await args.service.generateObjectForTask({
     task: "review_fact",
     messages: buildFactConsistencyReviewMessages({
-      contextPack,
+      contextPack: reviewerContextPack,
       draft: writerResult.object.draft,
       storyMemories: args.base.storyMemories,
       worldFacts: args.base.worldFacts,
@@ -569,7 +638,7 @@ async function generateChapterArtifact(args: {
   const artifact: ChapterArtifact = {
     chapterNumber: args.chapterNumber,
     plan: chapterPlan,
-    contextPack,
+    contextPack: writerContextPack,
     writerResult: writerResult.object as WriterResult,
     missingResourceReview: missingResourceReview.object as MissingResourceReviewerResult,
     factConsistencyReview: factConsistencyReview.object as FactConsistencyReviewerResult,

@@ -1,5 +1,6 @@
 export * from "./author-interview.js";
 export * from "./arc-outline.js";
+export * from "./beat-outline.js";
 export * from "./cast-expansion.js";
 export * from "./memory-updater.js";
 export * from "./planner.js";

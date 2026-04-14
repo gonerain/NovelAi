@@ -37,6 +37,8 @@ export type AuthorComponentCategory =
   | "style"
   | "character"
   | "plot"
+  | "relationship"
+  | "pacing"
   | "conflict"
   | "ending"
   | "aesthetic"

@@ -1,39 +1,39 @@
 {
   "narrativeStyle": [
-    "克制",
-    "细腻",
-    "慢热"
+    "restrained",
+    "detailed",
+    "slow-burn"
   ],
   "emotionalStyle": [
-    "通过动作和环境表达情绪",
-    "爆发段落短促有力"
+    "show emotion through action and setting",
+    "use sharper language in emotional breakpoints"
   ],
   "dialogueStyle": [
-    "潜台词",
-    "试探",
-    "回避式对话"
+    "subtext-heavy",
+    "testing",
+    "avoidant"
   ],
   "pacingStyle": [
-    "慢热铺垫",
-    "关键段落集中爆发"
+    "slow setup",
+    "concentrated emotional spikes"
   ],
   "imagery": [
-    "雨夜",
-    "旧伤",
-    "药味",
-    "照顾与被照顾"
+    "night rain",
+    "old wound pain",
+    "medicine bitterness",
+    "caregiving gestures"
   ],
   "preferredConflictShapes": [
-    "误读",
-    "回避",
-    "自我否认"
+    "misreading",
+    "avoidance",
+    "self-denial"
   ],
   "preferredClimaxShapes": [
-    "迟来的理解",
-    "有代价的和解"
+    "late understanding",
+    "reconciliation with cost"
   ],
   "antiPatterns": [
-    "快速和解",
-    "说教式点题"
+    "fast reconciliation",
+    "theme exposition monologue"
   ]
 }

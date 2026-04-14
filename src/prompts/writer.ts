@@ -52,9 +52,9 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         "Write only the chapter draft for the current chapter.",
         "The novel draft itself must be written in Chinese.",
         "Do not explain your reasoning. Do not output planning notes. Do not output bullet points inside the draft.",
-        "Honor hardConstraints strictly.",
+        "Honor mustRules strictly.",
         "Use chapterObjective, activeCharacters, relevantMemories, and relevantWorldFacts as the current working context.",
-        "Use authorRules and promptCapsule to control tone, relationship handling, and emotional delivery.",
+        "Use authorIdentityRules, taskRules, arcSignals, and chapterSignals to control tone, relationship handling, and emotional delivery.",
         "Use readerValue to make the chapter feel worth reading now: the draft should cash out at least one clear reader reward, not just atmosphere.",
         "Do not turn the chapter into slogan-like hype. Deliver payoff through scene, choice, relationship movement, or pressure shift.",
         "Prefer prose that notices abnormal details instead of explaining themes directly.",
@@ -70,8 +70,12 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
       role: "user",
       content: [
         `Task: ${contextPack.task}`,
-        `Author rules: ${contextPack.authorRules.join(" | ")}`,
-        `Hard constraints: ${contextPack.hardConstraints.join(" | ")}`,
+        `Must obey: ${contextPack.mustRules.join(" | ")}`,
+        `Author identity rules: ${contextPack.authorIdentityRules.join(" | ")}`,
+        `Task-specific rules: ${contextPack.taskRules.join(" | ")}`,
+        `Chapter execution reminders: ${contextPack.chapterExecutionReminders.join(" | ")}`,
+        `Theme pressure: ${contextPack.themePressure.join(" | ")}`,
+        `Avoid rules: ${contextPack.avoidRules.join(" | ")}`,
         `Chapter goal: ${contextPack.chapterObjective.goal}`,
         `Emotional goal: ${contextPack.chapterObjective.emotionalGoal}`,
         `Planned outcome: ${contextPack.chapterObjective.plannedOutcome}`,
@@ -90,7 +94,8 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         contextPack.readerValue?.payoffPatterns.length
           ? `Payoff patterns: ${contextPack.readerValue.payoffPatterns.join(" | ")}`
           : undefined,
-        `Prompt capsule: ${contextPack.promptCapsule.join(" | ")}`,
+        `Arc signals: ${contextPack.arcSignals.join(" | ")}`,
+        `Chapter signals: ${contextPack.chapterSignals.join(" | ")}`,
         [
           "Style target:",
           "1. Write through observation and deviation: what is too precise, too quiet, too fast, too steady, too clean.",

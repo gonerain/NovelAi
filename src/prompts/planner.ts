@@ -57,6 +57,7 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "Produce a structured ChapterPlan for exactly one chapter.",
         "Do not write prose. Do not explain your reasoning.",
         "The chapter plan must inherit the current arc's selling point, hook, and payoff pressure rather than drifting into generic continuation.",
+        "When beat outline is provided, treat it as a hard anchor for this chapter's conflict and expected change.",
         "Prefer 1 or 2 payoffPatternIds that match the current arc and beat. Do not output a long list.",
         "Keep sceneTags between 3 and 5 items.",
         "Keep mustHitConflicts between 2 and 4 items.",
@@ -74,14 +75,31 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         `Current situation: ${input.currentSituation}`,
         input.chapterNumber ? `Chapter number: ${input.chapterNumber}` : undefined,
         input.arcId ? `Arc id: ${input.arcId}` : undefined,
+        input.beatOutline ? `Beat id: ${input.beatOutline.id}` : undefined,
+        input.beatOutline?.chapterRangeHint
+          ? `Beat chapter range: ${input.beatOutline.chapterRangeHint.start}-${input.beatOutline.chapterRangeHint.end}`
+          : undefined,
         `Active characters: ${input.activeCharacterIds.join(", ")}`,
+        input.beatOutline?.requiredCharacters.length
+          ? `Beat required characters: ${input.beatOutline.requiredCharacters.join(", ")}`
+          : undefined,
         input.candidateMemoryIds.length > 0
           ? `Candidate memory ids: ${input.candidateMemoryIds.join(", ")}`
+          : undefined,
+        input.beatOutline?.requiredMemories.length
+          ? `Beat required memories: ${input.beatOutline.requiredMemories.join(", ")}`
+          : undefined,
+        input.beatOutline?.constraints.length
+          ? `Beat constraints: ${input.beatOutline.constraints.join(" | ")}`
           : undefined,
         input.recentConsequences.length > 0
           ? `Recent consequences: ${input.recentConsequences.join(" | ")}`
           : undefined,
-        `Author planner pack: ${input.authorPack.promptCapsule.join(" | ")}`,
+        `Author summary: ${input.authorPack.summary}`,
+        `Author must rules: ${input.authorPack.mustRules.join(" | ")}`,
+        `Author global preferences: ${input.authorPack.globalPreferences.join(" | ")}`,
+        `Planner-specific preferences: ${input.authorPack.taskSpecificPreferences.join(" | ")}`,
+        `Task-specific author rules: ${input.authorPack.taskRules.join(" | ")}`,
         `Theme baseline: core=${input.themeBible.coreTheme}; subthemes=${input.themeBible.subThemes.join(" | ")}; ending=${input.themeBible.endingTarget}; emotion=${input.themeBible.emotionalDestination}`,
         `Style baseline: narrative=${input.styleBible.narrativeStyle.join(" | ")}; emotion=${input.styleBible.emotionalStyle.join(" | ")}; pacing=${input.styleBible.pacingStyle.join(" | ")}; avoid=${input.styleBible.antiPatterns.join(" | ")}`,
         storyLine,

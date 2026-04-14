@@ -1,7 +1,12 @@
 import path from "node:path";
 
 import type { ChapterArtifact, StoryProject } from "./domain/index.js";
-import { formatOutlineStackResult, generateOutlineStack } from "./outline-lib.js";
+import {
+  formatOutlineStackResult,
+  formatOutlineValidationResult,
+  generateOutlineStack,
+  validateOutlineStack,
+} from "./outline-lib.js";
 import { loadStoryProject } from "./project/index.js";
 import { FileProjectRepository } from "./storage/index.js";
 import {
@@ -19,6 +24,7 @@ type CommandName =
   | "project:paths"
   | "outline:inspect"
   | "outline:generate-stack"
+  | "outline:validate"
   | "chapter:generate"
   | "chapter:generate-first"
   | "chapter:inspect"
@@ -70,6 +76,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     "project:paths",
     "outline:inspect",
     "outline:generate-stack",
+    "outline:validate",
     "chapter:generate",
     "chapter:generate-first",
     "chapter:inspect",
@@ -207,6 +214,7 @@ function usage(): string {
     "  project paths --project <id>",
     "  outline inspect --project <id>",
     "  outline generate-stack --project <id> [--count <chapters>]",
+    "  outline validate --project <id>",
     "  chapter generate --project <id> --chapter <n>",
     "  chapter generate-first --project <id> --count <n>",
     "  chapter inspect --project <id> --chapter <n>",
@@ -260,6 +268,17 @@ async function main(): Promise<void> {
         targetChapterCount: parsed.count,
       });
       console.log(formatOutlineStackResult(result));
+      return;
+    }
+
+    case "outline:validate": {
+      const result = await validateOutlineStack({
+        projectId: parsed.projectId,
+      });
+      console.log(formatOutlineValidationResult(result));
+      if (!result.ok) {
+        process.exitCode = 2;
+      }
       return;
     }
 
