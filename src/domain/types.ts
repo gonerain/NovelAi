@@ -174,6 +174,7 @@ export interface StoryMemory {
 
 export interface ChapterPlan {
   chapterNumber?: number;
+  chapterType?: "setup" | "progress" | "payoff" | "aftermath";
   arcId?: EntityId;
   beatId?: EntityId;
   title?: string;

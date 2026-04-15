@@ -72,6 +72,7 @@ export interface ContextPack {
     payoffPatterns: string[];
   };
   chapterObjective: {
+    chapterType?: ChapterPlan["chapterType"];
     goal: string;
     emotionalGoal: string;
     plannedOutcome: string;
@@ -263,6 +264,12 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
 
   const chapterSignals = uniqueTrimmed(
     [
+      input.chapterPlan.chapterNumber
+        ? `Chapter number: ${input.chapterPlan.chapterNumber}`
+        : "",
+      input.chapterPlan.chapterType
+        ? `Chapter type: ${input.chapterPlan.chapterType}`
+        : "",
       `Chapter goal: ${input.chapterPlan.chapterGoal}`,
       `Emotional goal: ${input.chapterPlan.emotionalGoal}`,
       `Planned outcome: ${input.chapterPlan.plannedOutcome}`,
@@ -328,6 +335,7 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       ),
     },
     chapterObjective: {
+      chapterType: input.chapterPlan.chapterType,
       goal: input.chapterPlan.chapterGoal,
       emotionalGoal: input.chapterPlan.emotionalGoal,
       plannedOutcome: input.chapterPlan.plannedOutcome,
