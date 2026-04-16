@@ -1,7 +1,10 @@
+import { access } from "node:fs/promises";
 import path from "node:path";
 
 import type { ChapterArtifact, StoryProject } from "./domain/index.js";
 import {
+  approveDetailedOutline,
+  exportOutlineDrafts,
   formatOutlineStackResult,
   formatOutlineValidationResult,
   generateOutlineStack,
@@ -28,6 +31,8 @@ type CommandName =
   | "project:paths"
   | "outline:inspect"
   | "outline:generate-stack"
+  | "outline:generate-drafts"
+  | "outline:approve-detail"
   | "outline:validate"
   | "chapter:generate"
   | "chapter:generate-first"
@@ -42,6 +47,8 @@ interface ParsedArgs {
   count?: number;
   profileId?: string;
   answers?: string;
+  approver?: string;
+  note?: string;
 }
 
 function readOption(args: Map<string, string>, key: string): string | undefined {
@@ -77,6 +84,8 @@ function parseCommand(argv: string[]): ParsedArgs {
   const countOption = readOption(flags, "--count");
   const profileOption = readOption(flags, "--profile");
   const answersOption = readOption(flags, "--answers");
+  const approverOption = readOption(flags, "--approver");
+  const noteOption = readOption(flags, "--note");
 
   const command = `${group}:${action}` as CommandName;
   const allowed = new Set<CommandName>([
@@ -87,6 +96,8 @@ function parseCommand(argv: string[]): ParsedArgs {
     "project:paths",
     "outline:inspect",
     "outline:generate-stack",
+    "outline:generate-drafts",
+    "outline:approve-detail",
     "outline:validate",
     "chapter:generate",
     "chapter:generate-first",
@@ -106,6 +117,8 @@ function parseCommand(argv: string[]): ParsedArgs {
     count: countOption ? Number(countOption) : undefined,
     profileId: profileOption,
     answers: answersOption,
+    approver: approverOption,
+    note: noteOption,
   };
 }
 
@@ -119,6 +132,28 @@ function chapterDir(projectId: string, chapterNumber: number): string {
     "chapters",
     `chapter-${String(chapterNumber).padStart(3, "0")}`,
   );
+}
+
+function detailedOutlineApprovalPath(projectId: string): string {
+  return path.join(projectDir(projectId), "detailed-outline-approved.json");
+}
+
+async function assertDetailedOutlineApproved(projectId: string): Promise<void> {
+  try {
+    await access(detailedOutlineApprovalPath(projectId));
+  } catch {
+    throw new Error(
+      [
+        `Detailed outline is not approved for project=${projectId}.`,
+        "Required workflow:",
+        `1) ./run-v1.sh outline generate-stack --project ${projectId} --count 120`,
+        `2) ./run-v1.sh outline generate-drafts --project ${projectId}`,
+        `3) 人工审阅 data/projects/${projectId}/detailed-outline.md`,
+        `4) ./run-v1.sh outline approve-detail --project ${projectId} --approver <name> --note \"ok\"`,
+        "Then chapter generation is unlocked.",
+      ].join("\n"),
+    );
+  }
 }
 
 function summarizeProject(project: StoryProject): string {
@@ -230,6 +265,8 @@ function usage(): string {
     "  project paths --project <id>",
     "  outline inspect --project <id>",
     "  outline generate-stack --project <id> [--count <chapters>]",
+    "  outline generate-drafts --project <id>",
+    "  outline approve-detail --project <id> [--approver <name>] [--note <text>]",
     "  outline validate --project <id>",
     "  chapter generate --project <id> --chapter <n>",
     "  chapter generate-first --project <id> --count <n>",
@@ -313,6 +350,27 @@ async function main(): Promise<void> {
       return;
     }
 
+    case "outline:generate-drafts": {
+      const result = await exportOutlineDrafts({
+        projectId: parsed.projectId,
+      });
+      console.log(`Project: ${result.projectId}`);
+      console.log(`Story outline draft: ${result.storyOutlinePath}`);
+      console.log(`Detailed outline draft: ${result.detailedOutlinePath}`);
+      return;
+    }
+
+    case "outline:approve-detail": {
+      const result = await approveDetailedOutline({
+        projectId: parsed.projectId,
+        approver: parsed.approver,
+        note: parsed.note,
+      });
+      console.log(`Detailed outline approved: ${result.projectId}`);
+      console.log(`Approval file: ${result.approvalPath}`);
+      return;
+    }
+
     case "outline:validate": {
       const result = await validateOutlineStack({
         projectId: parsed.projectId,
@@ -325,6 +383,7 @@ async function main(): Promise<void> {
     }
 
     case "chapter:generate": {
+      await assertDetailedOutlineApproved(parsed.projectId);
       if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
         throw new Error("chapter generate requires --chapter <n>");
       }
@@ -338,6 +397,7 @@ async function main(): Promise<void> {
     }
 
     case "chapter:generate-first": {
+      await assertDetailedOutlineApproved(parsed.projectId);
       if (!parsed.count || parsed.count < 1) {
         throw new Error("chapter generate-first requires --count <n>");
       }

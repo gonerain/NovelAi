@@ -44,8 +44,10 @@ export function buildFactConsistencyReviewMessages(
       role: "system",
       content: [
         "You are a fact consistency reviewer.",
-        "Check only four issue types: injury conflicts, knowledge-boundary conflicts, world-rule conflicts, and direct fact conflicts.",
+        "Check only five issue types: injury conflicts, knowledge-boundary conflicts, world-rule conflicts, direct fact conflicts, and role consistency conflicts.",
+        "Role consistency means a character's established identity/boundary/stance should not be contradicted without explicit transition evidence in this chapter.",
         "Do not comment on style, pacing, or literary quality.",
+        "Always score emotion and pacing from 0 to 10 in `scoring`, but never turn emotion/pacing feedback into findings.",
         "Only return a finding when the draft clearly contradicts the provided facts or memories.",
         "Return at most 4 findings. If there are no issues, return an empty findings array.",
       ].join("\n"),
@@ -78,5 +80,9 @@ export const factConsistencyReviewerResultSchema: FactConsistencyReviewerResult 
       suggestedFix: "string",
     },
   ],
+  scoring: {
+    emotion: 7,
+    pacing: 7,
+  },
   notes: ["string"],
 } as unknown as FactConsistencyReviewerResult;

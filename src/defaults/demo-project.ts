@@ -102,9 +102,9 @@ export const demoStoryOutline: StoryOutline = {
   endingTarget: demoThemeBible.endingTarget,
   majorArcIds: ["arc-1"],
   keyTurningPoints: [
-    "连雨异常引发X局调查，雨璃在平静日常中持续误导线索。",
-    "诺兰与玲逐步确认雨璃与异常共鸣相关，同时诺兰被雨璃与晴心的关系扰动判断。",
-    "真相逼近“生死之雨”计划时，外部阻止全部失效，最终由雨璃本人做出是否越界的选择。",
+    "连雨异常引发X局长期调查，雨璃在日常中持续误导线索，并推动市民形成带伞习惯。",
+    "诺兰在晴心与雨璃之间长期摇摆，难以确定真正任务目标，调查多次被引向错误分支。",
+    "后段才逼近“生死之雨”计划真相，外部阻止最终失效，只剩雨璃自我选择。",
   ],
 };
 
@@ -114,18 +114,18 @@ export const demoArcOutlines: ArcOutline[] = [
     storyOutlineId: demoStoryOutline.id,
     name: "连雨日常与调查逼近",
     arcGoal:
-      "在安静日常中并行推进三条线：雨璃维持可控降雨、调查组识别异常源、母女双方彼此知情却互不点破。",
+      "在长期日常中并行推进三条线：雨璃维持可控降雨并误导调查、调查组只能逐步缩小范围、母女双方彼此知情却互不点破。",
     startState:
       "C市连雨持续，雨璃看似稳定自控，调查组尚无确定目标。",
     endState:
-      "调查组锁定雨璃为关键对象，但核心动机与生死共鸣机制仍未被完整揭开。",
+      "调查组仅锁定异常模式与少量可疑对象，仍无法确认雨璃是否目标，更无法拼出‘共享生命计划’全貌。",
     requiredTurns: [
       "以甜品店、通勤、电话问候等日常场景承载高风险信息交换。",
       "雨璃在晴心带来的情绪波动与降雨控制目标之间反复校准。",
-      "诺兰与玲从“异常天气”转向“异常人格稳定性”识别，调查策略升级。",
+      "诺兰与玲多次接近真相又被误导，调查不断升级但无法完成个人锁定。",
     ],
     relationshipChanges: [
-      "诺兰对雨璃由观察对象转向高风险目标与共情对象并存。",
+      "诺兰对雨璃保持怀疑与共情并存，但长期无法下结论。",
       "雨璃与晴心的轻松日常逐渐被隐瞒成本侵蚀。",
     ],
     memoryRequirements: [
@@ -141,7 +141,7 @@ export const demoArcOutlines: ArcOutline[] = [
     ],
     chapterRangeHint: {
       start: 1,
-      end: 3,
+      end: 24,
     },
   },
 ];
@@ -152,11 +152,11 @@ export const demoBeatOutlines: BeatOutline[] = [
     arcId: "arc-1",
     order: 1,
     beatGoal:
-      "建立安宁冷寂的日常基调，抛出“连雨异常+陌生调查者出现”双钩子。",
+      "建立安宁冷寂的日常基调，抛出“连雨异常+调查者出现”双钩子，但不做目标锁定。",
     conflict:
       "雨璃需要维持情绪稳定与降雨控制，但晴心的陪伴不断打乱她的情绪校准。",
     expectedChange:
-      "读者确认雨璃与天气存在隐性绑定，并感知诺兰/玲已开始定向排查。",
+      "读者确认雨璃与天气存在隐性绑定，并感知诺兰/玲开始调查异常现象而非锁定个人。",
     requiredCharacters: ["yuli", "qingxin", "nolan", "ling"],
     requiredMemories: [
       "memory-rain-001",
@@ -174,7 +174,12 @@ export const demoBeatOutlines: BeatOutline[] = [
     constraints: [
       "禁止一章内讲完共鸣系统全设定",
       "保持日常场景密度，不直接爆发大冲突",
+      "前段只锁定异常现象，不锁定雨璃个人",
     ],
+    chapterRangeHint: {
+      start: 1,
+      end: 8,
+    },
     openingAnchor: {
       readerAnchor: [
         "日常对白与环境细节应当自然流动",
@@ -194,11 +199,11 @@ export const demoBeatOutlines: BeatOutline[] = [
     arcId: "arc-1",
     order: 2,
     beatGoal:
-      "调查线推进到可疑对象验证阶段，雨璃开始主动布置误导与城市雨具习惯工程。",
+      "调查线推进到“可疑人群与可疑区域”阶段，雨璃开始主动布置误导与城市雨具习惯工程。",
     conflict:
-      "雨璃既要压住晴心带来的正向情绪波动，又要避免诺兰和玲从行为一致性中锁定她。",
+      "雨璃既要压住晴心带来的正向情绪波动，又要让诺兰和玲在多个候选目标之间反复摇摆。",
     expectedChange:
-      "调查组确认目标范围收窄，雨璃的行动从被动防守转向策略性预埋。",
+      "调查组只能确认异常链条与少量候选对象，雨璃的行动从被动防守转向策略性预埋。",
     requiredCharacters: ["yuli", "qingxin", "nolan", "ling"],
     requiredMemories: [
       "memory-rain-001",
@@ -216,19 +221,24 @@ export const demoBeatOutlines: BeatOutline[] = [
     constraints: [
       "不提前揭露生死共鸣完整机制",
       "维持外冷内压的叙述温度",
+      "保持“诺兰在晴心与雨璃间摇摆”的不确定性",
     ],
+    chapterRangeHint: {
+      start: 9,
+      end: 16,
+    },
   },
   {
     id: "beat-3",
     arcId: "arc-1",
     order: 3,
     beatGoal:
-      "把“是否发动生死之雨”推到不可回避节点，制造外部无解、只能自选的终局条件。",
+      "累积误导与反证，制造‘接近真相但仍无法落锤’的高压中段。",
     conflict:
-      "诺兰即使识破计划也已失去阻止窗口，雨璃需要在执念与代价之间做最终选择。",
+      "诺兰与玲多次形成错误闭环，雨璃在维持计划与保护晴心/母亲之间承受持续消耗。",
     expectedChange:
-      "雨璃没有触发生死共鸣，只把项链交给诺兰离开，留下“雨为何仍下”的续章悬念。",
-    requiredCharacters: ["yuli", "nolan", "ling"],
+      "调查进入高压僵局：异常证据增多，但目标身份仍不确定，终局选择被推迟到后续大弧。",
+    requiredCharacters: ["yuli", "qingxin", "nolan", "ling"],
     requiredMemories: [
       "memory-life-death-002",
       "memory-mother-illness-003",
@@ -243,9 +253,13 @@ export const demoBeatOutlines: BeatOutline[] = [
       "诺兰从“命定论执行者”向“承担选择后果者”转变",
     ],
     constraints: [
-      "避免彻底解释“雨未停”的机制，保留余味",
-      "结尾以动作与意象收束，不写长篇主题陈述",
+      "中段禁止直接落地终局答案",
+      "维持信息增量但保留关键身份不确定性",
     ],
+    chapterRangeHint: {
+      start: 17,
+      end: 24,
+    },
   },
 ];
 
@@ -321,7 +335,7 @@ export const demoCharacterStates: CharacterState[] = [
     fears: ["重演父母悲剧", "自己判断失误造成不可逆后果"],
     wounds: ["母亲病逝", "父亲研究成功却来不及救治后失踪"],
     voiceNotes: ["平直简短", "少评价多观察", "决策语气冷硬"],
-    currentGoals: ["锁定连雨异常源", "验证雨璃与异常共鸣关联"],
+    currentGoals: ["识别连雨异常源", "在多名候选对象中排查真实目标"],
     emotionalState: ["冷淡", "压抑", "动摇"],
     knowledgeBoundary: ["知道组织规则", "不知道雨璃生死共鸣代价细节"],
     secretsKept: ["对命运论的消极依赖", "对雨璃产生非任务性关注"],
@@ -339,8 +353,8 @@ export const demoCharacterStates: CharacterState[] = [
       {
         targetCharacterId: "yuli",
         type: "ally",
-        publicLabel: "重点调查对象",
-        privateTruth: "怀疑与共情并存，判断不断被扰动",
+        publicLabel: "可疑对象之一",
+        privateTruth: "怀疑与共情并存，且长期难以定论",
         trustLevel: 25,
         tensionLevel: 82,
         dependencyLevel: 28,
@@ -357,7 +371,7 @@ export const demoCharacterStates: CharacterState[] = [
     fears: ["误判导致城市异常升级"],
     wounds: ["与诺兰多年失联后重逢却生疏"],
     voiceNotes: ["表达直接", "观察结论先行", "节奏偏快"],
-    currentGoals: ["协助诺兰锁定异常共鸣者", "验证雨璃行为模式"],
+    currentGoals: ["协助诺兰缩小候选范围", "验证雨璃与晴心的行为差异"],
     emotionalState: ["亢奋", "紧张", "好奇"],
     knowledgeBoundary: ["知道诺兰过去片段", "不知道雨璃家庭真实处境"],
     secretsKept: ["受退休父母嘱托要把诺兰带回组织中心"],

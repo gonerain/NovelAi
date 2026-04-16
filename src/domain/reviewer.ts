@@ -36,7 +36,8 @@ export interface FactConsistencyFinding {
     | "injury_conflict"
     | "knowledge_boundary_conflict"
     | "world_rule_conflict"
-    | "fact_conflict";
+    | "fact_conflict"
+    | "role_consistency_conflict";
   severity: ReviewerSeverity;
   title: string;
   evidence: string;
@@ -46,5 +47,9 @@ export interface FactConsistencyFinding {
 
 export interface FactConsistencyReviewerResult {
   findings: FactConsistencyFinding[];
+  scoring: {
+    emotion: number;
+    pacing: number;
+  };
   notes: string[];
 }

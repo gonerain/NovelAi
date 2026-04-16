@@ -1,4 +1,9 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 import {
+  pickArcForChapterDeterministic,
+  pickBeatForChapterDeterministic,
   applyMemoryUpdaterResult,
   buildContextPack,
   buildDerivedAuthorProfilePacks,
@@ -22,6 +27,7 @@ import {
   type ThemeBible,
   type WorldFact,
   type WriterResult,
+  shouldRewriteForConsistency,
   validateAuthorInterviewResult,
 } from "./domain/index.js";
 import {
@@ -43,6 +49,7 @@ import {
   getAuthorInterviewPresetById,
 } from "./defaults/author-presets.js";
 import { LlmService } from "./llm/service.js";
+import type { ChatMessage } from "./llm/types.js";
 import {
   authorInterviewDisplayDraftSchema,
   authorInterviewNormalizedDraftSchema,
@@ -59,13 +66,47 @@ import {
   memoryUpdaterResultSchema,
   missingResourceReviewerResultSchema,
   plannerResultSchema,
-  rewriterResultSchema,
-  writerResultSchema,
 } from "./prompts/index.js";
+import { parseWriterLikeOutput } from "./soft-output.js";
 import { FileProjectRepository } from "./storage/index.js";
 
 function logStage(stage: string, detail: string): void {
   console.log(`[${stage}] ${detail}`);
+}
+
+async function writePromptDebug(args: {
+  projectId: string;
+  scope: "outline" | "chapter";
+  label: string;
+  messages: ChatMessage[];
+}): Promise<void> {
+  const dir = path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    args.projectId,
+    "debug",
+    "prompts",
+    args.scope,
+  );
+  await mkdir(dir, { recursive: true });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = `${timestamp}_${args.label}.json`;
+  await writeFile(
+    path.join(dir, filename),
+    JSON.stringify(
+      {
+        projectId: args.projectId,
+        scope: args.scope,
+        label: args.label,
+        generatedAt: new Date().toISOString(),
+        messages: args.messages,
+      },
+      null,
+      2,
+    ),
+    "utf-8",
+  );
 }
 
 export interface V1RunOptions {
@@ -103,66 +144,6 @@ interface InvalidateResult {
   deletedChapterNumbers: number[];
   remainingChapterPlans: number;
   remainingMemories: number;
-}
-
-function pickArcForChapter(
-  arcOutlines: ArcOutline[],
-  chapterNumber: number,
-  fallbackArcId?: string,
-): ArcOutline | undefined {
-  const rangedMatch = arcOutlines.find((arc) => {
-    const range = arc.chapterRangeHint;
-    return range ? chapterNumber >= range.start && chapterNumber <= range.end : false;
-  });
-
-  if (rangedMatch) {
-    return rangedMatch;
-  }
-
-  if (fallbackArcId) {
-    return arcOutlines.find((arc) => arc.id === fallbackArcId);
-  }
-
-  return arcOutlines[0];
-}
-
-function pickBeatForChapter(
-  beatOutlines: BeatOutline[],
-  arcOutline: ArcOutline | undefined,
-  chapterNumber: number,
-): BeatOutline | undefined {
-  if (!arcOutline) {
-    return undefined;
-  }
-
-  const arcBeats = beatOutlines
-    .filter((beat) => beat.arcId === arcOutline.id)
-    .sort((left, right) => left.order - right.order);
-
-  if (arcBeats.length === 0) {
-    return undefined;
-  }
-
-  const rangedMatch = arcBeats.find((beat) => {
-    const range = beat.chapterRangeHint;
-    return range ? chapterNumber >= range.start && chapterNumber <= range.end : false;
-  });
-
-  if (rangedMatch) {
-    return rangedMatch;
-  }
-
-  const range = arcOutline.chapterRangeHint;
-  if (!range) {
-    return arcBeats[0];
-  }
-
-  const arcLength = range.end - range.start + 1;
-  const relativeIndex = Math.max(0, Math.min(arcLength - 1, chapterNumber - range.start));
-  const bucketSize = Math.max(1, Math.ceil(arcLength / arcBeats.length));
-  const beatIndex = Math.min(arcBeats.length - 1, Math.floor(relativeIndex / bucketSize));
-
-  return arcBeats[beatIndex];
 }
 
 function assertChapterPlanningAnchors(args: {
@@ -314,9 +295,8 @@ function hasBlockingReviewerIssues(args: {
   missing: MissingResourceReviewerResult;
   fact: FactConsistencyReviewerResult;
 }): boolean {
-  const hasHighMissing = args.missing.findings.some((item) => item.severity === "high");
   const hasHighFact = args.fact.findings.some((item) => item.severity === "high");
-  return hasHighMissing || hasHighFact;
+  return hasHighFact;
 }
 
 function normalizeReviewerResults(args: {
@@ -364,7 +344,7 @@ function countReviewerFindingsBySeverity(args: {
   missing: MissingResourceReviewerResult;
   fact: FactConsistencyReviewerResult;
 }): { high: number; medium: number; low: number } {
-  const allFindings = [...args.missing.findings, ...args.fact.findings];
+  const allFindings = [...args.fact.findings];
   return {
     high: allFindings.filter((item) => item.severity === "high").length,
     medium: allFindings.filter((item) => item.severity === "medium").length,
@@ -393,14 +373,14 @@ function buildRewritePlan(args: {
     return {
       mode: "hybrid_upgrade",
       objective:
-        "Resolve reviewer issues while strengthening pacing, emotional pressure, and chapter-end hook.",
+        "Resolve fact and role consistency findings while keeping chapter events and outcomes unchanged.",
     };
   }
 
   return {
     mode: "quality_boost",
     objective:
-      "Keep facts unchanged, then maximize readability, tension rhythm, and reader hook for this chapter.",
+      "No fact/role consistency findings detected. Keep the draft unchanged unless minor clarity touch-ups are necessary.",
   };
 }
 
@@ -538,16 +518,41 @@ export async function invalidateFromChapter(args: {
   }
 
   const chapterPlans = await repository.loadChapterPlans(args.projectId);
+  const previousMemories = currentMemories.map((memory) => ({
+    ...memory,
+    notes: [...memory.notes],
+  }));
+  const previousPlans = chapterPlans.map((plan) => ({ ...plan }));
   const remainingPlans = chapterPlans.filter(
     (plan) => (plan.chapterNumber ?? Number.MAX_SAFE_INTEGER) < args.chapterNumber,
   );
+  const deletedArtifactsBackup = (
+    await Promise.all(
+      deletedChapterNumbers.map(async (chapterNumber) => ({
+        chapterNumber,
+        artifact: await repository.loadChapterArtifact(args.projectId, chapterNumber),
+      })),
+    )
+  )
+    .filter((item): item is { chapterNumber: number; artifact: ChapterArtifact } => Boolean(item.artifact))
+    .map((item) => ({ chapterNumber: item.chapterNumber, artifact: item.artifact }));
 
-  for (const chapterNumber of deletedChapterNumbers) {
-    await repository.deleteChapterArtifact(args.projectId, chapterNumber);
+  try {
+    for (const chapterNumber of deletedChapterNumbers) {
+      await repository.deleteChapterArtifact(args.projectId, chapterNumber);
+    }
+
+    await repository.saveChapterPlans(args.projectId, remainingPlans);
+    await repository.saveStoryMemories(args.projectId, rebuiltMemories);
+  } catch (error) {
+    // Best-effort rollback to avoid partial invalidation state.
+    await repository.saveChapterPlans(args.projectId, previousPlans);
+    await repository.saveStoryMemories(args.projectId, previousMemories);
+    for (const item of deletedArtifactsBackup) {
+      await repository.saveChapterArtifact(args.projectId, item.artifact);
+    }
+    throw error;
   }
-
-  await repository.saveChapterPlans(args.projectId, remainingPlans);
-  await repository.saveStoryMemories(args.projectId, rebuiltMemories);
 
   return {
     projectId: args.projectId,
@@ -715,12 +720,12 @@ async function generateChapterArtifact(args: {
   updatedChapterPlans: ChapterPlan[];
 }> {
   logStage("chapter", `start chapter=${args.chapterNumber}`);
-  const currentArc = pickArcForChapter(
-    args.base.arcOutlines,
+  const currentArc = pickArcForChapterDeterministic(args.base.arcOutlines, args.chapterNumber);
+  const currentBeat = pickBeatForChapterDeterministic(
+    args.base.beatOutlines,
+    currentArc,
     args.chapterNumber,
-    args.base.storySetup.currentArcId,
   );
-  const currentBeat = pickBeatForChapter(args.base.beatOutlines, currentArc, args.chapterNumber);
   assertChapterPlanningAnchors({
     projectId: args.projectId,
     chapterNumber: args.chapterNumber,
@@ -754,6 +759,12 @@ async function generateChapterArtifact(args: {
   });
 
   logStage("chapter", `llm: planner chapter=${args.chapterNumber}`);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_planner`,
+    messages: plannerMessages,
+  });
   const plannerResult = await args.service.generateObjectForTask({
     task: "planner",
     messages: plannerMessages,
@@ -822,40 +833,71 @@ async function generateChapterArtifact(args: {
   });
 
   logStage("chapter", `llm: writer chapter=${args.chapterNumber}`);
-  const writerResult = await args.service.generateObjectForTask({
+  const writerMessages = buildWriterMessages({
+    contextPack: writerContextPack,
+    minParagraphs: 5,
+    maxParagraphs: 8,
+  });
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_writer`,
+    messages: writerMessages,
+  });
+  const writerTextResult = await args.service.generateForTask({
     task: "writer",
-    messages: buildWriterMessages({
-      contextPack: writerContextPack,
-      minParagraphs: 5,
-      maxParagraphs: 8,
-    }),
-    schema: writerResultSchema,
+    messages: writerMessages,
     temperature: 0.6,
     maxTokens: 2800,
   });
+  const writerOutput = parseWriterLikeOutput({
+    provider: writerTextResult.provider,
+    rawText: writerTextResult.text,
+  });
+  const writerResult = {
+    object: {
+      title: writerOutput.title,
+      draft: writerOutput.draft,
+      notes: writerOutput.notes,
+    } satisfies WriterResult,
+  };
 
   logStage("chapter", `llm: review_missing_resource chapter=${args.chapterNumber}`);
+  const missingReviewMessages = buildMissingResourceReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: writerResult.object.draft,
+    storyMemories: args.base.storyMemories,
+  });
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_missing_resource`,
+    messages: missingReviewMessages,
+  });
   const missingResourceReview = await args.service.generateObjectForTask({
     task: "review_missing_resource",
-    messages: buildMissingResourceReviewMessages({
-      contextPack: reviewerContextPack,
-      draft: writerResult.object.draft,
-      storyMemories: args.base.storyMemories,
-    }),
+    messages: missingReviewMessages,
     schema: missingResourceReviewerResultSchema,
     temperature: 0.2,
     maxTokens: 1800,
   });
 
   logStage("chapter", `llm: review_fact chapter=${args.chapterNumber}`);
+  const factReviewMessages = buildFactConsistencyReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: writerResult.object.draft,
+    storyMemories: args.base.storyMemories,
+    worldFacts: args.base.worldFacts,
+  });
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_fact`,
+    messages: factReviewMessages,
+  });
   const factConsistencyReview = await args.service.generateObjectForTask({
     task: "review_fact",
-    messages: buildFactConsistencyReviewMessages({
-      contextPack: reviewerContextPack,
-      draft: writerResult.object.draft,
-      storyMemories: args.base.storyMemories,
-      worldFacts: args.base.worldFacts,
-    }),
+    messages: factReviewMessages,
     schema: factConsistencyReviewerResultSchema,
     temperature: 0.2,
     maxTokens: 1800,
@@ -877,52 +919,75 @@ async function generateChapterArtifact(args: {
   let rewrittenTitle = writerResult.object.title;
   let activeMissing = initialMissing;
   let activeFact = initialFact;
-  const rewriteTemp =
-    rewritePlan.mode === "repair_first"
-      ? 0.35
-      : rewritePlan.mode === "hybrid_upgrade"
-        ? 0.5
-        : 0.65;
-  logStage("chapter", `llm: rewriter chapter=${args.chapterNumber} mode=${rewritePlan.mode} pass=1`);
-  const rewritten = await args.service.generateObjectForTask({
-    task: "rewriter",
-    messages: buildRewriterMessages({
+  const shouldRewriteForConsistencyNow = shouldRewriteForConsistency(activeFact);
+  if (shouldRewriteForConsistencyNow) {
+    const rewriteTemp = rewritePlan.mode === "repair_first" ? 0.35 : 0.5;
+    logStage("chapter", `llm: rewriter chapter=${args.chapterNumber} mode=${rewritePlan.mode} pass=1`);
+    const rewriterMessages = buildRewriterMessages({
       title: rewrittenTitle,
       draft: rewrittenDraft,
       mode: rewritePlan.mode,
       objective: rewritePlan.objective,
       missingResourceReview: activeMissing,
       factConsistencyReview: activeFact,
-    }),
-    schema: rewriterResultSchema,
-    temperature: rewriteTemp,
-    maxTokens: 3000,
-  });
-  rewrittenDraft = rewritten.object.draft;
-  rewrittenTitle = rewritten.object.title ?? rewrittenTitle;
+    });
+    await writePromptDebug({
+      projectId: args.projectId,
+      scope: "chapter",
+      label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_rewriter_${rewritePlan.mode}`,
+      messages: rewriterMessages,
+    });
+    const rewrittenTextResult = await args.service.generateForTask({
+      task: "rewriter",
+      messages: rewriterMessages,
+      temperature: rewriteTemp,
+      maxTokens: 3000,
+    });
+    const rewrittenOutput = parseWriterLikeOutput({
+      provider: rewrittenTextResult.provider,
+      rawText: rewrittenTextResult.text,
+      fallbackTitle: rewrittenTitle,
+    });
+    rewrittenDraft = rewrittenOutput.draft;
+    rewrittenTitle = rewrittenOutput.title ?? rewrittenTitle;
+  }
 
   logStage("chapter", `llm: review_missing_resource_final chapter=${args.chapterNumber} pass=1`);
+  const missingFinalMessages = buildMissingResourceReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: rewrittenDraft,
+    storyMemories: args.base.storyMemories,
+  });
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_missing_resource_final`,
+    messages: missingFinalMessages,
+  });
   const missingResourceReviewFinal = await args.service.generateObjectForTask({
     task: "review_missing_resource",
-    messages: buildMissingResourceReviewMessages({
-      contextPack: reviewerContextPack,
-      draft: rewrittenDraft,
-      storyMemories: args.base.storyMemories,
-    }),
+    messages: missingFinalMessages,
     schema: missingResourceReviewerResultSchema,
     temperature: 0.2,
     maxTokens: 1800,
   });
 
   logStage("chapter", `llm: review_fact_final chapter=${args.chapterNumber} pass=1`);
+  const factFinalMessages = buildFactConsistencyReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: rewrittenDraft,
+    storyMemories: args.base.storyMemories,
+    worldFacts: args.base.worldFacts,
+  });
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_fact_final`,
+    messages: factFinalMessages,
+  });
   const factConsistencyReviewFinal = await args.service.generateObjectForTask({
     task: "review_fact",
-    messages: buildFactConsistencyReviewMessages({
-      contextPack: reviewerContextPack,
-      draft: rewrittenDraft,
-      storyMemories: args.base.storyMemories,
-      worldFacts: args.base.worldFacts,
-    }),
+    messages: factFinalMessages,
     schema: factConsistencyReviewerResultSchema,
     temperature: 0.2,
     maxTokens: 1800,
@@ -946,15 +1011,22 @@ async function generateChapterArtifact(args: {
   }
 
   logStage("chapter", `llm: memory_updater chapter=${args.chapterNumber}`);
+  const memoryMessages = buildMemoryUpdaterMessages({
+    chapterNumber: args.chapterNumber,
+    chapterPlan,
+    draft: rewrittenDraft,
+    storyMemories: args.base.storyMemories,
+    activeCharacterIds: chapterPlan.requiredCharacters,
+  });
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_memory_updater`,
+    messages: memoryMessages,
+  });
   const memoryUpdate = await args.service.generateObjectForTask({
     task: "memory_updater",
-    messages: buildMemoryUpdaterMessages({
-      chapterNumber: args.chapterNumber,
-      chapterPlan,
-      draft: rewrittenDraft,
-      storyMemories: args.base.storyMemories,
-      activeCharacterIds: chapterPlan.requiredCharacters,
-    }),
+    messages: memoryMessages,
     schema: memoryUpdaterResultSchema,
     temperature: 0.2,
     maxTokens: 2200,

@@ -1,19 +1,20 @@
 {
-  "coreTheme": "Self-understanding and redemption",
+  "coreTheme": "自我理解与救赎",
   "subThemes": [
-    "self-destructive coping",
-    "accepting rescue",
-    "late honesty"
+    "以自我消耗维持秩序的习惯",
+    "对他人援手的本能抗拒",
+    "迟到且不完整的坦诚"
   ],
   "motifs": [
-    "night rain",
-    "old wounds",
-    "medicine"
+    "夜雨（情绪的外化与失控边缘）",
+    "旧伤（被掩盖的持续损耗）",
+    "药物的苦味（理性压制与代价）"
   ],
   "taboos": [
-    "cheap reconciliation",
-    "costless redemption"
+    "轻易达成的和解",
+    "没有代价的自我救赎",
+    "明确说出的主题或自我总结"
   ],
-  "endingTarget": "A bittersweet ending that still fulfills the theme",
-  "emotionalDestination": "After understanding himself, the protagonist still chooses to keep living"
+  "endingTarget": "一个带有缺口的收束：主角未彻底被拯救，也未继续坠落，而是在理解自身之后，选择承担代价继续活下去",
+  "emotionalDestination": "完成对自我行为的辨认与承认后，主角依然保留防御与裂痕，但主动做出“继续生存”的选择，而非被动维持"
 }

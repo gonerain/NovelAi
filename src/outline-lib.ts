@@ -1,3 +1,6 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 import type {
   ArcOutline,
   BeatOutline,
@@ -7,6 +10,7 @@ import type {
 } from "./domain/index.js";
 import { buildDerivedAuthorProfilePacks } from "./domain/index.js";
 import { LlmService } from "./llm/service.js";
+import type { ChatMessage } from "./llm/types.js";
 import {
   arcOutlineGenerationResultSchema,
   beatOutlineGenerationResultSchema,
@@ -23,6 +27,41 @@ import { bootstrapProject } from "./v1-lib.js";
 
 function logStage(stage: string, detail: string): void {
   console.log(`[${stage}] ${detail}`);
+}
+
+async function writePromptDebug(args: {
+  projectId: string;
+  scope: "outline" | "chapter";
+  label: string;
+  messages: ChatMessage[];
+}): Promise<void> {
+  const dir = path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    args.projectId,
+    "debug",
+    "prompts",
+    args.scope,
+  );
+  await mkdir(dir, { recursive: true });
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = `${timestamp}_${args.label}.json`;
+  await writeFile(
+    path.join(dir, filename),
+    JSON.stringify(
+      {
+        projectId: args.projectId,
+        scope: args.scope,
+        label: args.label,
+        generatedAt: new Date().toISOString(),
+        messages: args.messages,
+      },
+      null,
+      2,
+    ),
+    "utf-8",
+  );
 }
 
 export interface GenerateOutlineStackOptions {
@@ -47,6 +86,12 @@ export interface OutlineValidationResult {
   beatCount: number;
   targetChapterCount: number;
   issues: string[];
+}
+
+export interface OutlineDraftExportResult {
+  projectId: string;
+  storyOutlinePath: string;
+  detailedOutlinePath: string;
 }
 
 function validateArcCoverage(
@@ -208,17 +253,24 @@ export async function generateOutlineStack(
   const authorPacks = buildDerivedAuthorProfilePacks(project.authorProfile);
 
   logStage("outline", "llm: story_outline");
+  const storyOutlineMessages = buildStoryOutlineMessages({
+    projectTitle: project.title,
+    authorProfile: authorPacks.compact,
+    themeBible: project.themeBible,
+    styleBible: project.styleBible,
+    storySetup: project.storySetup,
+    targetChapterCount: options.targetChapterCount ?? 250,
+    targetArcCount: options.targetArcCount ?? 10,
+  });
+  await writePromptDebug({
+    projectId: options.projectId,
+    scope: "outline",
+    label: "story_outline",
+    messages: storyOutlineMessages,
+  });
   const storyOutlineResult = await service.generateObjectForTask({
     task: "story_outline",
-    messages: buildStoryOutlineMessages({
-      projectTitle: project.title,
-      authorProfile: authorPacks.compact,
-      themeBible: project.themeBible,
-      styleBible: project.styleBible,
-      storySetup: project.storySetup,
-      targetChapterCount: options.targetChapterCount ?? 250,
-      targetArcCount: options.targetArcCount ?? 10,
-    }),
+    messages: storyOutlineMessages,
     schema: storyOutlineGenerationResultSchema,
     temperature: 0.2,
     maxTokens: 2600,
@@ -229,16 +281,23 @@ export async function generateOutlineStack(
 
   logStage("outline", "llm: cast_expansion");
   const desiredLongTermCastSize = options.desiredLongTermCastSize ?? 6;
+  const castMessages = buildCastExpansionMessages({
+    projectTitle: project.title,
+    authorProfile: authorPacks.compact,
+    storyOutline,
+    arcBlueprints,
+    existingCoreCharacters: coreCharacters(project),
+    desiredLongTermCastSize,
+  });
+  await writePromptDebug({
+    projectId: options.projectId,
+    scope: "outline",
+    label: "cast_expansion",
+    messages: castMessages,
+  });
   const firstCastResult = await service.generateObjectForTask({
     task: "cast_expansion",
-    messages: buildCastExpansionMessages({
-      projectTitle: project.title,
-      authorProfile: authorPacks.compact,
-      storyOutline,
-      arcBlueprints,
-      existingCoreCharacters: coreCharacters(project),
-      desiredLongTermCastSize,
-    }),
+    messages: castMessages,
     schema: castExpansionResultSchema,
     temperature: 0.2,
     maxTokens: 2600,
@@ -247,23 +306,30 @@ export async function generateOutlineStack(
   if (cast.length < desiredLongTermCastSize) {
     const missing = desiredLongTermCastSize - cast.length;
     logStage("outline", `llm: cast_expansion topup missing=${missing}`);
+    const castTopupMessages = buildCastExpansionMessages({
+      projectTitle: project.title,
+      authorProfile: authorPacks.compact,
+      storyOutline,
+      arcBlueprints,
+      existingCoreCharacters: [
+        ...coreCharacters(project),
+        ...cast.map((item) => ({
+          id: item.id,
+          name: item.name,
+          role: item.role,
+        })),
+      ],
+      desiredLongTermCastSize: missing,
+    });
+    await writePromptDebug({
+      projectId: options.projectId,
+      scope: "outline",
+      label: "cast_expansion_topup",
+      messages: castTopupMessages,
+    });
     const topupResult = await service.generateObjectForTask({
       task: "cast_expansion",
-      messages: buildCastExpansionMessages({
-        projectTitle: project.title,
-        authorProfile: authorPacks.compact,
-        storyOutline,
-        arcBlueprints,
-        existingCoreCharacters: [
-          ...coreCharacters(project),
-          ...cast.map((item) => ({
-            id: item.id,
-            name: item.name,
-            role: item.role,
-          })),
-        ],
-        desiredLongTermCastSize: missing,
-      }),
+      messages: castTopupMessages,
       schema: castExpansionResultSchema,
       temperature: 0.2,
       maxTokens: 2200,
@@ -272,16 +338,23 @@ export async function generateOutlineStack(
   }
 
   logStage("outline", "llm: arc_outline");
+  const arcMessages = buildArcOutlineMessages({
+    projectTitle: project.title,
+    storyOutline,
+    arcBlueprints,
+    cast,
+    targetArcCount: options.targetArcCount ?? 10,
+    targetChapterCount: options.targetChapterCount ?? 250,
+  });
+  await writePromptDebug({
+    projectId: options.projectId,
+    scope: "outline",
+    label: "arc_outline",
+    messages: arcMessages,
+  });
   const arcResult = await service.generateObjectForTask({
     task: "arc_outline",
-    messages: buildArcOutlineMessages({
-      projectTitle: project.title,
-      storyOutline,
-      arcBlueprints,
-      cast,
-      targetArcCount: options.targetArcCount ?? 10,
-      targetChapterCount: options.targetChapterCount ?? 250,
-    }),
+    messages: arcMessages,
     schema: arcOutlineGenerationResultSchema,
     temperature: 0.2,
     maxTokens: 3200,
@@ -290,14 +363,21 @@ export async function generateOutlineStack(
   const allBeatOutlines = [];
   for (const arc of arcResult.object.arcOutlines) {
     logStage("outline", `llm: beat_outline arc=${arc.id}`);
+    const beatMessages = buildBeatOutlineMessages({
+      projectTitle: project.title,
+      storyOutline,
+      arcOutlines: [arc],
+      targetChapterCount: options.targetChapterCount ?? 250,
+    });
+    await writePromptDebug({
+      projectId: options.projectId,
+      scope: "outline",
+      label: `beat_outline_${arc.id || "unknown"}`,
+      messages: beatMessages,
+    });
     const beatResult = await service.generateObjectForTask({
       task: "beat_outline",
-      messages: buildBeatOutlineMessages({
-        projectTitle: project.title,
-        storyOutline,
-        arcOutlines: [arc],
-        targetChapterCount: options.targetChapterCount ?? 250,
-      }),
+      messages: beatMessages,
       schema: beatOutlineGenerationResultSchema,
       temperature: 0.2,
       maxTokens: 3200,
@@ -438,4 +518,161 @@ export function formatOutlineValidationResult(result: OutlineValidationResult): 
   }
 
   return lines.join("\n");
+}
+
+function projectDir(projectId: string): string {
+  return path.resolve(process.cwd(), "data", "projects", projectId);
+}
+
+function formatStoryOutlineMarkdown(project: StoryProject): string {
+  const outline = project.storyOutline;
+  if (!outline) {
+    return "# Story Outline\n\n(Missing story-outline.json)\n";
+  }
+
+  return [
+    `# 故事大纲（${outline.title}）`,
+    "",
+    `- 核心主题：${outline.coreTheme}`,
+    `- 终局目标：${outline.endingTarget}`,
+    "",
+    "## 核心前提",
+    outline.premise,
+    "",
+    "## 关键转折",
+    ...outline.keyTurningPoints.map((item, index) => `${index + 1}. ${item}`),
+  ].join("\n");
+}
+
+function formatDetailedOutlineMarkdown(project: StoryProject): string {
+  const lines: string[] = [];
+  lines.push(`# 细纲（${project.title}）`);
+  lines.push("");
+  lines.push("## 审核要点");
+  lines.push("- 先审节奏分配：铺垫/推进/爆发/余波是否合理。");
+  lines.push("- 再审调查进度：是否过早锁定个人目标。");
+  lines.push("- 最后审信息释放：是否保留中后段关键悬念。");
+  lines.push("");
+
+  const arcs = [...project.arcOutlines].sort(
+    (left, right) => (left.chapterRangeHint?.start ?? 0) - (right.chapterRangeHint?.start ?? 0),
+  );
+  for (const arc of arcs) {
+    const arcRange = arc.chapterRangeHint
+      ? `${arc.chapterRangeHint.start}-${arc.chapterRangeHint.end}`
+      : "未指定";
+    lines.push(`## Arc ${arc.id}｜${arc.name}（章 ${arcRange}）`);
+    lines.push(`- Arc目标：${arc.arcGoal}`);
+    lines.push(`- 起点状态：${arc.startState}`);
+    lines.push(`- 终点状态：${arc.endState}`);
+    if (arc.requiredTurns.length > 0) {
+      lines.push(`- 必经转折：${arc.requiredTurns.join("｜")}`);
+    }
+    if (arc.relationshipChanges.length > 0) {
+      lines.push(`- 关系变化：${arc.relationshipChanges.join("｜")}`);
+    }
+    lines.push("");
+
+    const beats = project.beatOutlines
+      .filter((beat) => beat.arcId === arc.id)
+      .sort((left, right) => left.order - right.order);
+    for (const beat of beats) {
+      const beatRange = beat.chapterRangeHint
+        ? `${beat.chapterRangeHint.start}-${beat.chapterRangeHint.end}`
+        : "未指定";
+      lines.push(`### Beat ${beat.order}｜${beat.id}（章 ${beatRange}）`);
+      lines.push(`- 目标：${beat.beatGoal}`);
+      lines.push(`- 冲突：${beat.conflict}`);
+      lines.push(`- 变化：${beat.expectedChange}`);
+      if (beat.revealTargets.length > 0) {
+        lines.push(`- 信息释放：${beat.revealTargets.join("｜")}`);
+      }
+      if (beat.constraints.length > 0) {
+        lines.push(`- 约束：${beat.constraints.join("｜")}`);
+      }
+      if (beat.requiredCharacters.length > 0) {
+        lines.push(`- 必到角色：${beat.requiredCharacters.join(", ")}`);
+      }
+      if (beat.requiredMemories.length > 0) {
+        lines.push(`- 必到记忆：${beat.requiredMemories.join(", ")}`);
+      }
+      lines.push("");
+    }
+
+    lines.push("### 章级细纲（人工审核与补写）");
+    lines.push("| 章次 | 节奏类型建议 | 章节目标 | 外部事件推进 | 信息增量 | 关系变化 | 章节钩子 |");
+    lines.push("|---|---|---|---|---|---|---|");
+
+    for (const beat of beats) {
+      const start = beat.chapterRangeHint?.start;
+      const end = beat.chapterRangeHint?.end;
+      if (!start || !end || end < start) {
+        continue;
+      }
+      for (let chapter = start; chapter <= end; chapter += 1) {
+        const offset = chapter - start;
+        const mod = offset % 4;
+        const chapterType = mod === 0 ? "setup" : mod === 1 ? "progress" : mod === 2 ? "payoff" : "aftermath";
+        lines.push(
+          `| ${chapter} | ${chapterType} | ${beat.beatGoal} | ${beat.conflict} | ${beat.revealTargets.slice(0, 2).join("；") || "待补"} | ${arc.relationshipChanges.slice(0, 2).join("；") || "待补"} | ${beat.constraints[0] ? `围绕“${beat.constraints[0]}”设置章节尾钩` : "待补"} |`,
+        );
+      }
+    }
+    lines.push("");
+    lines.push("#### 本Arc审稿检查清单");
+    lines.push("- [ ] 本Arc每3章至少1章有明确外部事件推进（不是纯内心描写）。");
+    lines.push("- [ ] 本Arc没有提前泄露不该揭示的终局信息。");
+    lines.push("- [ ] 关键角色（至少2人）在本Arc有关系位移。");
+    lines.push("- [ ] 每章钩子类型有变化（信息钩子/冲突钩子/反转钩子）。");
+    lines.push("");
+  }
+
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+export async function exportOutlineDrafts(options: {
+  projectId: string;
+}): Promise<OutlineDraftExportResult> {
+  const repository = new FileProjectRepository();
+  const project = await loadStoryProject(repository, options.projectId);
+  if (!project) {
+    throw new Error(`Project not found or incomplete: ${options.projectId}`);
+  }
+
+  const root = projectDir(options.projectId);
+  const storyOutlinePath = path.join(root, "story-outline.md");
+  const detailedOutlinePath = path.join(root, "detailed-outline.md");
+
+  await writeFile(storyOutlinePath, formatStoryOutlineMarkdown(project), "utf-8");
+  await writeFile(detailedOutlinePath, formatDetailedOutlineMarkdown(project), "utf-8");
+
+  return {
+    projectId: options.projectId,
+    storyOutlinePath,
+    detailedOutlinePath,
+  };
+}
+
+export async function approveDetailedOutline(options: {
+  projectId: string;
+  approver?: string;
+  note?: string;
+}): Promise<{ projectId: string; approvalPath: string }> {
+  const root = projectDir(options.projectId);
+  const approvalPath = path.join(root, "detailed-outline-approved.json");
+  await writeFile(
+    approvalPath,
+    JSON.stringify(
+      {
+        projectId: options.projectId,
+        approvedAt: new Date().toISOString(),
+        approver: options.approver ?? "manual",
+        note: options.note ?? "",
+      },
+      null,
+      2,
+    ),
+    "utf-8",
+  );
+  return { projectId: options.projectId, approvalPath };
 }

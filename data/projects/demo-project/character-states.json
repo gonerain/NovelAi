@@ -1,104 +1,138 @@
 [
   {
-    "id": "protagonist",
-    "name": "Protagonist",
-    "archetype": "restrained self-destructive lead",
+    "id": "yuli",
+    "name": "雨璃",
+    "archetype": "克制型自我消耗主角",
     "coreTraits": [
-      "calm",
-      "stubborn",
-      "over-controlled"
+      "冷静",
+      "自控",
+      "回避依赖"
     ],
     "desires": [
-      "solve everything alone",
-      "stay composed"
+      "独自解决一切",
+      "维持情绪与共鸣的稳定",
+      "延续母亲的生命"
     ],
     "fears": [
-      "being seen as weak",
-      "burdening others"
+      "失去母亲",
+      "情绪失控引发灾难",
+      "让他人承担自己的代价"
     ],
     "wounds": [
-      "old injury that flares under strain",
-      "habit of refusing help"
+      "长期压抑情绪带来的心理与共鸣负担",
+      "对‘依赖他人’的本能抗拒",
+      "对失去的过度恐惧"
     ],
     "voiceNotes": [
-      "speaks briefly",
-      "downplays his own pain"
+      "语气平稳克制",
+      "习惯弱化问题与痛苦",
+      "用日常语气回避关键情绪"
     ],
     "currentGoals": [
-      "hide the severity of the injury",
-      "avoid exposing the hidden pill"
+      "维持降雨节奏以掩盖计划",
+      "隐藏生与死共鸣的存在",
+      "避免被诺兰确认异常"
     ],
     "emotionalState": [
-      "tense",
-      "drained",
-      "guarded"
+      "压抑",
+      "疲惫",
+      "维持表面平衡"
     ],
     "knowledgeBoundary": [
-      "knows he still carries a life-saving pill"
+      "清楚自身共鸣的全部机制与代价"
     ],
     "secretsKept": [
-      "the origin and value of the pill"
+      "利用降雨为生与死共鸣做准备",
+      "真实目的在于与母亲共享生命"
     ],
     "relationships": [
       {
-        "targetCharacterId": "senior_brother",
-        "type": "ally",
-        "publicLabel": "traveling senior brother",
-        "privateTruth": "emotionally dependent on him, but unwilling to admit it",
-        "trustLevel": 72,
-        "tensionLevel": 81,
-        "dependencyLevel": 68,
-        "lastUpdatedInChapter": 0
+        "targetCharacterId": "nuolan",
+        "type": "潜在对立",
+        "publicLabel": "普通顾客",
+        "privateTruth": "隐约察觉对方在调查自己，但选择维持模糊状态",
+        "trustLevel": 32,
+        "tensionLevel": 78,
+        "dependencyLevel": 10,
+        "lastUpdatedInChapter": 1
+      },
+      {
+        "targetCharacterId": "qingxin",
+        "type": "亲密关系",
+        "publicLabel": "好友",
+        "privateTruth": "情感上依赖对方的陪伴，但刻意不让其接触真实负担",
+        "trustLevel": 85,
+        "tensionLevel": 22,
+        "dependencyLevel": 64,
+        "lastUpdatedInChapter": 1
       }
     ]
   },
   {
-    "id": "senior_brother",
-    "name": "Senior Brother",
-    "archetype": "protective ally with controlled intensity",
+    "id": "nuolan",
+    "name": "诺兰",
+    "archetype": "压抑型执行者",
     "coreTraits": [
-      "observant",
-      "restrained",
-      "persistent"
+      "冷静",
+      "理性",
+      "情绪压抑"
     ],
     "desires": [
-      "confirm what the protagonist is hiding",
-      "keep him alive"
+      "确认异常源头",
+      "完成任务",
+      "避免重演过去的失去"
     ],
     "fears": [
-      "losing someone important through hesitation"
+      "再次因迟疑导致无法挽回的结果",
+      "判断错误伤及无辜"
     ],
     "wounds": [
-      "once lost a companion by acting too late"
+      "母亲死亡带来的无力感",
+      "父亲执念留下的影响",
+      "对‘命运不可改变’的信念"
     ],
     "voiceNotes": [
-      "speaks evenly",
-      "presses truth quietly rather than loudly"
+      "语气平直",
+      "提问带有试探性",
+      "避免情绪外露"
     ],
     "currentGoals": [
-      "force the protagonist to accept help"
+      "确认雨璃是否为异常共鸣源",
+      "在不打草惊蛇的前提下推进调查"
     ],
     "emotionalState": [
-      "suspicious",
-      "worried",
-      "holding back anger"
+      "警惕",
+      "克制",
+      "隐性焦虑"
     ],
     "knowledgeBoundary": [
-      "suspects a hidden trump card but does not know what it is"
+      "确认存在异常降雨，但未锁定具体机制",
+      "无法判断雨璃与晴心谁为目标"
     ],
     "secretsKept": [
-      "is willing to intervene by force if needed"
+      "对调查对象产生了非纯任务性的关注",
+      "对‘是否应介入他人命运’的动摇"
     ],
     "relationships": [
       {
-        "targetCharacterId": "protagonist",
-        "type": "ally",
-        "publicLabel": "traveling junior brother",
-        "privateTruth": "his protectiveness is no longer neutral",
-        "trustLevel": 78,
-        "tensionLevel": 76,
-        "dependencyLevel": 64,
-        "lastUpdatedInChapter": 0
+        "targetCharacterId": "yuli",
+        "type": "调查对象",
+        "publicLabel": "普通店员",
+        "privateTruth": "在理性怀疑之外，开始产生迟疑与观察兴趣",
+        "trustLevel": 28,
+        "tensionLevel": 82,
+        "dependencyLevel": 12,
+        "lastUpdatedInChapter": 1
+      },
+      {
+        "targetCharacterId": "ling",
+        "type": "同僚",
+        "publicLabel": "搭档",
+        "privateTruth": "在判断上存在分歧，但尚未显性冲突",
+        "trustLevel": 74,
+        "tensionLevel": 36,
+        "dependencyLevel": 40,
+        "lastUpdatedInChapter": 1
       }
     ]
   }

@@ -1,410 +1,221 @@
 {
-    "id":  "demo-project-author-profile",
-    "name":  "Default Author Profile",
-    "summary":  "Author favors high-scan readability web-novel prose: short paragraphs, fast information unlock, and strong beat-by-beat momentum while keeping ambition, betrayal, and delayed justice themes.",
-    "corePreferences":  [
-                            "high-scan readability",
-                            "short paragraphs with hard breaks",
-                            "fast information unlock",
-                            "ambition",
-                            "betrayal",
-                            "delayed justice",
-                            "cost of power"
-                        ],
-    "aestheticMotifs":  [
-                            "cold weather",
-                            "decaying cities",
-                            "coded messages",
-                            "debt ledgers",
-                            "council confrontations"
-                        ],
-    "favoriteCharacterTypes":  [
-                                   "highly competent but morally strained leads",
-                                   "weaponize calm under pressure"
-                               ],
-    "favoriteRelationshipPatterns":  [
-                                         "alliances built on leverage",
-                                         "slowly turn into conflicted loyalty"
-                                     ],
-    "plotBiases":  [
-                       "short-beat progression",
-                       "quick conflict visibility per paragraph",
-                       "layered conspiracies",
-                       "hard reversals",
-                       "tactical wins with strategic losses"
-                   ],
-    "endingBiases":  [
-                         "bitter-precise endings",
-                         "win the war but lose a private world"
-                     ],
-    "components":  [
-                       {
-                           "id":  "comp1",
-                           "name":  "Costly Redemption",
-                           "category":  "theme",
-                           "description":  "Costly Redemption component",
-                           "strengthens":  [
-
-                                           ],
-                           "suppresses":  [
-
-                                          ],
-                           "effects":  [
-                                           {
-                                               "target":  "planner",
-                                               "apply":  [
-                                                             "Ensure redemption arcs involve significant personal sacrifice or loss",
-                                                             "Tie redemption to the protagonist\u0027s self-destructive habits"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "writer",
-                                               "apply":  [
-                                                             "Write scenes where characters pay a high price for redemption",
-                                                             "Emphasize emotional weight of sacrifices"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "reviewer",
-                                               "apply":  [
-                                                             "Does redemption feel earned through cost?",
-                                                             "Is the protagonist\u0027s self-destructive behavior addressed?"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "memory",
-                                               "apply":  [
-                                                             "Redemption should not come easily",
-                                                             "Link to themes of power and betrayal"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           }
-                                       ],
-                           "validationHints":  [
-                                                   "Does redemption feel earned through cost?",
-                                                   "Is the protagonist\u0027s self-destructive behavior addressed?"
-                                               ],
-                           "priority":  1,
-                           "enabled":  true
-                       },
-                       {
-                           "id":  "comp2",
-                           "name":  "Morally Strained Competence",
-                           "category":  "theme",
-                           "description":  "Morally Strained Competence component",
-                           "strengthens":  [
-
-                                           ],
-                           "suppresses":  [
-
-                                          ],
-                           "effects":  [
-                                           {
-                                               "target":  "planner",
-                                               "apply":  [
-                                                             "Design leads with high skill but ethical conflicts",
-                                                             "Use calm demeanor as a strategic tool"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "writer",
-                                               "apply":  [
-                                                             "Show internal conflict in decision-making",
-                                                             "Depict calm under pressure as a weapon"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "reviewer",
-                                               "apply":  [
-                                                             "Is the lead competent but morally ambiguous?",
-                                                             "Does calmness serve a purpose in scenes?"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "memory",
-                                               "apply":  [
-                                                             "Avoid making leads purely good or evil",
-                                                             "Balance competence with flaws"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           }
-                                       ],
-                           "validationHints":  [
-                                                   "Is the lead competent but morally ambiguous?",
-                                                   "Does calmness serve a purpose in scenes?"
-                                               ],
-                           "priority":  1,
-                           "enabled":  true
-                       },
-                       {
-                           "id":  "comp3",
-                           "name":  "Leverage-Based Alliances",
-                           "category":  "theme",
-                           "description":  "Leverage-Based Alliances component",
-                           "strengthens":  [
-
-                                           ],
-                           "suppresses":  [
-
-                                          ],
-                           "effects":  [
-                                           {
-                                               "target":  "planner",
-                                               "apply":  [
-                                                             "Start relationships as transactional",
-                                                             "Develop alliances into complex loyalties"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "writer",
-                                               "apply":  [
-                                                             "Write dialogue and actions based on leverage",
-                                                             "Show gradual shift to conflicted loyalty"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "reviewer",
-                                               "apply":  [
-                                                             "Are alliances initially built on leverage?",
-                                                             "Do relationships evolve beyond transactions?"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "memory",
-                                               "apply":  [
-                                                             "Leverage should drive early interactions",
-                                                             "Conflict should arise from loyalty shifts"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           }
-                                       ],
-                           "validationHints":  [
-                                                   "Are alliances initially built on leverage?",
-                                                   "Do relationships evolve beyond transactions?"
-                                               ],
-                           "priority":  2,
-                           "enabled":  true
-                       },
-                       {
-                           "id":  "comp4",
-                           "name":  "Layered Conspiracies",
-                           "category":  "theme",
-                           "description":  "Layered Conspiracies component",
-                           "strengthens":  [
-
-                                           ],
-                           "suppresses":  [
-
-                                          ],
-                           "effects":  [
-                                           {
-                                               "target":  "planner",
-                                               "apply":  [
-                                                             "Plot with hidden agendas and schemes",
-                                                             "Include reversals that impact tactical outcomes"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "writer",
-                                               "apply":  [
-                                                             "Reveal conspiracies gradually",
-                                                             "Write scenes with strategic twists"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "reviewer",
-                                               "apply":  [
-                                                             "Is the plot driven by conspiracies?",
-                                                             "Do reversals feel hard and impactful?"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "memory",
-                                               "apply":  [
-                                                             "Keep conspiracies intricate but clear",
-                                                             "Ensure tactical wins have strategic costs"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           }
-                                       ],
-                           "validationHints":  [
-                                                   "Is the plot driven by conspiracies?",
-                                                   "Do reversals feel hard and impactful?"
-                                               ],
-                           "priority":  1,
-                           "enabled":  true
-                       },
-                       {
-                           "id":  "comp5",
-                           "name":  "Bitter-Precise Endings",
-                           "category":  "theme",
-                           "description":  "Bitter-Precise Endings component",
-                           "strengthens":  [
-
-                                           ],
-                           "suppresses":  [
-
-                                          ],
-                           "effects":  [
-                                           {
-                                               "target":  "planner",
-                                               "apply":  [
-                                                             "End with characters achieving goals but suffering losses",
-                                                             "Emphasize cost over victory"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "writer",
-                                               "apply":  [
-                                                             "Write endings that balance success and personal defeat",
-                                                             "Use precise language to convey bitterness"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "reviewer",
-                                               "apply":  [
-                                                             "Does the ending feel bitter-precise?",
-                                                             "Are there personal losses despite wins?"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "memory",
-                                               "apply":  [
-                                                             "Endings should not be purely happy",
-                                                             "Focus on private world losses"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           }
-                                       ],
-                           "validationHints":  [
-                                                   "Does the ending feel bitter-precise?",
-                                                   "Are there personal losses despite wins?"
-                                               ],
-                           "priority":  2,
-                           "enabled":  true
-                       },
-                       {
-                           "id":  "comp6",
-                           "name":  "Decaying Urban Aesthetics",
-                           "category":  "theme",
-                           "description":  "Decaying Urban Aesthetics component",
-                           "strengthens":  [
-
-                                           ],
-                           "suppresses":  [
-
-                                          ],
-                           "effects":  [
-                                           {
-                                               "target":  "planner",
-                                               "apply":  [
-                                                             "Set scenes in cold, decaying environments",
-                                                             "Use motifs to enhance themes of decay"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "writer",
-                                               "apply":  [
-                                                             "Describe settings with vivid, bleak imagery",
-                                                             "Incorporate motifs like coded messages naturally"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "reviewer",
-                                               "apply":  [
-                                                             "Are aesthetic motifs present and thematic?",
-                                                             "Do settings reflect decay and redemption?"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           },
-                                           {
-                                               "target":  "memory",
-                                               "apply":  [
-                                                             "Cold weather and cities should mirror internal states",
-                                                             "Motifs should serve plot and character"
-                                                         ],
-                                               "avoid":  [
-
-                                                         ]
-                                           }
-                                       ],
-                           "validationHints":  [
-                                                   "Are aesthetic motifs present and thematic?",
-                                                   "Do settings reflect decay and redemption?"
-                                               ],
-                           "priority":  3,
-                           "enabled":  true
-                       }
-                   ],
-    "constraints":  [
-                        {
-                            "id":  "con1",
-                            "name":  "Protagonist\u0027s Self-Containment",
-                            "description":  "Must maintain protagonist control-vs-breakdown arc, while keeping prose highly skimmable with short paragraphs and quick information reveals.",
-                            "severity":  "medium"
-                        }
-                    ]
+  "id": "nolans_rain_author_profile",
+  "name": "诺兰的雨季 Author Profile",
+  "summary": "Author favors emotionally suppressed yet highly controlled characters in quiet, rain-soaked settings, where relationships are restrained, intentions hidden, and emotional breakthroughs carry irreversible cost.",
+  
+  "corePreferences": [
+    "emotional suppression",
+    "fear of loss",
+    "controlled affection",
+    "sacrifice without expression"
+  ],
+  
+  "aestheticMotifs": [
+    "continuous rain",
+    "dim streetlights",
+    "warm indoor vs cold outdoor contrast",
+    "umbrellas and shared shelter",
+    "quiet conversations",
+    "unspoken intentions"
+  ],
+  
+  "favoriteCharacterTypes": [
+    "highly self-controlled protagonists afraid of emotional fluctuation",
+    "people who weaponize calm to stabilize the world",
+    "emotionally transparent but fragile companions",
+    "duty-driven observers caught between logic and empathy"
+  ],
+  
+  "favoriteRelationshipPatterns": [
+    "emotionally asymmetrical bonds (one suppresses, one expresses)",
+    "care expressed through control rather than words",
+    "hidden intentions known but unspoken",
+    "mutual understanding without confrontation"
+  ],
+  
+  "plotBiases": [
+    "hidden truths revealed through daily life",
+    "conflicts driven by protection rather than ambition",
+    "slow tension accumulation instead of sudden twists",
+    "irreversible choices delayed until the last moment"
+  ],
+  
+  "endingBiases": [
+    "emotional restraint instead of catharsis",
+    "self-denial as final choice",
+    "no explicit resolution, only quiet continuation",
+    "what is not done matters more than what is done"
+  ],
+  
+  "components": [
+    {
+      "id": "comp1",
+      "name": "Silent Sacrifice",
+      "category": "theme",
+      "description": "Characters sacrifice without seeking recognition or expression",
+      "effects": [
+        {
+          "target": "planner",
+          "apply": [
+            "Design sacrifices that remain hidden or misunderstood",
+            "Avoid dramatic revelation of intentions"
+          ]
+        },
+        {
+          "target": "writer",
+          "apply": [
+            "Express sacrifice through omission and restraint",
+            "Use subtle behavior instead of declarations"
+          ]
+        },
+        {
+          "target": "reviewer",
+          "apply": [
+            "Is the sacrifice visible to reader but not to characters?",
+            "Does restraint carry emotional weight?"
+          ]
+        }
+      ],
+      "priority": 1
+    },
+    
+    {
+      "id": "comp2",
+      "name": "Emotional Control as Mechanism",
+      "category": "theme",
+      "description": "Emotion is not expression but a system to regulate reality",
+      "effects": [
+        {
+          "target": "planner",
+          "apply": [
+            "Tie emotional state directly to world consequences",
+            "Make control more important than truth"
+          ]
+        },
+        {
+          "target": "writer",
+          "apply": [
+            "Show characters actively managing feelings like variables",
+            "Depict emotional drift as danger"
+          ]
+        },
+        {
+          "target": "reviewer",
+          "apply": [
+            "Does emotional instability create real stakes?",
+            "Is control portrayed as effortful and fragile?"
+          ]
+        }
+      ],
+      "priority": 1
+    },
+    
+    {
+      "id": "comp3",
+      "name": "Unspoken Mutual Awareness",
+      "category": "theme",
+      "description": "Characters understand each other but choose silence",
+      "effects": [
+        {
+          "target": "planner",
+          "apply": [
+            "Design relationships where truths are shared but not acknowledged",
+            "Use dramatic irony subtly"
+          ]
+        },
+        {
+          "target": "writer",
+          "apply": [
+            "Let dialogue avoid the core truth intentionally",
+            "Use pauses, deflections, and indirect phrasing"
+          ]
+        },
+        {
+          "target": "reviewer",
+          "apply": [
+            "Do characters avoid saying what they clearly know?",
+            "Is tension built through silence rather than conflict?"
+          ]
+        }
+      ],
+      "priority": 1
+    },
+    
+    {
+      "id": "comp4",
+      "name": "Soft Daily Surface, Hard Understructure",
+      "category": "theme",
+      "description": "Gentle daily life hides severe underlying stakes",
+      "effects": [
+        {
+          "target": "planner",
+          "apply": [
+            "Embed major conflicts inside mundane routines",
+            "Avoid overt escalation until late stage"
+          ]
+        },
+        {
+          "target": "writer",
+          "apply": [
+            "Use food, weather, and routine as emotional carriers",
+            "Let tone stay soft even when stakes are high"
+          ]
+        },
+        {
+          "target": "reviewer",
+          "apply": [
+            "Does daily life carry hidden tension?",
+            "Is contrast between tone and stakes effective?"
+          ]
+        }
+      ],
+      "priority": 2
+    },
+    
+    {
+      "id": "comp5",
+      "name": "Irreversible Non-Action",
+      "category": "theme",
+      "description": "The final choice is often what the character refuses to do",
+      "effects": [
+        {
+          "target": "planner",
+          "apply": [
+            "Build toward a decisive moment where action is possible",
+            "Make refusal the true climax"
+          ]
+        },
+        {
+          "target": "writer",
+          "apply": [
+            "Portray hesitation and awareness clearly",
+            "Emphasize the weight of choosing not to act"
+          ]
+        },
+        {
+          "target": "reviewer",
+          "apply": [
+            "Is the non-action clearly intentional?",
+            "Does it carry irreversible consequence?"
+          ]
+        }
+      ],
+      "priority": 2
+    }
+  ],
+  
+  "constraints": [
+    {
+      "id": "con1",
+      "name": "Emotional Restraint Consistency",
+      "description": "Characters must not express emotions directly; emotional leakage should be subtle and controlled.",
+      "severity": "high"
+    },
+    {
+      "id": "con2",
+      "name": "No Dramatic Catharsis",
+      "description": "Avoid overt emotional breakdowns or explicit confessions; resolution must remain restrained.",
+      "severity": "high"
+    }
+  ]
 }

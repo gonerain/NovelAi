@@ -1,41 +1,43 @@
 [
   {
-    "id": "fact-inn-001",
+    "id": "fact-rain-inn-001",
     "category": "location_rule",
-    "title": "The inn refuge is temporary",
-    "description": "The inn barrier can block tracking only for one night. After dawn, pursuers can lock onto the location again.",
+    "title": "临时栖身点无法长期掩盖共鸣痕迹",
+    "description": "普通场所（如咖啡店、公寓等）只能在短时间内掩盖异常共鸣的波动。一旦持续出现异常（如长期降雨），X局可通过数据与现场观测重新锁定目标区域。",
     "scope": "local",
     "visibility": "public",
     "relatedCharacterIds": [
-      "protagonist",
-      "senior_brother"
+      "yuli",
+      "nuolan",
+      "ling"
     ],
     "relatedLocationIds": [
-      "inn-room"
+      "cafe",
+      "apartment"
     ]
   },
   {
-    "id": "fact-pill-002",
-    "category": "resource_rule",
-    "title": "Using the pill reveals abnormal spiritual traces",
-    "description": "The rare pill releases an abnormal pulse when used, making the user's background and value easier to trace.",
+    "id": "fact-resonance-002",
+    "category": "ability_rule",
+    "title": "生与死的共鸣会留下异常信号",
+    "description": "雨璃在使用生与死的共鸣时，会产生区别于普通天气共鸣的异常波动，该波动可被X局设备或高经验成员察觉，并具备追踪价值。",
     "scope": "character_specific",
     "visibility": "hidden",
     "relatedCharacterIds": [
-      "protagonist"
+      "yuli"
     ],
     "relatedLocationIds": []
   },
   {
-    "id": "fact-brother-003",
+    "id": "fact-nuolan-003",
     "category": "character_rule",
-    "title": "Senior Brother will not stay passive once danger is obvious",
-    "description": "If he confirms the protagonist is collapsing, he will intervene even against resistance.",
+    "title": "诺兰在确认异常后不会保持旁观",
+    "description": "一旦诺兰确认目标可能处于失控或危险状态，他会主动介入调查甚至接触目标，即使证据尚未完全充分，也不会选择长期观望。",
     "scope": "character_specific",
     "visibility": "public",
     "relatedCharacterIds": [
-      "senior_brother",
-      "protagonist"
+      "nuolan",
+      "yuli"
     ],
     "relatedLocationIds": []
   }

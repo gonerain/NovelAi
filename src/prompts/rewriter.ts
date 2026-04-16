@@ -14,21 +14,16 @@ interface RewriterInput {
 }
 
 function summarizeFindings(args: RewriterInput): string {
-  const missing = args.missingResourceReview.findings.map(
-    (item, index) =>
-      `${index + 1}. [${item.severity}] ${item.title} | memory=${item.memoryId} | fix=${item.suggestedFix}`,
-  );
   const facts = args.factConsistencyReview.findings.map(
     (item, index) =>
       `${index + 1}. [${item.severity}] ${item.title} | violated=${item.violatedFactIds.join(", ") || "none"} | fix=${item.suggestedFix}`,
   );
 
   return [
-    "Missing resource findings:",
-    ...(missing.length > 0 ? missing : ["none"]),
-    "",
-    "Fact consistency findings:",
+    "Consistency findings (fact + role consistency only):",
     ...(facts.length > 0 ? facts : ["none"]),
+    "",
+    `Scores only (do not rewrite for these): emotion=${args.factConsistencyReview.scoring.emotion}/10, pacing=${args.factConsistencyReview.scoring.pacing}/10`,
   ].join("\n");
 }
 
@@ -46,16 +41,17 @@ export function buildRewriterMessages(input: RewriterInput): ChatMessage[] {
     if (input.mode === "hybrid_upgrade") {
       return [
         "Mode: hybrid_upgrade.",
-        "Primary objective: fix important reviewer findings and improve excitement/readability together.",
-        "Prioritize consistency first, then rhythm, tension, and hook quality.",
+        "Primary objective: fix medium/low consistency findings while preserving readability.",
+        "Do not rewrite for emotion or pacing score improvements.",
         "Do not add new plot events or world facts that break continuity.",
       ].join("\n");
     }
 
     return [
       "Mode: quality_boost.",
-      "Primary objective: improve excitement, rhythm, emotional pressure, and chapter hook.",
-      "Keep plot facts, core events, and outcomes unchanged.",
+      "Primary objective: keep the draft stable when there are no consistency findings.",
+      "If no consistency issue exists, keep wording changes minimal.",
+      "Do not rewrite for emotion, rhythm, tension, or hook upgrades.",
       "Do not add new plot events or world facts.",
     ].join("\n");
   })();
@@ -68,7 +64,7 @@ export function buildRewriterMessages(input: RewriterInput): ChatMessage[] {
         "Rewrite the chapter draft in Chinese only.",
         "Keep core events, chapter intent, and outcome unchanged.",
         "Do not output analysis or bullet points.",
-        "Return valid JSON only.",
+        "Soft format preference: output rewritten正文 first, then optionally append [[META]] JSON [[/META]] with fields like title and notes.",
         modeInstruction,
         input.objective ? `Execution objective: ${input.objective}` : "",
       ].join("\n"),
