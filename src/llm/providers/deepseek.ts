@@ -135,12 +135,10 @@ export class DeepSeekClient implements LlmClient {
       total_tokens?: number;
     };
   }> {
+    const messages = this.withJsonInstruction(args.messages, args.schema);
     return (await this.requestChatCompletionWithRetry({
       model: args.model,
-      messages: [
-        ...args.messages,
-        { role: "system", content: buildJsonInstruction(args.schema) },
-      ],
+      messages,
       temperature: args.temperature,
       maxTokens: args.maxTokens,
       responseFormat: {
@@ -156,6 +154,31 @@ export class DeepSeekClient implements LlmClient {
         total_tokens?: number;
       };
     };
+  }
+
+  private withJsonInstruction(
+    messages: StructuredGenerationInput<object>["messages"],
+    schema: object,
+  ): StructuredGenerationInput<object>["messages"] {
+    const jsonInstruction = buildJsonInstruction(schema);
+    const [first, ...rest] = messages;
+    if (first?.role === "system") {
+      return [
+        {
+          role: "system",
+          content: `${first.content}\n\n${jsonInstruction}`,
+        },
+        ...rest,
+      ];
+    }
+
+    return [
+      {
+        role: "system",
+        content: jsonInstruction,
+      },
+      ...messages,
+    ];
   }
 
   private isLengthTruncated(data: {
@@ -195,7 +218,7 @@ export class DeepSeekClient implements LlmClient {
             model: args.model,
             messages: args.messages,
             temperature: args.temperature,
-            max_tokens: args.maxTokens,
+            max_tokens: args.maxTokens ?? (args.responseFormat ? 4096 : undefined),
             response_format: args.responseFormat,
           }),
           signal: args.signal,

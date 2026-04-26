@@ -1,25 +1,45 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
+  buildChapterCardSemanticText,
   pickArcForChapterDeterministic,
   pickBeatForChapterDeterministic,
   applyMemoryUpdaterResult,
   buildContextPack,
+  buildExactSearchHits,
+  buildMemorySemanticText,
+  buildMemoryRetrievalPack,
+  buildMemorySystemArtifacts,
+  buildSemanticQueryText,
+  buildSpecializedReviewerViews,
   buildDerivedAuthorProfilePacks,
   defaultPayoffPatterns,
   mapAuthorInterviewToProfile,
   normalizeAuthorInterviewResult,
+  buildRetrievalEvalChapterViews,
+  buildRetrievalEvalSeed,
+  evaluateRetrievalCases,
+  normalizeRetrievalEvalSetAgainstChapterViews,
+  resolveGenrePayoffPack,
+  toSemanticRetrievalHits,
   type ArcOutline,
   type AuthorInterviewSessionInput,
   type BeatOutline,
+  type ChapterCommercialPlan,
   type ChapterArtifact,
   type ChapterPlan,
   type CharacterState,
+  type CommercialReviewerResult,
   type DerivedAuthorProfilePacks,
   type FactConsistencyReviewerResult,
+  type GenrePayoffPack,
+  type MemorySearchLedgerType,
   type MemoryUpdaterResult,
   type MissingResourceReviewerResult,
+  type PlannerSearchIntent,
+  type RetrievalEvalReport,
+  type RetrievalEvalSet,
   type StoryOutline,
   type StoryMemory,
   type StorySetup,
@@ -30,6 +50,8 @@ import {
   shouldRewriteForConsistency,
   validateAuthorInterviewResult,
 } from "./domain/index.js";
+import { EmbeddingService } from "./embedding/service.js";
+import type { EmbeddingCacheSnapshot } from "./embedding/service.js";
 import {
   demoArcOutlines,
   demoBeatOutlines,
@@ -56,12 +78,14 @@ import {
   buildAuthorInterviewDisplayMessages,
   buildAuthorInterviewNormalizeMessages,
   buildAuthorInterviewSmallModelNormalizeMessages,
+  buildCommercialReviewMessages,
   buildFactConsistencyReviewMessages,
   buildMemoryUpdaterMessages,
   buildMissingResourceReviewMessages,
   buildRewriterMessages,
   buildPlannerMessages,
   buildWriterMessages,
+  commercialReviewerResultSchema,
   factConsistencyReviewerResultSchema,
   memoryUpdaterResultSchema,
   missingResourceReviewerResultSchema,
@@ -109,11 +133,265 @@ async function writePromptDebug(args: {
   );
 }
 
+async function writeJsonArtifact(filepath: string, data: unknown): Promise<void> {
+  await mkdir(path.dirname(filepath), { recursive: true });
+  await writeFile(filepath, `${JSON.stringify(data, null, 2)}\n`, "utf-8");
+}
+
+async function readJsonArtifact<T>(filepath: string): Promise<T | null> {
+  try {
+    const content = await readFile(filepath, "utf-8");
+    return JSON.parse(content) as T;
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    ) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function loadAllChapterArtifacts(
+  repository: FileProjectRepository,
+  projectId: string,
+): Promise<ChapterArtifact[]> {
+  const chapterNumbers = await repository.listChapterArtifactNumbers(projectId);
+  const artifacts = await Promise.all(
+    chapterNumbers.map((chapterNumber) => repository.loadChapterArtifact(projectId, chapterNumber)),
+  );
+
+  return artifacts
+    .filter((artifact): artifact is ChapterArtifact => Boolean(artifact))
+    .sort((left, right) => left.chapterNumber - right.chapterNumber);
+}
+
+async function writeMemorySystemOutputs(args: {
+  projectId: string;
+  storyMemories: StoryMemory[];
+  characterStates: CharacterState[];
+  chapterArtifacts: ChapterArtifact[];
+}): Promise<void> {
+  const memoryArtifacts = buildMemorySystemArtifacts({
+    storyMemories: args.storyMemories,
+    characterStates: args.characterStates,
+    chapterArtifacts: args.chapterArtifacts,
+  });
+  const root = path.resolve(process.cwd(), "data", "projects", args.projectId, "memory");
+
+  await Promise.all([
+    writeJsonArtifact(path.join(root, "chapter-cards.json"), memoryArtifacts.chapterCards),
+    writeJsonArtifact(path.join(root, "ledgers", "resources.json"), memoryArtifacts.ledgers.resources),
+    writeJsonArtifact(path.join(root, "ledgers", "promises.json"), memoryArtifacts.ledgers.promises),
+    writeJsonArtifact(path.join(root, "ledgers", "injuries.json"), memoryArtifacts.ledgers.injuries),
+    writeJsonArtifact(
+      path.join(root, "ledgers", "foreshadows.json"),
+      memoryArtifacts.ledgers.foreshadows,
+    ),
+    writeJsonArtifact(
+      path.join(root, "ledgers", "relationships.json"),
+      memoryArtifacts.ledgers.relationships,
+    ),
+    writeJsonArtifact(path.join(root, "ledgers", "timeline.json"), memoryArtifacts.ledgers.timeline),
+    writeJsonArtifact(
+      path.join(root, "retrieval", "entity-chapter-map.json"),
+      memoryArtifacts.entityChapterIndex,
+    ),
+    writeJsonArtifact(
+      path.join(root, "retrieval", "semantic-index.json"),
+      memoryArtifacts.semanticIndex,
+    ),
+    writeJsonArtifact(
+      path.join(root, "digests", "active-threads.json"),
+      memoryArtifacts.activeThreadDigest,
+    ),
+  ]);
+}
+
+async function writeRetrievalDebugReport(args: {
+  projectId: string;
+  chapterNumber: number;
+  chapterPlan: ChapterPlan;
+  storyMemories: StoryMemory[];
+  characterStates: CharacterState[];
+  chapterArtifacts: ChapterArtifact[];
+  semanticOverrideHits?: ReturnType<typeof toSemanticRetrievalHits>;
+  writerContextPack: ReturnType<typeof buildContextPack>;
+  reviewerContextPack: ReturnType<typeof buildContextPack>;
+  specializedViews: ReturnType<typeof buildSpecializedReviewerViews>;
+}): Promise<void> {
+  const root = path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    args.projectId,
+    "memory",
+    "retrieval",
+  );
+
+  await writeJsonArtifact(
+    path.join(root, `chapter-${String(args.chapterNumber).padStart(3, "0")}.json`),
+    {
+      chapterNumber: args.chapterNumber,
+      searchIntent: args.chapterPlan.searchIntent ?? null,
+      commercial: args.chapterPlan.commercial ?? null,
+      exactSearchHits: buildExactSearchHits({
+        chapterPlan: args.chapterPlan,
+        storyMemories: args.storyMemories,
+        characterStates: args.characterStates,
+        artifacts: buildMemorySystemArtifacts({
+          storyMemories: args.storyMemories,
+          characterStates: args.characterStates,
+          chapterArtifacts: args.chapterArtifacts,
+        }),
+      }),
+      writerRetrievalSignals: args.writerContextPack.retrievalSignals,
+      reviewerRetrievalSignals: args.reviewerContextPack.retrievalSignals,
+      semanticHits: buildMemoryRetrievalPack({
+        chapterPlan: args.chapterPlan,
+        storyMemories: args.storyMemories,
+        characterStates: args.characterStates,
+        chapterArtifacts: args.chapterArtifacts,
+        semanticOverrideHits: args.semanticOverrideHits,
+      }).semanticHits,
+      relevantLedgerEntries: args.writerContextPack.relevantLedgerEntries,
+      relevantChapterCards: args.writerContextPack.relevantChapterCards,
+      relevantWorldFacts: args.writerContextPack.relevantWorldFacts,
+      resourceCandidates: args.specializedViews.resourceCandidates,
+      relationshipCandidates: args.specializedViews.relationshipCandidates,
+    },
+  );
+}
+
+async function rebuildMemorySystemOutputsForProject(
+  repository: FileProjectRepository,
+  projectId: string,
+  storyMemories?: StoryMemory[],
+  characterStates?: CharacterState[],
+): Promise<void> {
+  const [loadedMemories, loadedCharacters, chapterArtifacts] = await Promise.all([
+    storyMemories ? Promise.resolve(storyMemories) : repository.loadStoryMemories(projectId),
+    characterStates ? Promise.resolve(characterStates) : repository.loadCharacterStates(projectId),
+    loadAllChapterArtifacts(repository, projectId),
+  ]);
+
+  await writeMemorySystemOutputs({
+    projectId,
+    storyMemories: loadedMemories,
+    characterStates: loadedCharacters,
+    chapterArtifacts,
+  });
+}
+
+function retrievalEvalSetPath(projectId: string): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "memory",
+    "eval",
+    "retrieval-eval-set.json",
+  );
+}
+
+const embeddingService = new EmbeddingService();
+
+async function loadEmbeddingCacheForProject(projectId: string): Promise<void> {
+  if (!embeddingService.isPersistentCacheEnabled) {
+    return;
+  }
+
+  const snapshot = await readJsonArtifact<EmbeddingCacheSnapshot>(embeddingCachePath(projectId));
+  embeddingService.loadSnapshot(snapshot);
+}
+
+async function saveEmbeddingCacheForProject(projectId: string): Promise<void> {
+  if (!embeddingService.isPersistentCacheEnabled) {
+    return;
+  }
+
+  const snapshot = embeddingService.exportSnapshot();
+  if (!snapshot) {
+    return;
+  }
+
+  await writeJsonArtifact(embeddingCachePath(projectId), snapshot);
+}
+
+async function resolveSemanticOverrideHits(args: {
+  chapterPlan: ChapterPlan;
+  storyMemories: StoryMemory[];
+  chapterArtifacts: ChapterArtifact[];
+}): Promise<ReturnType<typeof toSemanticRetrievalHits> | undefined> {
+  if (embeddingService.mode !== "openai_compatible") {
+    return undefined;
+  }
+
+  const artifacts = buildMemorySystemArtifacts({
+    storyMemories: args.storyMemories,
+    characterStates: [],
+    chapterArtifacts: args.chapterArtifacts,
+  });
+  const queryText = buildSemanticQueryText(args.chapterPlan);
+  const candidates = [
+    ...args.storyMemories.map((memory) => ({
+      kind: "memory" as const,
+      sourceId: memory.id,
+      label: memory.title,
+      text: buildMemorySemanticText(memory),
+    })),
+    ...artifacts.chapterCards.map((card) => ({
+      kind: "chapter_card" as const,
+      sourceId: card.id,
+      label: card.title,
+      text: buildChapterCardSemanticText(card),
+    })),
+  ];
+  const ranked = await embeddingService.rankCandidates({
+    queryText,
+    candidates,
+    topK: 8,
+    minScore: 0.12,
+  });
+
+  return toSemanticRetrievalHits(ranked);
+}
+
+function retrievalEvalReportPath(projectId: string): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "memory",
+    "eval",
+    "retrieval-eval-report.json",
+  );
+}
+
+function embeddingCachePath(projectId: string): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "memory",
+    "retrieval",
+    "embedding-cache.json",
+  );
+}
+
 export interface V1RunOptions {
   projectId: string;
   mode: "first-n" | "chapter";
   count?: number;
   chapterNumber?: number;
+  withEval?: boolean;
+  strictEval?: boolean;
 }
 
 export interface V1RunResult {
@@ -122,10 +400,12 @@ export interface V1RunResult {
   generatedChapterNumbers: number[];
   artifacts: ChapterArtifact[];
   validationIssues: string[];
+  retrievalEval?: RetrievalEvalRunResult;
 }
 
 interface ProjectBaseState {
   storySetup: StorySetup;
+  genrePayoffPack: GenrePayoffPack;
   storyOutline: StoryOutline;
   arcOutlines: ArcOutline[];
   beatOutlines: BeatOutline[];
@@ -144,6 +424,39 @@ interface InvalidateResult {
   deletedChapterNumbers: number[];
   remainingChapterPlans: number;
   remainingMemories: number;
+}
+
+export interface RetrievalEvalSeedResult {
+  projectId: string;
+  evalSetPath: string;
+  totalCases: number;
+}
+
+export interface RetrievalEvalRunResult {
+  projectId: string;
+  evalSetPath: string;
+  reportPath: string;
+  report: RetrievalEvalReport;
+  regression?: RetrievalEvalRegressionSummary;
+}
+
+export interface RetrievalEvalRegressionSummary {
+  previousPassedCases: number;
+  currentPassedCases: number;
+  previousTotalCases: number;
+  currentTotalCases: number;
+  deltaPassedCases: number;
+  deltaFailedCases: number;
+  regressedChapters: Array<{
+    chapterNumber: number;
+    previousPassedCases: number;
+    currentPassedCases: number;
+  }>;
+  improvedChapters: Array<{
+    chapterNumber: number;
+    previousPassedCases: number;
+    currentPassedCases: number;
+  }>;
 }
 
 function assertChapterPlanningAnchors(args: {
@@ -192,6 +505,188 @@ function uniqueStrings(items: string[], limit: number): string[] {
   }
 
   return result;
+}
+
+function normalizeSearchIntent(args: {
+  planned?: PlannerSearchIntent;
+  requiredCharacterIds: string[];
+  requiredMemoryIds: string[];
+  characterStates: CharacterState[];
+  storyMemories: StoryMemory[];
+}): PlannerSearchIntent {
+  const validLedgerTypes = new Set<MemorySearchLedgerType>([
+    "resource",
+    "promise",
+    "injury",
+    "foreshadow",
+    "relationship",
+  ]);
+  const ledgerTypes = (args.planned?.ledgerTypes ?? []).filter(
+    (item): item is MemorySearchLedgerType => validLedgerTypes.has(item as MemorySearchLedgerType),
+  );
+  const characterIdSet = new Set(args.characterStates.map((character) => character.id));
+  const characterNameMap = new Map(
+    args.characterStates.map((character) => [character.name.trim().toLowerCase(), character.id] as const),
+  );
+  const memoryIdSet = new Set(args.storyMemories.map((memory) => memory.id));
+  const memoryTitleMap = new Map(
+    args.storyMemories.map((memory) => [memory.title.trim().toLowerCase(), memory.id] as const),
+  );
+
+  const normalizedEntityIds: string[] = [];
+  const fallbackExactPhrases: string[] = [];
+  for (const raw of args.planned?.entityIds ?? []) {
+    const normalized = raw.trim();
+    if (!normalized) {
+      continue;
+    }
+    const lowered = normalized.toLowerCase();
+    const parenStripped = normalized.replace(/\s*\(.+?\)\s*$/g, "").trim();
+    const mappedCharacterId =
+      characterIdSet.has(normalized)
+        ? normalized
+        : characterNameMap.get(lowered) ??
+          characterNameMap.get(parenStripped.toLowerCase());
+    if (mappedCharacterId) {
+      normalizedEntityIds.push(mappedCharacterId);
+      continue;
+    }
+    fallbackExactPhrases.push(normalized);
+  }
+
+  const normalizedMemoryIds: string[] = [];
+  for (const raw of args.planned?.memoryIds ?? []) {
+    const normalized = raw.trim();
+    if (!normalized) {
+      continue;
+    }
+    const mappedMemoryId =
+      memoryIdSet.has(normalized)
+        ? normalized
+        : memoryTitleMap.get(normalized.toLowerCase());
+    if (mappedMemoryId) {
+      normalizedMemoryIds.push(mappedMemoryId);
+      continue;
+    }
+    fallbackExactPhrases.push(normalized);
+  }
+
+  return {
+    entityIds: uniqueStrings(
+      [...normalizedEntityIds, ...args.requiredCharacterIds],
+      8,
+    ),
+    memoryIds: uniqueStrings(
+      [...normalizedMemoryIds, ...args.requiredMemoryIds],
+      12,
+    ),
+    ledgerTypes: uniqueStrings(ledgerTypes, 4) as MemorySearchLedgerType[],
+    topicQueries: uniqueStrings(args.planned?.topicQueries ?? [], 6),
+    exactPhrases: uniqueStrings(
+      [...(args.planned?.exactPhrases ?? []), ...fallbackExactPhrases],
+      8,
+    ),
+  };
+}
+
+function normalizeCommercialPlan(args: {
+  planned?: ChapterCommercialPlan;
+  genrePayoffPack: GenrePayoffPack;
+  chapterNumber: number;
+  chapterType?: ChapterPlan["chapterType"];
+  chapterGoal: string;
+  plannedOutcome: string;
+  emotionalGoal: string;
+  currentSituation: string;
+}): ChapterCommercialPlan {
+  const validOpeningModes = new Set<NonNullable<ChapterCommercialPlan["openingMode"]>>([
+    "hard_hook",
+    "daily_abnormal",
+    "relationship_pressure",
+    "aftermath_hook",
+  ]);
+  const validParagraphRhythms = new Set<ChapterCommercialPlan["paragraphRhythm"]>([
+    "tight",
+    "balanced",
+    "slow_burn",
+  ]);
+  const validRewardTypes = new Set<NonNullable<ChapterCommercialPlan["rewardType"]>>([
+    "proof_win",
+    "countermove",
+    "relationship_pull",
+    "rule_reveal",
+    "status_shift",
+  ]);
+  const validRewardTimings = new Set<NonNullable<ChapterCommercialPlan["rewardTiming"]>>([
+    "early",
+    "mid",
+    "late",
+  ]);
+  const chapterTypeKey = (args.chapterType ?? "progress") as keyof GenrePayoffPack["preferredRewardTypes"];
+  const packOpeningModes = args.genrePayoffPack.openingModes;
+  const packRewardTypes = args.genrePayoffPack.preferredRewardTypes[chapterTypeKey] ?? [];
+
+  const fallbackOpeningMode: NonNullable<ChapterCommercialPlan["openingMode"]> =
+    (args.chapterNumber <= 3 ? packOpeningModes[0] : undefined) ??
+    (args.chapterType === "aftermath" && packOpeningModes.includes("aftermath_hook")
+      ? "aftermath_hook"
+      : undefined) ??
+    packOpeningModes[0] ??
+    "daily_abnormal";
+
+  const fallbackParagraphRhythm: ChapterCommercialPlan["paragraphRhythm"] =
+    args.chapterNumber <= 3 ? "tight" : args.chapterType === "aftermath" ? "balanced" : "balanced";
+  const fallbackRewardType: NonNullable<ChapterCommercialPlan["rewardType"]> =
+    (args.chapterNumber === 1 ? packRewardTypes[0] : undefined) ??
+    packRewardTypes[0] ??
+    (args.chapterType === "payoff"
+      ? "proof_win"
+      : args.chapterType === "aftermath"
+        ? "status_shift"
+        : "countermove");
+  const fallbackRewardTiming: NonNullable<ChapterCommercialPlan["rewardTiming"]> =
+    args.chapterType === "setup" ? "mid" : args.chapterType === "payoff" ? "late" : "mid";
+
+  return {
+    openingMode:
+      args.planned?.openingMode && validOpeningModes.has(args.planned.openingMode)
+        ? args.planned.openingMode
+        : fallbackOpeningMode,
+    coreSellPoint:
+      args.planned?.coreSellPoint?.trim() || args.chapterGoal.trim() || args.currentSituation.trim(),
+    visibleProblem:
+      args.planned?.visibleProblem?.trim() ||
+      args.currentSituation.trim() ||
+      args.chapterGoal.trim(),
+    externalTurn:
+      args.planned?.externalTurn?.trim() || args.plannedOutcome.trim() || args.chapterGoal.trim(),
+    microPayoff:
+      args.planned?.microPayoff?.trim() ||
+      `让读者看到${args.plannedOutcome.trim() || args.emotionalGoal.trim() || "局面发生明确变化"}`,
+    endHook:
+      args.planned?.endHook?.trim() ||
+      `把下一步问题钉死：${args.plannedOutcome.trim() || args.chapterGoal.trim()}`,
+    readerPromise:
+      args.planned?.readerPromise?.trim() ||
+      `接下来围绕“${args.chapterGoal.trim() || args.plannedOutcome.trim()}”继续推进`,
+    paragraphRhythm:
+      args.planned?.paragraphRhythm && validParagraphRhythms.has(args.planned.paragraphRhythm)
+        ? args.planned.paragraphRhythm
+        : fallbackParagraphRhythm,
+    rewardType:
+      args.planned?.rewardType && validRewardTypes.has(args.planned.rewardType)
+        ? args.planned.rewardType
+        : fallbackRewardType,
+    rewardTiming:
+      args.planned?.rewardTiming && validRewardTimings.has(args.planned.rewardTiming)
+        ? args.planned.rewardTiming
+        : fallbackRewardTiming,
+    rewardTarget:
+      args.planned?.rewardTarget?.trim() ||
+      args.genrePayoffPack.rewardTargetBias[0] ||
+      args.plannedOutcome.trim() ||
+      args.chapterGoal.trim(),
+  };
 }
 
 function stripGeneratedChapterNotes(notes: string[]): string[] {
@@ -291,6 +786,32 @@ function buildRecentConsequences(
   );
 }
 
+function buildRecentCommercialHistory(
+  chapterPlans: ChapterPlan[],
+  currentChapterNumber: number,
+): string[] {
+  return chapterPlans
+    .filter(
+      (plan) =>
+        typeof plan.chapterNumber === "number" &&
+        plan.chapterNumber < currentChapterNumber &&
+        plan.commercial,
+    )
+    .sort((left, right) => (right.chapterNumber ?? 0) - (left.chapterNumber ?? 0))
+    .slice(0, 3)
+    .map((plan) =>
+      [
+        `chapter=${plan.chapterNumber}`,
+        plan.commercial?.rewardType ? `rewardType=${plan.commercial.rewardType}` : undefined,
+        plan.commercial?.rewardTiming ? `rewardTiming=${plan.commercial.rewardTiming}` : undefined,
+        plan.commercial?.microPayoff ? `microPayoff=${plan.commercial.microPayoff}` : undefined,
+        plan.commercial?.endHook ? `endHook=${plan.commercial.endHook}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    );
+}
+
 function hasBlockingReviewerIssues(args: {
   missing: MissingResourceReviewerResult;
   fact: FactConsistencyReviewerResult;
@@ -340,11 +861,33 @@ function normalizeReviewerResults(args: {
   };
 }
 
+function normalizeCommercialReviewerResult(
+  review: CommercialReviewerResult,
+): CommercialReviewerResult {
+  const seen = new Set<string>();
+  const findings = review.findings
+    .filter((item) => {
+      const key = `${item.issueType}|${item.title}|${item.suggestedFix}`.trim();
+      if (!key || seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 4);
+
+  return {
+    ...review,
+    findings,
+  };
+}
+
 function countReviewerFindingsBySeverity(args: {
   missing: MissingResourceReviewerResult;
   fact: FactConsistencyReviewerResult;
+  commercial?: CommercialReviewerResult;
 }): { high: number; medium: number; low: number } {
-  const allFindings = [...args.fact.findings];
+  const allFindings = [...args.fact.findings, ...(args.commercial?.findings ?? [])];
   return {
     high: allFindings.filter((item) => item.severity === "high").length,
     medium: allFindings.filter((item) => item.severity === "medium").length,
@@ -355,8 +898,9 @@ function countReviewerFindingsBySeverity(args: {
 function buildRewritePlan(args: {
   missing: MissingResourceReviewerResult;
   fact: FactConsistencyReviewerResult;
+  commercial?: CommercialReviewerResult;
 }): {
-  mode: "repair_first" | "hybrid_upgrade" | "quality_boost";
+  mode: "repair_first" | "hybrid_upgrade" | "commercial_tune" | "quality_boost";
   objective: string;
 } {
   const severity = countReviewerFindingsBySeverity(args);
@@ -374,6 +918,14 @@ function buildRewritePlan(args: {
       mode: "hybrid_upgrade",
       objective:
         "Resolve fact and role consistency findings while keeping chapter events and outcomes unchanged.",
+    };
+  }
+
+  if ((args.commercial?.findings.length ?? 0) > 0) {
+    return {
+      mode: "commercial_tune",
+      objective:
+        "Improve hook clarity, concrete trouble visibility, micro-payoff delivery, and end-hook pull without changing chapter facts or outcomes.",
     };
   }
 
@@ -435,6 +987,7 @@ async function ensureBootstrappedProject(
   const themeBible = (await repository.loadThemeBible(projectId)) ?? demoThemeBible;
   const styleBible = (await repository.loadStyleBible(projectId)) ?? demoStyleBible;
   const storySetup = (await repository.loadStorySetup(projectId)) ?? demoStorySetup;
+  const genrePayoffPack = resolveGenrePayoffPack(storySetup.genrePayoffPackId);
   const loadedStoryOutline = await repository.loadStoryOutline(projectId);
   const loadedArcOutlines = await repository.loadArcOutlines(projectId);
   const loadedBeatOutlines = await repository.loadBeatOutlines(projectId);
@@ -464,11 +1017,18 @@ async function ensureBootstrappedProject(
       loadedStoryMemories.length ? deriveFallbackSeedMemories(storyMemories) : demoStoryMemories,
     );
   }
+  await rebuildMemorySystemOutputsForProject(
+    repository,
+    projectId,
+    storyMemories,
+    characterStates,
+  );
 
   logStage("bootstrap", "base files ready");
 
   return {
     storySetup,
+    genrePayoffPack,
     storyOutline,
     arcOutlines,
     beatOutlines,
@@ -544,6 +1104,11 @@ export async function invalidateFromChapter(args: {
 
     await repository.saveChapterPlans(args.projectId, remainingPlans);
     await repository.saveStoryMemories(args.projectId, rebuiltMemories);
+    await rebuildMemorySystemOutputsForProject(
+      repository,
+      args.projectId,
+      rebuiltMemories,
+    );
   } catch (error) {
     // Best-effort rollback to avoid partial invalidation state.
     await repository.saveChapterPlans(args.projectId, previousPlans);
@@ -551,6 +1116,11 @@ export async function invalidateFromChapter(args: {
     for (const item of deletedArtifactsBackup) {
       await repository.saveChapterArtifact(args.projectId, item.artifact);
     }
+    await rebuildMemorySystemOutputsForProject(
+      repository,
+      args.projectId,
+      previousMemories,
+    );
     throw error;
   }
 
@@ -706,6 +1276,172 @@ export async function bootstrapProject(
   };
 }
 
+export async function seedRetrievalEvalSet(args: {
+  projectId: string;
+}): Promise<RetrievalEvalSeedResult> {
+  const repository = new FileProjectRepository();
+  await loadEmbeddingCacheForProject(args.projectId);
+  const [characterStates, currentMemories, chapterArtifacts] = await Promise.all([
+    repository.loadCharacterStates(args.projectId),
+    repository.loadStoryMemories(args.projectId),
+    loadAllChapterArtifacts(repository, args.projectId),
+  ]);
+  const seedStoryMemories = await loadSeedStoryMemories(
+    repository,
+    args.projectId,
+    currentMemories,
+  );
+  const chapterViews = await buildRetrievalEvalChapterViews({
+    chapterArtifacts,
+    characterStates,
+    seedStoryMemories,
+    resolveSemanticHits: async (input) =>
+      resolveSemanticOverrideHits({
+        chapterPlan: input.chapterPlan,
+        storyMemories: input.storyMemories,
+        chapterArtifacts: chapterArtifacts.filter(
+          (artifact) => artifact.chapterNumber < (input.chapterPlan.chapterNumber ?? Number.MAX_SAFE_INTEGER),
+        ),
+      }),
+  });
+  const rawEvalSet = buildRetrievalEvalSeed({
+    projectId: args.projectId,
+    chapterArtifacts,
+  });
+  const evalSet = normalizeRetrievalEvalSetAgainstChapterViews({
+    evalSet: rawEvalSet,
+    chapterViews,
+  });
+  const evalSetPath = retrievalEvalSetPath(args.projectId);
+  await writeJsonArtifact(evalSetPath, evalSet);
+  await saveEmbeddingCacheForProject(args.projectId);
+
+  return {
+    projectId: args.projectId,
+    evalSetPath,
+    totalCases: evalSet.cases.length,
+  };
+}
+
+export async function runRetrievalEval(args: {
+  projectId: string;
+}): Promise<RetrievalEvalRunResult> {
+  const repository = new FileProjectRepository();
+  await loadEmbeddingCacheForProject(args.projectId);
+  const [characterStates, currentMemories, chapterArtifacts] = await Promise.all([
+    repository.loadCharacterStates(args.projectId),
+    repository.loadStoryMemories(args.projectId),
+    loadAllChapterArtifacts(repository, args.projectId),
+  ]);
+
+  const seedStoryMemories = await loadSeedStoryMemories(
+    repository,
+    args.projectId,
+    currentMemories,
+  );
+  await writeMemorySystemOutputs({
+    projectId: args.projectId,
+    storyMemories: currentMemories,
+    characterStates,
+    chapterArtifacts,
+  });
+  const evalSetPath = retrievalEvalSetPath(args.projectId);
+  const reportPath = retrievalEvalReportPath(args.projectId);
+  const previousReport = await readJsonArtifact<RetrievalEvalReport>(reportPath);
+  let evalSet = await readJsonArtifact<RetrievalEvalSet>(evalSetPath);
+
+  if (!evalSet) {
+    const seeded = buildRetrievalEvalSeed({
+      projectId: args.projectId,
+      chapterArtifacts,
+    });
+    evalSet = seeded;
+  }
+
+  const chapterViews = await buildRetrievalEvalChapterViews({
+    chapterArtifacts,
+    characterStates,
+    seedStoryMemories,
+    resolveSemanticHits: async (input) =>
+      resolveSemanticOverrideHits({
+        chapterPlan: input.chapterPlan,
+        storyMemories: input.storyMemories,
+        chapterArtifacts: chapterArtifacts.filter(
+          (artifact) => artifact.chapterNumber < (input.chapterPlan.chapterNumber ?? Number.MAX_SAFE_INTEGER),
+        ),
+      }),
+  });
+  evalSet = normalizeRetrievalEvalSetAgainstChapterViews({
+    evalSet,
+    chapterViews,
+  });
+  await writeJsonArtifact(evalSetPath, evalSet);
+  const report = evaluateRetrievalCases({
+    projectId: args.projectId,
+    evalSet,
+    chapterViews,
+  });
+  await writeJsonArtifact(reportPath, report);
+  await saveEmbeddingCacheForProject(args.projectId);
+
+  return {
+    projectId: args.projectId,
+    evalSetPath,
+    reportPath,
+    report,
+    regression: compareRetrievalEvalReports(previousReport, report),
+  };
+}
+
+function compareRetrievalEvalReports(
+  previousReport: RetrievalEvalReport | null,
+  currentReport: RetrievalEvalReport,
+): RetrievalEvalRegressionSummary | undefined {
+  if (!previousReport) {
+    return undefined;
+  }
+
+  const previousChapterMap = new Map(
+    previousReport.chapterSummaries.map((item) => [item.chapterNumber, item]),
+  );
+  const regressedChapters: RetrievalEvalRegressionSummary["regressedChapters"] = [];
+  const improvedChapters: RetrievalEvalRegressionSummary["improvedChapters"] = [];
+
+  for (const current of currentReport.chapterSummaries) {
+    const previous = previousChapterMap.get(current.chapterNumber);
+    if (!previous) {
+      continue;
+    }
+
+    if (current.passedCases < previous.passedCases) {
+      regressedChapters.push({
+        chapterNumber: current.chapterNumber,
+        previousPassedCases: previous.passedCases,
+        currentPassedCases: current.passedCases,
+      });
+    } else if (current.passedCases > previous.passedCases) {
+      improvedChapters.push({
+        chapterNumber: current.chapterNumber,
+        previousPassedCases: previous.passedCases,
+        currentPassedCases: current.passedCases,
+      });
+    }
+  }
+
+  return {
+    previousPassedCases: previousReport.passedCases,
+    currentPassedCases: currentReport.passedCases,
+    previousTotalCases: previousReport.totalCases,
+    currentTotalCases: currentReport.totalCases,
+    deltaPassedCases: currentReport.passedCases - previousReport.passedCases,
+    deltaFailedCases:
+      (currentReport.totalCases - currentReport.passedCases) -
+      (previousReport.totalCases - previousReport.passedCases),
+    regressedChapters,
+    improvedChapters,
+  };
+}
+
 async function generateChapterArtifact(args: {
   service: LlmService;
   base: ProjectBaseState;
@@ -714,6 +1450,7 @@ async function generateChapterArtifact(args: {
   chapterNumber: number;
   currentSituation: string;
   recentConsequences: string[];
+  availableChapterArtifacts: ChapterArtifact[];
 }): Promise<{
   artifact: ChapterArtifact;
   updatedStoryMemories: StoryMemory[];
@@ -738,6 +1475,7 @@ async function generateChapterArtifact(args: {
     authorPack: args.base.authorPacks.planner,
     themeBible: args.base.themeBible,
     styleBible: args.base.styleBible,
+    genrePayoffPack: args.base.genrePayoffPack,
     storyOutline: args.base.storyOutline,
     arcOutline: currentArc,
     beatOutline: currentBeat,
@@ -756,6 +1494,10 @@ async function generateChapterArtifact(args: {
       .map((memory) => memory.id)
       .slice(0, 12),
     recentConsequences: args.recentConsequences,
+    recentCommercialHistory: buildRecentCommercialHistory(
+      args.base.chapterPlans,
+      args.chapterNumber,
+    ),
   });
 
   logStage("chapter", `llm: planner chapter=${args.chapterNumber}`);
@@ -774,19 +1516,38 @@ async function generateChapterArtifact(args: {
   });
 
   const planned = plannerResult.object.chapterPlan;
+  const requiredCharacters = uniqueStrings(
+    [...planned.requiredCharacters, ...(currentBeat?.requiredCharacters ?? [])],
+    8,
+  );
+  const requiredMemories = uniqueStrings(
+    [...planned.requiredMemories, ...(currentBeat?.requiredMemories ?? [])],
+    12,
+  );
   const chapterPlan = {
     ...planned,
     chapterNumber: args.chapterNumber,
     arcId: currentArc?.id ?? planned.arcId ?? "arc-1",
     beatId: currentBeat?.id ?? planned.beatId,
-    requiredCharacters: uniqueStrings(
-      [...planned.requiredCharacters, ...(currentBeat?.requiredCharacters ?? [])],
-      8,
-    ),
-    requiredMemories: uniqueStrings(
-      [...planned.requiredMemories, ...(currentBeat?.requiredMemories ?? [])],
-      12,
-    ),
+    requiredCharacters,
+    requiredMemories,
+    searchIntent: normalizeSearchIntent({
+      planned: planned.searchIntent,
+      requiredCharacterIds: requiredCharacters,
+      requiredMemoryIds: requiredMemories,
+      characterStates: args.base.characterStates,
+      storyMemories: args.base.storyMemories,
+    }),
+    commercial: normalizeCommercialPlan({
+      planned: planned.commercial,
+      genrePayoffPack: args.base.genrePayoffPack,
+      chapterNumber: args.chapterNumber,
+      chapterType: planned.chapterType,
+      chapterGoal: planned.chapterGoal,
+      plannedOutcome: planned.plannedOutcome,
+      emotionalGoal: planned.emotionalGoal,
+      currentSituation: args.currentSituation,
+    }),
     beatConstraints: uniqueStrings([...(currentBeat?.constraints ?? [])], 6),
     mustHitConflicts: uniqueStrings(
       [
@@ -805,6 +1566,11 @@ async function generateChapterArtifact(args: {
       currentBeat,
     }),
   };
+  const semanticOverrideHits = await resolveSemanticOverrideHits({
+    chapterPlan,
+    storyMemories: args.base.storyMemories,
+    chapterArtifacts: args.availableChapterArtifacts,
+  });
 
   logStage("chapter", `build context chapter=${args.chapterNumber}`);
   const writerContextPack = buildContextPack({
@@ -812,9 +1578,12 @@ async function generateChapterArtifact(args: {
     authorPack: args.base.authorPacks.writer,
     themeBible: args.base.themeBible,
     styleBible: args.base.styleBible,
+    genrePayoffPack: args.base.genrePayoffPack,
     chapterPlan,
     arcOutline: currentArc,
     beatOutline: currentBeat,
+    chapterArtifacts: args.availableChapterArtifacts,
+    semanticOverrideHits,
     characterStates: args.base.characterStates,
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
@@ -824,12 +1593,21 @@ async function generateChapterArtifact(args: {
     authorPack: args.base.authorPacks.reviewer,
     themeBible: args.base.themeBible,
     styleBible: args.base.styleBible,
+    genrePayoffPack: args.base.genrePayoffPack,
     chapterPlan,
     arcOutline: currentArc,
     beatOutline: currentBeat,
+    chapterArtifacts: args.availableChapterArtifacts,
+    semanticOverrideHits,
     characterStates: args.base.characterStates,
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
+  });
+  const specializedReviewerViews = buildSpecializedReviewerViews({
+    chapterPlan,
+    storyMemories: args.base.storyMemories,
+    characterStates: args.base.characterStates,
+    chapterArtifacts: args.availableChapterArtifacts,
   });
 
   logStage("chapter", `llm: writer chapter=${args.chapterNumber}`);
@@ -867,6 +1645,7 @@ async function generateChapterArtifact(args: {
     contextPack: reviewerContextPack,
     draft: writerResult.object.draft,
     storyMemories: args.base.storyMemories,
+    resourceCandidates: specializedReviewerViews.resourceCandidates,
   });
   await writePromptDebug({
     projectId: args.projectId,
@@ -888,6 +1667,7 @@ async function generateChapterArtifact(args: {
     draft: writerResult.object.draft,
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
+    relationshipCandidates: specializedReviewerViews.relationshipCandidates,
   });
   await writePromptDebug({
     projectId: args.projectId,
@@ -903,15 +1683,38 @@ async function generateChapterArtifact(args: {
     maxTokens: 1800,
   });
 
+  logStage("chapter", `llm: review_commercial chapter=${args.chapterNumber}`);
+  const commercialReviewMessages = buildCommercialReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: writerResult.object.draft,
+  });
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_commercial`,
+    messages: commercialReviewMessages,
+  });
+  const commercialReview = await args.service.generateObjectForTask({
+    task: "review_commercial",
+    messages: commercialReviewMessages,
+    schema: commercialReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1600,
+  });
+
   const initialNormalized = normalizeReviewerResults({
     missing: missingResourceReview.object as MissingResourceReviewerResult,
     fact: factConsistencyReview.object as FactConsistencyReviewerResult,
   });
   const initialMissing = initialNormalized.missing;
   const initialFact = initialNormalized.fact;
+  const initialCommercial = normalizeCommercialReviewerResult(
+    commercialReview.object as CommercialReviewerResult,
+  );
   const rewritePlan = buildRewritePlan({
     missing: initialMissing,
     fact: initialFact,
+    commercial: initialCommercial,
   });
   const originalDraft = writerResult.object.draft;
   const originalTitle = writerResult.object.title;
@@ -919,8 +1722,10 @@ async function generateChapterArtifact(args: {
   let rewrittenTitle = writerResult.object.title;
   let activeMissing = initialMissing;
   let activeFact = initialFact;
-  const shouldRewriteForConsistencyNow = shouldRewriteForConsistency(activeFact);
-  if (shouldRewriteForConsistencyNow) {
+  let activeCommercial = initialCommercial;
+  const shouldRewriteNow =
+    shouldRewriteForConsistency(activeFact) || rewritePlan.mode === "commercial_tune";
+  if (shouldRewriteNow) {
     const rewriteTemp = rewritePlan.mode === "repair_first" ? 0.35 : 0.5;
     logStage("chapter", `llm: rewriter chapter=${args.chapterNumber} mode=${rewritePlan.mode} pass=1`);
     const rewriterMessages = buildRewriterMessages({
@@ -930,6 +1735,7 @@ async function generateChapterArtifact(args: {
       objective: rewritePlan.objective,
       missingResourceReview: activeMissing,
       factConsistencyReview: activeFact,
+      commercialReview: activeCommercial,
     });
     await writePromptDebug({
       projectId: args.projectId,
@@ -957,6 +1763,7 @@ async function generateChapterArtifact(args: {
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
     storyMemories: args.base.storyMemories,
+    resourceCandidates: specializedReviewerViews.resourceCandidates,
   });
   await writePromptDebug({
     projectId: args.projectId,
@@ -978,6 +1785,7 @@ async function generateChapterArtifact(args: {
     draft: rewrittenDraft,
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
+    relationshipCandidates: specializedReviewerViews.relationshipCandidates,
   });
   await writePromptDebug({
     projectId: args.projectId,
@@ -993,12 +1801,34 @@ async function generateChapterArtifact(args: {
     maxTokens: 1800,
   });
 
+  logStage("chapter", `llm: review_commercial_final chapter=${args.chapterNumber} pass=1`);
+  const commercialFinalMessages = buildCommercialReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: rewrittenDraft,
+  });
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_commercial_final`,
+    messages: commercialFinalMessages,
+  });
+  const commercialReviewFinal = await args.service.generateObjectForTask({
+    task: "review_commercial",
+    messages: commercialFinalMessages,
+    schema: commercialReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1600,
+  });
+
   const normalizedFinal = normalizeReviewerResults({
     missing: missingResourceReviewFinal.object as MissingResourceReviewerResult,
     fact: factConsistencyReviewFinal.object as FactConsistencyReviewerResult,
   });
   activeMissing = normalizedFinal.missing;
   activeFact = normalizedFinal.fact;
+  activeCommercial = normalizeCommercialReviewerResult(
+    commercialReviewFinal.object as CommercialReviewerResult,
+  );
 
   if (
     rewritePlan.mode === "quality_boost" &&
@@ -1008,6 +1838,7 @@ async function generateChapterArtifact(args: {
     rewrittenTitle = originalTitle;
     activeMissing = initialMissing;
     activeFact = initialFact;
+    activeCommercial = initialCommercial;
   }
 
   logStage("chapter", `llm: memory_updater chapter=${args.chapterNumber}`);
@@ -1050,6 +1881,7 @@ async function generateChapterArtifact(args: {
     },
     missingResourceReview: activeMissing,
     factConsistencyReview: activeFact,
+    commercialReview: activeCommercial,
     memoryUpdate: memoryUpdate.object as MemoryUpdaterResult,
     generatedAt: new Date().toISOString(),
   };
@@ -1058,6 +1890,24 @@ async function generateChapterArtifact(args: {
   await args.repository.saveChapterPlans(args.projectId, updatedChapterPlans);
   await args.repository.saveStoryMemories(args.projectId, updatedStoryMemories);
   await args.repository.saveChapterArtifact(args.projectId, artifact);
+  await writeRetrievalDebugReport({
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    chapterPlan,
+    storyMemories: updatedStoryMemories,
+    characterStates: args.base.characterStates,
+    chapterArtifacts: [...args.availableChapterArtifacts, artifact],
+    semanticOverrideHits,
+    writerContextPack,
+    reviewerContextPack,
+    specializedViews: specializedReviewerViews,
+  });
+  await writeMemorySystemOutputs({
+    projectId: args.projectId,
+    storyMemories: updatedStoryMemories,
+    characterStates: args.base.characterStates,
+    chapterArtifacts: [...args.availableChapterArtifacts, artifact],
+  });
 
   logStage("chapter", `done chapter=${args.chapterNumber}`);
   return {
@@ -1086,6 +1936,7 @@ export async function runV1(options: V1RunOptions): Promise<V1RunResult> {
   logStage("run", `start mode=${options.mode} project=${options.projectId}`);
   const service = new LlmService();
   const repository = new FileProjectRepository();
+  await loadEmbeddingCacheForProject(options.projectId);
   const targetChapter = parseTargetChapter(options);
 
   const base = await ensureBootstrappedProject(service, repository, options.projectId);
@@ -1101,12 +1952,25 @@ export async function runV1(options: V1RunOptions): Promise<V1RunResult> {
   }
 
   if (maxExistingChapter >= targetChapter) {
+    const retrievalEval = options.withEval
+      ? await runRetrievalEval({ projectId: options.projectId })
+      : undefined;
+    if (
+      options.strictEval &&
+      retrievalEval &&
+      retrievalEval.report.passedCases < retrievalEval.report.totalCases
+    ) {
+      throw new Error(
+        `Retrieval eval failed under --strict-eval: ${retrievalEval.report.passedCases}/${retrievalEval.report.totalCases} passed.`,
+      );
+    }
     return {
       projectId: options.projectId,
       targetChapter,
       generatedChapterNumbers: [],
       artifacts: existingArtifacts,
       validationIssues: base.validationIssues,
+      retrievalEval,
     };
   }
 
@@ -1128,6 +1992,7 @@ export async function runV1(options: V1RunOptions): Promise<V1RunResult> {
       chapterNumber,
       currentSituation,
       recentConsequences,
+      availableChapterArtifacts: [...existingArtifacts, ...generatedArtifacts],
       base: {
         ...base,
         storyMemories,
@@ -1146,12 +2011,26 @@ export async function runV1(options: V1RunOptions): Promise<V1RunResult> {
   }
 
   logStage("run", "completed");
+  const retrievalEval = options.withEval
+    ? await runRetrievalEval({ projectId: options.projectId })
+    : undefined;
+  if (
+    options.strictEval &&
+    retrievalEval &&
+    retrievalEval.report.passedCases < retrievalEval.report.totalCases
+  ) {
+    throw new Error(
+      `Retrieval eval failed under --strict-eval: ${retrievalEval.report.passedCases}/${retrievalEval.report.totalCases} passed.`,
+    );
+  }
+  await saveEmbeddingCacheForProject(options.projectId);
   return {
     projectId: options.projectId,
     targetChapter,
     generatedChapterNumbers: generatedArtifacts.map((artifact) => artifact.chapterNumber),
     artifacts: generatedArtifacts,
     validationIssues: base.validationIssues,
+    retrievalEval,
   };
 }
 
@@ -1186,6 +2065,37 @@ export function formatV1RunResult(result: V1RunResult): string {
     }
   }
 
+  if (result.retrievalEval) {
+    lines.push("");
+    lines.push("Retrieval eval:");
+    lines.push(
+      `Passed: ${result.retrievalEval.report.passedCases}/${result.retrievalEval.report.totalCases}`,
+    );
+    lines.push(`Skipped: ${result.retrievalEval.report.skippedCases}`);
+    if (result.retrievalEval.regression) {
+      lines.push(
+        `Delta passed: ${formatSignedNumber(result.retrievalEval.regression.deltaPassedCases)}`,
+      );
+      lines.push(
+        `Delta failed: ${formatSignedNumber(result.retrievalEval.regression.deltaFailedCases)}`,
+      );
+      if (result.retrievalEval.regression.regressedChapters.length > 0) {
+        lines.push(
+          `Regressed chapters: ${result.retrievalEval.regression.regressedChapters
+            .map((item) => `ch${item.chapterNumber} ${item.previousPassedCases}->${item.currentPassedCases}`)
+            .join(", ")}`,
+        );
+      }
+      if (result.retrievalEval.regression.improvedChapters.length > 0) {
+        lines.push(
+          `Improved chapters: ${result.retrievalEval.regression.improvedChapters
+            .map((item) => `ch${item.chapterNumber} ${item.previousPassedCases}->${item.currentPassedCases}`)
+            .join(", ")}`,
+        );
+      }
+    }
+  }
+
   return lines.join("\n");
 }
 
@@ -1197,6 +2107,67 @@ export function formatInvalidateResult(result: InvalidateResult): string {
     `Remaining chapter plans: ${result.remainingChapterPlans}`,
     `Remaining memories: ${result.remainingMemories}`,
   ].join("\n");
+}
+
+export function formatRetrievalEvalSeedResult(result: RetrievalEvalSeedResult): string {
+  return [
+    `Project: ${result.projectId}`,
+    `Eval set path: ${result.evalSetPath}`,
+    `Cases: ${result.totalCases}`,
+  ].join("\n");
+}
+
+export function formatRetrievalEvalRunResult(result: RetrievalEvalRunResult): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Eval set path: ${result.evalSetPath}`);
+  lines.push(`Report path: ${result.reportPath}`);
+  lines.push(`Passed: ${result.report.passedCases}/${result.report.totalCases}`);
+  lines.push(`Skipped: ${result.report.skippedCases}`);
+  if (result.regression) {
+    lines.push(`Delta passed: ${formatSignedNumber(result.regression.deltaPassedCases)}`);
+    lines.push(`Delta failed: ${formatSignedNumber(result.regression.deltaFailedCases)}`);
+    if (result.regression.regressedChapters.length > 0) {
+      lines.push(
+        `Regressed chapters: ${result.regression.regressedChapters
+          .map((item) => `ch${item.chapterNumber} ${item.previousPassedCases}->${item.currentPassedCases}`)
+          .join(", ")}`,
+      );
+    }
+    if (result.regression.improvedChapters.length > 0) {
+      lines.push(
+        `Improved chapters: ${result.regression.improvedChapters
+          .map((item) => `ch${item.chapterNumber} ${item.previousPassedCases}->${item.currentPassedCases}`)
+          .join(", ")}`,
+      );
+    }
+  }
+
+  for (const summary of result.report.chapterSummaries.slice(0, 12)) {
+    lines.push(
+      `Chapter ${summary.chapterNumber}: ${summary.passedCases}/${summary.totalCases} passed`,
+    );
+  }
+
+  const failed = result.report.caseResults.filter((item) => !item.passed).slice(0, 8);
+  if (failed.length > 0) {
+    lines.push("");
+    lines.push("Failed cases:");
+    for (const item of failed) {
+      lines.push(
+        `- ch${item.chapterNumber} ${item.caseType} ${item.expectedValue} | evidence=${item.evidence.join(" | ") || "none"}`,
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
+function formatSignedNumber(value: number): string {
+  if (value > 0) {
+    return `+${value}`;
+  }
+  return String(value);
 }
 
 export const defaultDemoProjectId = "demo-project";

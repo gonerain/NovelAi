@@ -4,6 +4,7 @@ import type {
   BeatOutline,
   ChapterPlan,
   EntityId,
+  GenrePayoffPack,
   StoryOutline,
   StyleBible,
   ThemeBible,
@@ -22,9 +23,11 @@ export interface PlannerInput {
   premise: string;
   currentArcGoal: string;
   currentSituation: string;
+  genrePayoffPack?: GenrePayoffPack;
   activeCharacterIds: EntityId[];
   candidateMemoryIds: EntityId[];
   recentConsequences: string[];
+  recentCommercialHistory?: string[];
 }
 
 export interface PlannerResult {

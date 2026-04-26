@@ -1,10 +1,18 @@
 import type { TaskAuthorPack } from "./author-profile-packs.js";
+import { buildMemoryRetrievalPack } from "./memory-system.js";
+import type {
+  ContextChapterCardSnapshot,
+  ContextLedgerSnapshot,
+  MemoryChapterArtifactSnapshot,
+  SemanticRetrievalHit,
+} from "./memory-system.js";
 import type {
   ArcOutline,
   BeatOutline,
   ChapterPlan,
   CharacterState,
   EntityId,
+  GenrePayoffPack,
   StoryMemory,
   StyleBible,
   ThemeBible,
@@ -17,8 +25,11 @@ export interface ContextBuilderInput {
   themeBible: ThemeBible;
   styleBible: StyleBible;
   chapterPlan: ChapterPlan;
+  genrePayoffPack?: GenrePayoffPack;
   arcOutline?: ArcOutline;
   beatOutline?: BeatOutline;
+  chapterArtifacts?: MemoryChapterArtifactSnapshot[];
+  semanticOverrideHits?: SemanticRetrievalHit[];
   characterStates: CharacterState[];
   storyMemories: StoryMemory[];
   worldFacts: WorldFact[];
@@ -68,6 +79,11 @@ export interface ContextPack {
     sellingPoint?: string;
     hook?: string;
     payoff?: string;
+    genrePackId?: string;
+    genrePackSummary?: string;
+    genreHookBias: string[];
+    genreRewardBias: string[];
+    genreAvoidPatterns: string[];
     powerPatterns: string[];
     payoffPatterns: string[];
   };
@@ -79,11 +95,27 @@ export interface ContextPack {
     sceneType: string;
     sceneTags: string[];
   };
+  commercialSignals?: {
+    openingMode?: string;
+    coreSellPoint?: string;
+    visibleProblem?: string;
+    externalTurn?: string;
+    microPayoff?: string;
+    endHook?: string;
+    readerPromise?: string;
+    paragraphRhythm?: string;
+    rewardType?: string;
+    rewardTiming?: string;
+    rewardTarget?: string;
+  };
   activeCharacters: ContextCharacterSnapshot[];
   relevantMemories: ContextMemorySnapshot[];
+  relevantLedgerEntries: ContextLedgerSnapshot[];
+  relevantChapterCards: ContextChapterCardSnapshot[];
   relevantWorldFacts: ContextWorldFactSnapshot[];
   arcSignals: string[];
   chapterSignals: string[];
+  retrievalSignals: string[];
 }
 
 function uniqueTrimmed(items: string[], limit: number): string[] {
@@ -134,6 +166,8 @@ function buildTriggerKeywords(chapterPlan: ChapterPlan): string[] {
       chapterPlan.plannedOutcome,
       ...chapterPlan.sceneTags,
       ...chapterPlan.mustHitConflicts,
+      ...(chapterPlan.searchIntent?.topicQueries ?? []),
+      ...(chapterPlan.searchIntent?.exactPhrases ?? []),
     ],
     20,
   ).map((item) => item.toLowerCase());
@@ -143,11 +177,18 @@ function memoryScore(
   memory: StoryMemory,
   chapterPlan: ChapterPlan,
   triggerKeywords: string[],
+  semanticMemoryIds?: Set<string>,
 ): number {
   let score = 0;
+  const exactTerms = (chapterPlan.searchIntent?.exactPhrases ?? []).map((item) =>
+    item.trim().toLowerCase(),
+  );
 
   if (chapterPlan.requiredMemories.includes(memory.id)) {
     score += 100;
+  }
+  if (chapterPlan.searchIntent?.memoryIds.includes(memory.id)) {
+    score += 50;
   }
 
   score += priorityWeight(memory.priority) * 10;
@@ -164,6 +205,20 @@ function memoryScore(
     chapterPlan.requiredCharacters.includes(characterId),
   ).length;
   score += characterMatches * 8;
+  const searchEntityMatches = memory.relatedCharacterIds.filter((characterId) =>
+    chapterPlan.searchIntent?.entityIds.includes(characterId),
+  ).length;
+  score += searchEntityMatches * 6;
+  if (
+    exactTerms.some((term) =>
+      [memory.id, memory.title, memory.summary].some((value) => value.toLowerCase().includes(term)),
+    )
+  ) {
+    score += 40;
+  }
+  if (semanticMemoryIds?.has(memory.id)) {
+    score += 34;
+  }
 
   if (memory.status === "active" || memory.status === "triggered") {
     score += 5;
@@ -178,15 +233,25 @@ function worldFactScore(
   triggerKeywords: string[],
 ): number {
   let score = 0;
+  const exactTerms = (chapterPlan.searchIntent?.exactPhrases ?? []).map((item) =>
+    item.trim().toLowerCase(),
+  );
 
   const characterMatches = fact.relatedCharacterIds.filter((characterId) =>
     chapterPlan.requiredCharacters.includes(characterId),
   ).length;
   score += characterMatches * 10;
+  const searchEntityMatches = fact.relatedCharacterIds.filter((characterId) =>
+    chapterPlan.searchIntent?.entityIds.includes(characterId),
+  ).length;
+  score += searchEntityMatches * 8;
 
   const haystack = `${fact.title} ${fact.description} ${fact.category}`.toLowerCase();
   const keywordMatches = triggerKeywords.filter((keyword) => haystack.includes(keyword)).length;
   score += keywordMatches * 6;
+  if (exactTerms.some((term) => haystack.includes(term))) {
+    score += 24;
+  }
 
   if (fact.scope === "local" || fact.scope === "character_specific") {
     score += 3;
@@ -201,6 +266,18 @@ function worldFactScore(
 
 export function buildContextPack(input: ContextBuilderInput): ContextPack {
   const triggerKeywords = buildTriggerKeywords(input.chapterPlan);
+  const retrievalPack = buildMemoryRetrievalPack({
+    chapterPlan: input.chapterPlan,
+    storyMemories: input.storyMemories,
+    characterStates: input.characterStates,
+    chapterArtifacts: input.chapterArtifacts ?? [],
+    semanticOverrideHits: input.semanticOverrideHits,
+  });
+  const semanticMemoryIds = new Set(
+    retrievalPack.semanticHits
+      .filter((item) => item.kind === "memory")
+      .map((item) => item.sourceId),
+  );
 
   const activeCharacters = input.characterStates
     .filter((character) => input.chapterPlan.requiredCharacters.includes(character.id))
@@ -223,7 +300,7 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
   const relevantMemories = input.storyMemories
     .map((memory) => ({
       memory,
-      score: memoryScore(memory, input.chapterPlan, triggerKeywords),
+      score: memoryScore(memory, input.chapterPlan, triggerKeywords, semanticMemoryIds),
     }))
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score)
@@ -273,6 +350,15 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       `Chapter goal: ${input.chapterPlan.chapterGoal}`,
       `Emotional goal: ${input.chapterPlan.emotionalGoal}`,
       `Planned outcome: ${input.chapterPlan.plannedOutcome}`,
+      input.chapterPlan.commercial?.coreSellPoint
+        ? `Commercial sell point: ${input.chapterPlan.commercial.coreSellPoint}`
+        : "",
+      input.chapterPlan.commercial?.visibleProblem
+        ? `Visible problem: ${input.chapterPlan.commercial.visibleProblem}`
+        : "",
+      input.chapterPlan.commercial?.readerPromise
+        ? `Reader promise: ${input.chapterPlan.commercial.readerPromise}`
+        : "",
     ],
     10,
   );
@@ -324,6 +410,11 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       sellingPoint: input.arcOutline?.arcSellingPoint,
       hook: input.arcOutline?.arcHook,
       payoff: input.arcOutline?.arcPayoff,
+      genrePackId: input.genrePayoffPack?.id,
+      genrePackSummary: input.genrePayoffPack?.summary,
+      genreHookBias: uniqueTrimmed(input.genrePayoffPack?.hookBias ?? [], 3),
+      genreRewardBias: uniqueTrimmed(input.genrePayoffPack?.microPayoffBias ?? [], 3),
+      genreAvoidPatterns: uniqueTrimmed(input.genrePayoffPack?.avoidPatterns ?? [], 3),
       powerPatterns: uniqueTrimmed(input.arcOutline?.primaryPowerPatternIds ?? [], 3),
       payoffPatterns: uniqueTrimmed(
         [
@@ -342,10 +433,28 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       sceneType: input.chapterPlan.sceneType,
       sceneTags: input.chapterPlan.sceneTags.slice(0, 5),
     },
+    commercialSignals: input.chapterPlan.commercial
+      ? {
+          openingMode: input.chapterPlan.commercial.openingMode,
+          coreSellPoint: input.chapterPlan.commercial.coreSellPoint,
+          visibleProblem: input.chapterPlan.commercial.visibleProblem,
+          externalTurn: input.chapterPlan.commercial.externalTurn,
+          microPayoff: input.chapterPlan.commercial.microPayoff,
+          endHook: input.chapterPlan.commercial.endHook,
+          readerPromise: input.chapterPlan.commercial.readerPromise,
+          paragraphRhythm: input.chapterPlan.commercial.paragraphRhythm,
+          rewardType: input.chapterPlan.commercial.rewardType,
+          rewardTiming: input.chapterPlan.commercial.rewardTiming,
+          rewardTarget: input.chapterPlan.commercial.rewardTarget,
+        }
+      : undefined,
     activeCharacters,
     relevantMemories,
+    relevantLedgerEntries: retrievalPack.relevantLedgerEntries,
+    relevantChapterCards: retrievalPack.relevantChapterCards,
     relevantWorldFacts,
     arcSignals,
     chapterSignals,
+    retrievalSignals: retrievalPack.retrievalSignals,
   };
 }

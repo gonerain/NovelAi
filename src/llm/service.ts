@@ -51,6 +51,8 @@ function isRetryableError(error: unknown): boolean {
 
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   return (
+    message.includes("invalid structured json output") ||
+    message.includes("empty content") ||
     message.includes("timeout") ||
     message.includes("timed out") ||
     message.includes("econnreset") ||

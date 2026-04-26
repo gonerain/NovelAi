@@ -90,6 +90,7 @@ export const demoStorySetup: StorySetup = {
   openingSituation:
     "C市已连续下雨二十天。雨璃维持着大学、打工与照顾母亲的平静日常，却在甜品店里第一次与X局调查员诺兰、玲擦肩。",
   defaultActiveCharacterIds: ["yuli", "qingxin", "nolan"],
+  genrePayoffPackId: "female_relationship_v1",
   storyOutlineId: "story-outline-demo",
   currentArcId: "arc-1",
 };

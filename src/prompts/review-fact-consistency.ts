@@ -5,7 +5,11 @@ import type {
 import type { ChatMessage } from "../llm/types.js";
 
 function selectRelevantFacts(input: FactConsistencyReviewerInput) {
-  const visibleMemoryIds = new Set(input.contextPack.relevantMemories.map((memory) => memory.id));
+  const visibleMemoryIds = new Set([
+    ...input.contextPack.relevantMemories.map((memory) => memory.id),
+    ...input.contextPack.relevantLedgerEntries.flatMap((entry) => entry.sourceMemoryIds),
+    ...input.contextPack.relevantChapterCards.flatMap((card) => card.memoryIds),
+  ]);
   const visibleFactIds = new Set(input.contextPack.relevantWorldFacts.map((fact) => fact.id));
 
   return {
@@ -60,7 +64,11 @@ export function buildFactConsistencyReviewMessages(
         `Scene tags: ${input.contextPack.chapterObjective.sceneTags.join(" | ")}`,
         `Must rules: ${input.contextPack.mustRules.join(" | ")}`,
         `Reviewer checks: ${input.contextPack.taskRules.join(" | ")}`,
+        `Retrieval signals: ${input.contextPack.retrievalSignals.join(" | ")}`,
         `Active characters:\n${JSON.stringify(input.contextPack.activeCharacters, null, 2)}`,
+        `Relationship candidates:\n${JSON.stringify(input.relationshipCandidates ?? [], null, 2)}`,
+        `Relevant ledger entries:\n${JSON.stringify(input.contextPack.relevantLedgerEntries, null, 2)}`,
+        `Recent chapter cards:\n${JSON.stringify(input.contextPack.relevantChapterCards, null, 2)}`,
         `Relevant memory facts:\n${JSON.stringify(relevant.memories, null, 2)}`,
         `Relevant world facts:\n${JSON.stringify(relevant.facts, null, 2)}`,
         `Draft:\n${input.draft}`,

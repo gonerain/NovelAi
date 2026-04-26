@@ -17,10 +17,14 @@ import {
   defaultDemoProjectId,
   formatAuthorPresetCatalog,
   formatInvalidateResult,
+  formatRetrievalEvalRunResult,
+  formatRetrievalEvalSeedResult,
   formatV1RunResult,
   interviewProject,
   invalidateFromChapter,
+  runRetrievalEval,
   runV1,
+  seedRetrievalEvalSet,
 } from "./v1-lib.js";
 
 type CommandName =
@@ -29,6 +33,8 @@ type CommandName =
   | "project:profiles"
   | "project:inspect"
   | "project:paths"
+  | "memory:eval-seed"
+  | "memory:eval-run"
   | "outline:inspect"
   | "outline:generate-stack"
   | "outline:generate-drafts"
@@ -49,6 +55,8 @@ interface ParsedArgs {
   answers?: string;
   approver?: string;
   note?: string;
+  withEval?: boolean;
+  strictEval?: boolean;
 }
 
 function readOption(args: Map<string, string>, key: string): string | undefined {
@@ -86,6 +94,10 @@ function parseCommand(argv: string[]): ParsedArgs {
   const answersOption = readOption(flags, "--answers");
   const approverOption = readOption(flags, "--approver");
   const noteOption = readOption(flags, "--note");
+  const withEvalOption = readOption(flags, "--with-eval");
+  const strictEvalOption = readOption(flags, "--strict-eval");
+  const strictEval = strictEvalOption === "true";
+  const withEval = withEvalOption === "true" || strictEval;
 
   const command = `${group}:${action}` as CommandName;
   const allowed = new Set<CommandName>([
@@ -94,6 +106,8 @@ function parseCommand(argv: string[]): ParsedArgs {
     "project:profiles",
     "project:inspect",
     "project:paths",
+    "memory:eval-seed",
+    "memory:eval-run",
     "outline:inspect",
     "outline:generate-stack",
     "outline:generate-drafts",
@@ -119,6 +133,8 @@ function parseCommand(argv: string[]): ParsedArgs {
     answers: answersOption,
     approver: approverOption,
     note: noteOption,
+    withEval,
+    strictEval,
   };
 }
 
@@ -252,6 +268,10 @@ function summarizeProjectPaths(projectId: string): string {
     `Story memories: ${path.join(dir, "story-memories.json")}`,
     `Chapter plans: ${path.join(dir, "chapter-plans.json")}`,
     `Chapters dir: ${path.join(dir, "chapters")}`,
+    `Semantic index: ${path.join(dir, "memory", "retrieval", "semantic-index.json")}`,
+    `Embedding cache: ${path.join(dir, "memory", "retrieval", "embedding-cache.json")}`,
+    `Retrieval eval set: ${path.join(dir, "memory", "eval", "retrieval-eval-set.json")}`,
+    `Retrieval eval report: ${path.join(dir, "memory", "eval", "retrieval-eval-report.json")}`,
   ].join("\n");
 }
 
@@ -263,13 +283,15 @@ function usage(): string {
     "  project interview --project <id> --answers A,B,C,A,B,C",
     "  project inspect --project <id>",
     "  project paths --project <id>",
+    "  memory eval-seed --project <id>",
+    "  memory eval-run --project <id>",
     "  outline inspect --project <id>",
     "  outline generate-stack --project <id> [--count <chapters>]",
     "  outline generate-drafts --project <id>",
     "  outline approve-detail --project <id> [--approver <name>] [--note <text>]",
     "  outline validate --project <id>",
-    "  chapter generate --project <id> --chapter <n>",
-    "  chapter generate-first --project <id> --count <n>",
+    "  chapter generate --project <id> --chapter <n> [--with-eval] [--strict-eval]",
+    "  chapter generate-first --project <id> --count <n> [--with-eval] [--strict-eval]",
     "  chapter inspect --project <id> --chapter <n>",
     "  chapter invalidate-from --project <id> --chapter <n>",
     "  chapter reset-all --project <id>",
@@ -332,6 +354,22 @@ async function main(): Promise<void> {
       return;
     }
 
+    case "memory:eval-seed": {
+      const result = await seedRetrievalEvalSet({
+        projectId: parsed.projectId,
+      });
+      console.log(formatRetrievalEvalSeedResult(result));
+      return;
+    }
+
+    case "memory:eval-run": {
+      const result = await runRetrievalEval({
+        projectId: parsed.projectId,
+      });
+      console.log(formatRetrievalEvalRunResult(result));
+      return;
+    }
+
     case "outline:inspect": {
       const project = await loadStoryProject(repository, parsed.projectId);
       if (!project) {
@@ -391,6 +429,8 @@ async function main(): Promise<void> {
         projectId: parsed.projectId,
         mode: "chapter",
         chapterNumber: parsed.chapterNumber,
+        withEval: parsed.withEval,
+        strictEval: parsed.strictEval,
       });
       console.log(formatV1RunResult(result));
       return;
@@ -405,6 +445,8 @@ async function main(): Promise<void> {
         projectId: parsed.projectId,
         mode: "first-n",
         count: parsed.count,
+        withEval: parsed.withEval,
+        strictEval: parsed.strictEval,
       });
       console.log(formatV1RunResult(result));
       return;

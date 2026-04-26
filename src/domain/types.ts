@@ -57,6 +57,18 @@ export type PayoffPatternCategory =
   | "relationship"
   | "theme";
 
+export type MemorySearchLedgerType =
+  | "resource"
+  | "promise"
+  | "injury"
+  | "foreshadow"
+  | "relationship";
+
+export type GenrePayoffPackId =
+  | "male_webnovel_v1"
+  | "female_relationship_v1"
+  | "suspense_v1";
+
 export interface ThemeBible {
   coreTheme: string;
   subThemes: string[];
@@ -172,6 +184,33 @@ export interface StoryMemory {
   notes: string[];
 }
 
+export interface PlannerSearchIntent {
+  entityIds: EntityId[];
+  memoryIds: EntityId[];
+  ledgerTypes: MemorySearchLedgerType[];
+  topicQueries: string[];
+  exactPhrases: string[];
+}
+
+export interface ChapterCommercialPlan {
+  openingMode?: "hard_hook" | "daily_abnormal" | "relationship_pressure" | "aftermath_hook";
+  coreSellPoint: string;
+  visibleProblem: string;
+  externalTurn: string;
+  microPayoff: string;
+  endHook: string;
+  readerPromise: string;
+  paragraphRhythm: "tight" | "balanced" | "slow_burn";
+  rewardType?:
+    | "proof_win"
+    | "countermove"
+    | "relationship_pull"
+    | "rule_reveal"
+    | "status_shift";
+  rewardTiming?: "early" | "mid" | "late";
+  rewardTarget?: string;
+}
+
 export interface ChapterPlan {
   chapterNumber?: number;
   chapterType?: "setup" | "progress" | "payoff" | "aftermath";
@@ -185,6 +224,8 @@ export interface ChapterPlan {
   sceneTags: string[];
   requiredCharacters: EntityId[];
   requiredMemories: EntityId[];
+  searchIntent?: PlannerSearchIntent;
+  commercial?: ChapterCommercialPlan;
   beatConstraints?: string[];
   mustHitConflicts: string[];
   disallowedMoves: string[];
@@ -201,6 +242,23 @@ export interface StoryOutline {
   endingTarget: string;
   majorArcIds: EntityId[];
   keyTurningPoints: string[];
+}
+
+export interface GenrePayoffPack {
+  id: GenrePayoffPackId;
+  name: string;
+  summary: string;
+  openingModes: Array<NonNullable<ChapterCommercialPlan["openingMode"]>>;
+  hookBias: string[];
+  microPayoffBias: string[];
+  rewardTargetBias: string[];
+  avoidPatterns: string[];
+  preferredRewardTypes: {
+    setup: Array<NonNullable<ChapterCommercialPlan["rewardType"]>>;
+    progress: Array<NonNullable<ChapterCommercialPlan["rewardType"]>>;
+    payoff: Array<NonNullable<ChapterCommercialPlan["rewardType"]>>;
+    aftermath: Array<NonNullable<ChapterCommercialPlan["rewardType"]>>;
+  };
 }
 
 export interface ArcOutline {
@@ -301,6 +359,7 @@ export interface StorySetup {
   currentArcGoal: string;
   openingSituation: string;
   defaultActiveCharacterIds: EntityId[];
+  genrePayoffPackId?: GenrePayoffPackId;
   storyOutlineId?: EntityId;
   currentArcId?: EntityId;
 }

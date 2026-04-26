@@ -1,4 +1,4 @@
-import type { EntityId, PayoffPattern } from "./types.js";
+import type { EntityId, GenrePayoffPack, GenrePayoffPackId, PayoffPattern } from "./types.js";
 
 export const defaultPayoffPatterns: PayoffPattern[] = [
   {
@@ -276,6 +276,101 @@ export const defaultPayoffPatterns: PayoffPattern[] = [
   },
 ];
 
+export const genrePayoffPacks: GenrePayoffPack[] = [
+  {
+    id: "male_webnovel_v1",
+    name: "Male Webnovel V1",
+    summary:
+      "Prioritize competence display, tactical reversals, public face-slapping, resource gain, and visible status movement. Chapters should give readers a concrete sense that the protagonist took back initiative.",
+    openingModes: ["hard_hook", "daily_abnormal", "aftermath_hook"],
+    hookBias: [
+      "Open with pressure that threatens status, resource, or survival.",
+      "Let the protagonist make a visible tactical choice early.",
+      "Prefer readable conflict over slow concealment when both are possible.",
+    ],
+    microPayoffBias: [
+      "Small win should produce visible evidence, leverage, or humiliation for the other side.",
+      "Readers should feel the protagonist is not only enduring pressure but actively taking back the board.",
+    ],
+    rewardTargetBias: ["status", "resource", "leverage", "proof", "route"],
+    avoidPatterns: [
+      "Too many chapters of passive suffering without a countermove.",
+      "Abstract theme talk replacing tactical progression.",
+      "Win that changes nothing in the visible hierarchy.",
+    ],
+    preferredRewardTypes: {
+      setup: ["rule_reveal", "proof_win"],
+      progress: ["countermove", "proof_win"],
+      payoff: ["status_shift", "proof_win"],
+      aftermath: ["status_shift", "relationship_pull"],
+    },
+  },
+  {
+    id: "female_relationship_v1",
+    name: "Female Relationship Tension V1",
+    summary:
+      "Prioritize concrete daily trouble, asymmetrical care, pressure through labels and misunderstanding, and relationship movement with real emotional cost. Chapters should feel readable, intimate, and quietly addictive.",
+    openingModes: ["daily_abnormal", "relationship_pressure", "aftermath_hook"],
+    hookBias: [
+      "Open from a small social or practical moment that carries emotional imbalance.",
+      "Make the relationship label or public misunderstanding bite quickly.",
+      "Let external procedures and private emotion collide in the same scene.",
+    ],
+    microPayoffBias: [
+      "Small reward should reveal hidden care, new evidence, or a fragile opening in the relationship.",
+      "Even when the protagonist loses ground publicly, let them gain some emotional or informational foothold.",
+    ],
+    rewardTargetBias: ["evidence", "identity", "relationship", "risk"],
+    avoidPatterns: [
+      "Pure passive pain without a meaningful emotional or informational gain.",
+      "Overwritten monologue before readers understand the concrete trouble.",
+      "Every male lead behaving as the same coercive template.",
+    ],
+    preferredRewardTypes: {
+      setup: ["rule_reveal", "relationship_pull"],
+      progress: ["relationship_pull", "countermove"],
+      payoff: ["proof_win", "relationship_pull"],
+      aftermath: ["status_shift", "relationship_pull"],
+    },
+  },
+  {
+    id: "suspense_v1",
+    name: "Suspense Escalation V1",
+    summary:
+      "Prioritize clue acquisition, false certainty, narrowing options, and chapter-end compulsion. Chapters should steadily tighten uncertainty while rewarding readers with sharper understanding.",
+    openingModes: ["hard_hook", "aftermath_hook", "daily_abnormal"],
+    hookBias: [
+      "Open from a clue, anomaly, interruption, or aftermath with immediate interpretive pressure.",
+      "Let each chapter answer one small question and open a worse one.",
+      "Use procedures, records, and contradictions as scene engines.",
+    ],
+    microPayoffBias: [
+      "Small reward should be a clue, contradiction, pattern recognition, or new suspect alignment.",
+      "Readers should feel they know more by chapter end, even if the situation is more dangerous.",
+    ],
+    rewardTargetBias: ["evidence", "pattern", "risk", "route"],
+    avoidPatterns: [
+      "Mystery fog with no concrete clue movement.",
+      "Pure atmosphere replacing investigative action.",
+      "Late reveals with no earlier footprint.",
+    ],
+    preferredRewardTypes: {
+      setup: ["rule_reveal", "proof_win"],
+      progress: ["proof_win", "countermove"],
+      payoff: ["rule_reveal", "status_shift"],
+      aftermath: ["status_shift", "relationship_pull"],
+    },
+  },
+];
+
 export function getPayoffPatternById(id: EntityId): PayoffPattern | undefined {
   return defaultPayoffPatterns.find((pattern) => pattern.id === id);
+}
+
+export function getGenrePayoffPackById(id: GenrePayoffPackId): GenrePayoffPack | undefined {
+  return genrePayoffPacks.find((pack) => pack.id === id);
+}
+
+export function resolveGenrePayoffPack(id?: GenrePayoffPackId): GenrePayoffPack {
+  return getGenrePayoffPackById(id ?? "female_relationship_v1") ?? genrePayoffPacks[0];
 }

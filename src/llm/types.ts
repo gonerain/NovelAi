@@ -63,6 +63,7 @@ export type TaskName =
   | "planner"
   | "writer"
   | "rewriter"
+  | "review_commercial"
   | "review_missing_resource"
   | "review_fact"
   | "review_voice"

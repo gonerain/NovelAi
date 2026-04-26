@@ -1,4 +1,5 @@
 import type {
+  CommercialReviewerResult,
   FactConsistencyReviewerResult,
   MissingResourceReviewerResult,
 } from "../domain/index.js";
@@ -7,10 +8,11 @@ import type { ChatMessage } from "../llm/types.js";
 interface RewriterInput {
   title?: string;
   draft: string;
-  mode: "repair_first" | "hybrid_upgrade" | "quality_boost";
+  mode: "repair_first" | "hybrid_upgrade" | "commercial_tune" | "quality_boost";
   objective?: string;
   missingResourceReview: MissingResourceReviewerResult;
   factConsistencyReview: FactConsistencyReviewerResult;
+  commercialReview?: CommercialReviewerResult;
 }
 
 function summarizeFindings(args: RewriterInput): string {
@@ -18,12 +20,22 @@ function summarizeFindings(args: RewriterInput): string {
     (item, index) =>
       `${index + 1}. [${item.severity}] ${item.title} | violated=${item.violatedFactIds.join(", ") || "none"} | fix=${item.suggestedFix}`,
   );
+  const commercial = (args.commercialReview?.findings ?? []).map(
+    (item, index) =>
+      `${index + 1}. [${item.severity}] ${item.title} | type=${item.issueType} | fix=${item.suggestedFix}`,
+  );
 
   return [
     "Consistency findings (fact + role consistency only):",
     ...(facts.length > 0 ? facts : ["none"]),
     "",
+    "Commercial findings:",
+    ...(commercial.length > 0 ? commercial : ["none"]),
+    "",
     `Scores only (do not rewrite for these): emotion=${args.factConsistencyReview.scoring.emotion}/10, pacing=${args.factConsistencyReview.scoring.pacing}/10`,
+    args.commercialReview
+      ? `Commercial scores: hook=${args.commercialReview.scoring.hookClarity}/10, payoff=${args.commercialReview.scoring.payoffDelivery}/10, scanability=${args.commercialReview.scoring.scanability}/10`
+      : "Commercial scores: n/a",
   ].join("\n");
 }
 
@@ -42,8 +54,18 @@ export function buildRewriterMessages(input: RewriterInput): ChatMessage[] {
       return [
         "Mode: hybrid_upgrade.",
         "Primary objective: fix medium/low consistency findings while preserving readability.",
-        "Do not rewrite for emotion or pacing score improvements.",
+        "Secondary objective: if commercial findings are provided, address them only after consistency is safe.",
         "Do not add new plot events or world facts that break continuity.",
+      ].join("\n");
+    }
+
+    if (input.mode === "commercial_tune") {
+      return [
+        "Mode: commercial_tune.",
+        "Primary objective: improve hook clarity, scanability, micro payoff delivery, and end hook strength.",
+        "Keep facts, world rules, chapter events, and chapter outcome unchanged.",
+        "You may tighten paragraphs, move reveals earlier, sharpen concrete trouble, and make the chapter easier to read quickly.",
+        "Do not add new plot events or world facts.",
       ].join("\n");
     }
 

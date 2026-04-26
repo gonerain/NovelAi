@@ -47,9 +47,11 @@ export async function ensureOk(
 
 export function buildJsonInstruction(schema: object): string {
   return [
-    "Return valid JSON only.",
+    "You are in JSON mode. Return one valid JSON object only.",
     "Do not wrap the response in markdown fences.",
-    "Follow this JSON shape exactly:",
+    "Do not include explanations, comments, or any text before or after the JSON object.",
+    "Use double quotes for all JSON object keys and string values.",
+    "Follow this JSON shape exactly. Example JSON output:",
     JSON.stringify(schema, null, 2),
   ].join("\n");
 }

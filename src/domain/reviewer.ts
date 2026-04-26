@@ -1,4 +1,8 @@
 import type { ContextPack } from "./context-builder.js";
+import type {
+  RelationshipReviewerCandidate,
+  ResourceReviewerCandidate,
+} from "./memory-system.js";
 import type { StoryMemory, WorldFact } from "./types.js";
 
 export type ReviewerSeverity = "low" | "medium" | "high";
@@ -7,6 +11,7 @@ export interface MissingResourceReviewerInput {
   contextPack: ContextPack;
   draft: string;
   storyMemories: StoryMemory[];
+  resourceCandidates?: ResourceReviewerCandidate[];
 }
 
 export interface MissingResourceFinding {
@@ -29,6 +34,7 @@ export interface FactConsistencyReviewerInput {
   draft: string;
   storyMemories: StoryMemory[];
   worldFacts: WorldFact[];
+  relationshipCandidates?: RelationshipReviewerCandidate[];
 }
 
 export interface FactConsistencyFinding {
@@ -50,6 +56,34 @@ export interface FactConsistencyReviewerResult {
   scoring: {
     emotion: number;
     pacing: number;
+  };
+  notes: string[];
+}
+
+export interface CommercialReviewerInput {
+  contextPack: ContextPack;
+  draft: string;
+}
+
+export interface CommercialReviewerFinding {
+  issueType:
+    | "hook_delay"
+    | "problem_blur"
+    | "payoff_weak"
+    | "hook_weak"
+    | "scanability_weak";
+  severity: ReviewerSeverity;
+  title: string;
+  evidence: string;
+  suggestedFix: string;
+}
+
+export interface CommercialReviewerResult {
+  findings: CommercialReviewerFinding[];
+  scoring: {
+    hookClarity: number;
+    payoffDelivery: number;
+    scanability: number;
   };
   notes: string[];
 }

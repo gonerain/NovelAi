@@ -5,7 +5,23 @@ import type {
 import type { ChatMessage } from "../llm/types.js";
 
 function selectCriticalResources(input: MissingResourceReviewerInput) {
-  const visibleMemoryIds = new Set(input.contextPack.relevantMemories.map((memory) => memory.id));
+  if (input.resourceCandidates && input.resourceCandidates.length > 0) {
+    return input.resourceCandidates.map((entry) => ({
+      id: entry.id,
+      title: entry.title,
+      summary: entry.summary,
+      kind: entry.ledgerType,
+      priority: entry.priority,
+      triggerConditions: [],
+      notes: entry.sourceMemoryIds,
+    }));
+  }
+
+  const visibleMemoryIds = new Set([
+    ...input.contextPack.relevantMemories.map((memory) => memory.id),
+    ...input.contextPack.relevantLedgerEntries.flatMap((entry) => entry.sourceMemoryIds),
+    ...input.contextPack.relevantChapterCards.flatMap((card) => card.memoryIds),
+  ]);
 
   return input.storyMemories
     .filter((memory) => {
@@ -65,7 +81,10 @@ export function buildMissingResourceReviewMessages(
         `Scene tags: ${input.contextPack.chapterObjective.sceneTags.join(" | ")}`,
         `Must rules: ${input.contextPack.mustRules.join(" | ")}`,
         `Reviewer checks: ${input.contextPack.taskRules.join(" | ")}`,
+        `Retrieval signals: ${input.contextPack.retrievalSignals.join(" | ")}`,
         `Active characters:\n${JSON.stringify(input.contextPack.activeCharacters, null, 2)}`,
+        `Relevant ledger entries:\n${JSON.stringify(input.contextPack.relevantLedgerEntries, null, 2)}`,
+        `Recent chapter cards:\n${JSON.stringify(input.contextPack.relevantChapterCards, null, 2)}`,
         `Candidate critical resources:\n${JSON.stringify(candidateResources, null, 2)}`,
         `Draft:\n${input.draft}`,
       ].join("\n\n"),

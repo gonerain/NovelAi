@@ -2,6 +2,7 @@ import type { ContextPack } from "./context-builder.js";
 import type { MemoryUpdaterResult } from "./memory-updater.js";
 import type { ChapterPlan } from "./types.js";
 import type {
+  CommercialReviewerResult,
   FactConsistencyReviewerResult,
   MissingResourceReviewerResult,
 } from "./reviewer.js";
@@ -14,6 +15,7 @@ export interface ChapterArtifact {
   writerResult: WriterResult;
   missingResourceReview: MissingResourceReviewerResult;
   factConsistencyReview: FactConsistencyReviewerResult;
+  commercialReview?: CommercialReviewerResult;
   memoryUpdate: MemoryUpdaterResult;
   generatedAt: string;
 }
