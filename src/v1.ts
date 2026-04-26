@@ -19,6 +19,12 @@ import {
   formatChangeImpactRunResult,
   formatInvalidateResult,
   formatInvalidateTargetRunResult,
+  formatRegenerateFromTargetRunResult,
+  formatApplyDraftRewriteRunResult,
+  formatInspectDraftRewriteRunResult,
+  formatListDraftRewriteVersionsRunResult,
+  formatRewriteChapterRunResult,
+  formatRewriteDraftRunResult,
   formatRewritePlanRunResult,
   formatRetrievalEvalRunResult,
   formatRetrievalEvalSeedResult,
@@ -26,6 +32,12 @@ import {
   interviewProject,
   invalidateFromChapter,
   invalidateFromTarget,
+  regenerateFromTarget,
+  applyDraftRewrite,
+  inspectDraftRewrite,
+  listDraftRewriteVersions,
+  rewriteChapter,
+  rewriteChapterDraft,
   runChangeImpact,
   runRewritePlan,
   runRetrievalEval,
@@ -41,6 +53,7 @@ type CommandName =
   | "project:paths"
   | "project:impact"
   | "project:rewrite-plan"
+  | "project:regenerate-from-target"
   | "memory:eval-seed"
   | "memory:eval-run"
   | "outline:inspect"
@@ -51,6 +64,11 @@ type CommandName =
   | "chapter:generate"
   | "chapter:generate-first"
   | "chapter:inspect"
+  | "chapter:rewrite"
+  | "chapter:rewrite-draft"
+  | "chapter:apply-draft-rewrite"
+  | "chapter:list-draft-rewrites"
+  | "chapter:inspect-draft-rewrite"
   | "chapter:invalidate-from"
   | "chapter:invalidate-target"
   | "chapter:reset-all";
@@ -60,6 +78,7 @@ interface ParsedArgs {
   projectId: string;
   chapterNumber?: number;
   count?: number;
+  versionId?: string;
   profileId?: string;
   answers?: string;
   approver?: string;
@@ -100,6 +119,7 @@ function parseCommand(argv: string[]): ParsedArgs {
   const projectId = readOption(flags, "--project") ?? defaultDemoProjectId;
   const chapterOption = readOption(flags, "--chapter");
   const countOption = readOption(flags, "--count");
+  const versionOption = readOption(flags, "--version");
   const profileOption = readOption(flags, "--profile");
   const answersOption = readOption(flags, "--answers");
   const approverOption = readOption(flags, "--approver");
@@ -119,6 +139,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     "project:paths",
     "project:impact",
     "project:rewrite-plan",
+    "project:regenerate-from-target",
     "memory:eval-seed",
     "memory:eval-run",
     "outline:inspect",
@@ -129,6 +150,11 @@ function parseCommand(argv: string[]): ParsedArgs {
     "chapter:generate",
     "chapter:generate-first",
     "chapter:inspect",
+    "chapter:rewrite",
+    "chapter:rewrite-draft",
+    "chapter:apply-draft-rewrite",
+    "chapter:list-draft-rewrites",
+    "chapter:inspect-draft-rewrite",
     "chapter:invalidate-from",
     "chapter:invalidate-target",
     "chapter:reset-all",
@@ -143,6 +169,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     projectId,
     chapterNumber: chapterOption ? Number(chapterOption) : undefined,
     count: countOption ? Number(countOption) : undefined,
+    versionId: versionOption,
     profileId: profileOption,
     answers: answersOption,
     approver: approverOption,
@@ -302,6 +329,7 @@ function usage(): string {
     "  project paths --project <id>",
     "  project impact --project <id> --target <entity_or_node_id>",
     "  project rewrite-plan --project <id> --target <entity_or_node_id>",
+    "  project regenerate-from-target --project <id> --target <entity_or_node_id> --count <n> [--with-eval] [--strict-eval]",
     "  memory eval-seed --project <id>",
     "  memory eval-run --project <id>",
     "  outline inspect --project <id>",
@@ -312,6 +340,11 @@ function usage(): string {
     "  chapter generate --project <id> --chapter <n> [--with-eval] [--strict-eval]",
     "  chapter generate-first --project <id> --count <n> [--with-eval] [--strict-eval]",
     "  chapter inspect --project <id> --chapter <n>",
+    "  chapter rewrite --project <id> --chapter <n> [--with-eval] [--strict-eval]",
+    "  chapter rewrite-draft --project <id> --chapter <n> [--with-eval] [--strict-eval]",
+    "  chapter apply-draft-rewrite --project <id> --chapter <n> [--version <id>]",
+    "  chapter list-draft-rewrites --project <id> --chapter <n>",
+    "  chapter inspect-draft-rewrite --project <id> --chapter <n> [--version <id>]",
     "  chapter invalidate-from --project <id> --chapter <n>",
     "  chapter invalidate-target --project <id> --target <entity_or_node_id>",
     "  chapter reset-all --project <id>",
@@ -395,6 +428,25 @@ async function main(): Promise<void> {
         targetId: parsed.targetId,
       });
       console.log(formatRewritePlanRunResult(result));
+      return;
+    }
+
+    case "project:regenerate-from-target": {
+      await assertDetailedOutlineApproved(parsed.projectId);
+      if (!parsed.targetId) {
+        throw new Error("project regenerate-from-target requires --target <entity_or_node_id>");
+      }
+      if (!parsed.count || parsed.count < 1) {
+        throw new Error("project regenerate-from-target requires --count <n>");
+      }
+      const result = await regenerateFromTarget({
+        projectId: parsed.projectId,
+        targetId: parsed.targetId,
+        count: parsed.count,
+        withEval: parsed.withEval,
+        strictEval: parsed.strictEval,
+      });
+      console.log(formatRegenerateFromTargetRunResult(result));
       return;
     }
 
@@ -507,6 +559,77 @@ async function main(): Promise<void> {
         );
       }
       console.log(summarizeChapterArtifact(parsed.projectId, artifact));
+      return;
+    }
+
+    case "chapter:rewrite": {
+      await assertDetailedOutlineApproved(parsed.projectId);
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("chapter rewrite requires --chapter <n>");
+      }
+      const result = await rewriteChapter({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+        withEval: parsed.withEval,
+        strictEval: parsed.strictEval,
+      });
+      console.log(formatRewriteChapterRunResult(result));
+      return;
+    }
+
+    case "chapter:rewrite-draft": {
+      await assertDetailedOutlineApproved(parsed.projectId);
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("chapter rewrite-draft requires --chapter <n>");
+      }
+      const result = await rewriteChapterDraft({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+        withEval: parsed.withEval,
+        strictEval: parsed.strictEval,
+      });
+      console.log(formatRewriteDraftRunResult(result));
+      return;
+    }
+
+    case "chapter:apply-draft-rewrite": {
+      await assertDetailedOutlineApproved(parsed.projectId);
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("chapter apply-draft-rewrite requires --chapter <n>");
+      }
+      const result = await applyDraftRewrite({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+        versionId: parsed.versionId,
+      });
+      console.log(formatApplyDraftRewriteRunResult(result));
+      return;
+    }
+
+    case "chapter:list-draft-rewrites": {
+      await assertDetailedOutlineApproved(parsed.projectId);
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("chapter list-draft-rewrites requires --chapter <n>");
+      }
+      const result = await listDraftRewriteVersions({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatListDraftRewriteVersionsRunResult(result));
+      return;
+    }
+
+    case "chapter:inspect-draft-rewrite": {
+      await assertDetailedOutlineApproved(parsed.projectId);
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("chapter inspect-draft-rewrite requires --chapter <n>");
+      }
+      const result = await inspectDraftRewrite({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+        versionId: parsed.versionId,
+      });
+      console.log(formatInspectDraftRewriteRunResult(result));
       return;
     }
 

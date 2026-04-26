@@ -244,11 +244,16 @@ Deliverables:
 
 ### Later
 
+- [x] add memory writeback validation v1 with sanitization, evidence checks, and warning sidecar output
 - [x] upgrade local semantic vector search to provider-backed embeddings when cost/perf justifies it
 - [x] add graph expansion
 - [x] add change-impact tracing for outline / memory / character edits
 - [x] add rewrite-plan bridging from impact reports to chapter invalidation suggestions
 - [x] add target-based invalidation command that executes rewrite-plan output
+- [x] add target-based regenerate workflow that chains rewrite-plan, invalidation, and regeneration
+- [x] add chapter rewrite workflow for single-chapter invalidate-and-regenerate
+- [x] add non-destructive chapter rewrite-draft workflow with sidecar outputs
+- [x] add versioned rewrite-draft snapshots plus apply/promote command with canonical backups
 - [x] add retrieval eval set with planted facts
 - [ ] add database-backed storage
 
@@ -263,7 +268,23 @@ Deliverables:
 - Change-impact tracing now exists as a project command, so edits can be inspected for likely blast radius before invalidating or regenerating chapters.
 - Rewrite-plan bridging now turns impact analysis into a concrete invalidation starting point, so edits can flow into regeneration with less guesswork.
 - Target-based invalidation now exists as an execution command, so the suggested rewrite boundary can be applied without manually translating the report back into chapter operations.
+- Target-based regeneration now exists as a single workflow command, so a local edit can be pushed through invalidate-and-regenerate without stitching the steps together by hand.
+- Single-chapter rewrite now exists as a dedicated workflow command, so local text iteration does not need to be routed through target-level impact analysis.
+- Non-destructive chapter draft rewrite now exists as a sidecar workflow, so prose iteration can happen without immediately mutating canonical memory or chapter artifacts.
+- Rewrite-draft sidecars now preserve versioned snapshots, support list/inspect/apply by version, and can be explicitly promoted into canonical chapter artifacts with backup files, keeping text iteration and official adoption as separate steps.
+- Memory writeback validation v1 now sanitizes updater output before persistence, extracts lightweight draft evidence snippets, and writes a per-chapter validation sidecar, but it is still rule-based rather than full evidence review.
 - The next meaningful milestone is not more recall routes. It is moving these file-based artifacts into a stable database-backed store without losing reproducibility.
+
+## Upgrade Backlog
+
+- [ ] upgrade memory writeback validation from rule-based evidence checks to stronger review against chapter text and ledgers
+- [ ] upgrade semantic retrieval with batch embeddings, retry policy, and provider-aware fallback ranking
+- [ ] upgrade graph expansion from lightweight support edges to thread/resource/foreshadow dependency paths
+- [x] upgrade chapter rewrite sidecars into versioned drafts plus explicit apply/promote command
+- [x] upgrade chapter rewrite sidecars with command-level compare/select flow
+- [ ] upgrade retrieval eval from seeded CLI checks to broader regression suites grouped by failure type
+- [ ] upgrade storage from file-only artifacts to SQLite-backed canonical indexes with JSON export parity
+- [ ] upgrade chapter rewrite compare/select from command summaries to richer diff and review UX
 
 ## Known Risks
 

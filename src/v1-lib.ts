@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -24,6 +24,7 @@ import {
   normalizeRetrievalEvalSetAgainstChapterViews,
   resolveGenrePayoffPack,
   toSemanticRetrievalHits,
+  validateMemoryUpdaterResult,
   type ArcOutline,
   type AuthorInterviewSessionInput,
   type BeatOutline,
@@ -98,6 +99,44 @@ import { FileProjectRepository } from "./storage/index.js";
 
 function logStage(stage: string, detail: string): void {
   console.log(`[${stage}] ${detail}`);
+}
+
+async function generateWriterLikeResult(args: {
+  service: LlmService;
+  task: "writer" | "rewriter";
+  messages: ChatMessage[];
+  temperature: number;
+  maxTokens: number;
+  fallbackTitle?: string;
+}): Promise<ReturnType<typeof parseWriterLikeOutput>> {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const textResult = await args.service.generateForTask({
+        task: args.task,
+        messages: args.messages,
+        temperature: args.temperature,
+        maxTokens: args.maxTokens,
+      });
+      return parseWriterLikeOutput({
+        provider: textResult.provider,
+        rawText: textResult.text,
+        fallbackTitle: args.fallbackTitle,
+      });
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      const retryableParseFailure =
+        message.includes("Empty writer output") || message.includes("Failed to parse");
+      if (!retryableParseFailure || attempt >= 1) {
+        throw error;
+      }
+      console.warn(`[llm] task=${args.task} parse failure, retrying once: ${message}`);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
 async function writePromptDebug(args: {
@@ -422,6 +461,124 @@ function rewritePlanReportPath(projectId: string, targetId: string): string {
   );
 }
 
+function chapterDraftRewritePath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "draft_rewrite.md",
+  );
+}
+
+function chapterDraftRewriteMetadataPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "draft_rewrite.json",
+  );
+}
+
+function chapterDraftRewriteVersionsDir(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "draft_rewrite_versions",
+  );
+}
+
+function chapterDraftRewriteVersionDraftPath(
+  projectId: string,
+  chapterNumber: number,
+  versionId: string,
+): string {
+  return path.join(
+    chapterDraftRewriteVersionsDir(projectId, chapterNumber),
+    `${versionId}.md`,
+  );
+}
+
+function chapterDraftRewriteVersionMetadataPath(
+  projectId: string,
+  chapterNumber: number,
+  versionId: string,
+): string {
+  return path.join(
+    chapterDraftRewriteVersionsDir(projectId, chapterNumber),
+    `${versionId}.json`,
+  );
+}
+
+function chapterMemoryValidationPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "memory_update_validation.json",
+  );
+}
+
+function chapterCanonicalDraftPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "draft.md",
+  );
+}
+
+function chapterCanonicalResultPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "result.json",
+  );
+}
+
+function chapterBackupDraftPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "draft_before_promote.md",
+  );
+}
+
+function chapterBackupResultPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "result_before_promote.json",
+  );
+}
+
 export interface V1RunOptions {
   projectId: string;
   mode: "first-n" | "chapter";
@@ -470,6 +627,89 @@ export interface InvalidateTargetRunResult {
   rewritePlanPath: string;
   plan: RewritePlanReport;
   invalidation?: InvalidateResult;
+}
+
+export interface RegenerateFromTargetRunResult {
+  projectId: string;
+  targetId: string;
+  requestedCount: number;
+  impactReportPath: string;
+  rewritePlanPath: string;
+  plan: RewritePlanReport;
+  invalidation?: InvalidateResult;
+  generation?: V1RunResult;
+}
+
+export interface RewriteChapterRunResult {
+  projectId: string;
+  chapterNumber: number;
+  invalidation: InvalidateResult;
+  generation: V1RunResult;
+}
+
+export interface RewriteDraftRunResult {
+  projectId: string;
+  chapterNumber: number;
+  draftPath: string;
+  metadataPath: string;
+  versionId: string;
+  versionDraftPath: string;
+  versionMetadataPath: string;
+  mode: "repair_first" | "hybrid_upgrade" | "commercial_tune" | "quality_boost";
+  title: string | undefined;
+  retrievalEval?: RetrievalEvalRunResult;
+}
+
+export interface ApplyDraftRewriteRunResult {
+  projectId: string;
+  chapterNumber: number;
+  versionId: string;
+  draftRewritePath: string;
+  metadataPath: string;
+  backupDraftPath: string;
+  backupResultPath: string;
+  canonicalDraftPath: string;
+  canonicalResultPath: string;
+  title: string | undefined;
+}
+
+export interface DraftRewriteVersionSummary {
+  versionId: string;
+  generatedAt?: string;
+  mode?: string;
+  title?: string;
+  draftPath: string;
+  metadataPath: string;
+  isLatest: boolean;
+}
+
+export interface ListDraftRewriteVersionsRunResult {
+  projectId: string;
+  chapterNumber: number;
+  versions: DraftRewriteVersionSummary[];
+}
+
+export interface InspectDraftRewriteRunResult {
+  projectId: string;
+  chapterNumber: number;
+  versionId: string;
+  draftPath: string;
+  metadataPath: string;
+  title?: string;
+  mode?: string;
+  generatedAt?: string;
+  objective?: string;
+  compareAgainst: "canonical" | "latest";
+  comparison: {
+    selectedLines: number;
+    baselineLines: number;
+    lineDelta: number;
+    selectedChars: number;
+    baselineChars: number;
+    charDelta: number;
+    firstDifferenceLine: number | null;
+    exactMatch: boolean;
+  };
 }
 
 export interface RetrievalEvalSeedResult {
@@ -1629,6 +1869,631 @@ export async function invalidateFromTarget(args: {
   };
 }
 
+export async function regenerateFromTarget(args: {
+  projectId: string;
+  targetId: string;
+  count: number;
+  withEval?: boolean;
+  strictEval?: boolean;
+}): Promise<RegenerateFromTargetRunResult> {
+  if (args.count < 1) {
+    throw new Error("count must be >= 1");
+  }
+
+  const invalidationResult = await invalidateFromTarget({
+    projectId: args.projectId,
+    targetId: args.targetId,
+  });
+
+  if (!invalidationResult.invalidation) {
+    return {
+      projectId: args.projectId,
+      targetId: args.targetId,
+      requestedCount: args.count,
+      impactReportPath: invalidationResult.impactReportPath,
+      rewritePlanPath: invalidationResult.rewritePlanPath,
+      plan: invalidationResult.plan,
+      invalidation: invalidationResult.invalidation,
+    };
+  }
+
+  const targetChapter = invalidationResult.invalidation.chapterNumber + args.count - 1;
+  const generation = await runV1({
+    projectId: args.projectId,
+    mode: "first-n",
+    count: targetChapter,
+    withEval: args.withEval,
+    strictEval: args.strictEval,
+  });
+
+  return {
+    projectId: args.projectId,
+    targetId: args.targetId,
+    requestedCount: args.count,
+    impactReportPath: invalidationResult.impactReportPath,
+    rewritePlanPath: invalidationResult.rewritePlanPath,
+    plan: invalidationResult.plan,
+    invalidation: invalidationResult.invalidation,
+    generation,
+  };
+}
+
+export async function rewriteChapter(args: {
+  projectId: string;
+  chapterNumber: number;
+  withEval?: boolean;
+  strictEval?: boolean;
+}): Promise<RewriteChapterRunResult> {
+  if (args.chapterNumber < 1) {
+    throw new Error("chapterNumber must be >= 1");
+  }
+
+  const repository = new FileProjectRepository();
+  const existingArtifact = await repository.loadChapterArtifact(args.projectId, args.chapterNumber);
+  if (!existingArtifact) {
+    throw new Error(
+      `chapter rewrite requires an existing chapter artifact: project=${args.projectId}, chapter=${args.chapterNumber}`,
+    );
+  }
+
+  const invalidation = await invalidateFromChapter({
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+  });
+  const generation = await runV1({
+    projectId: args.projectId,
+    mode: "chapter",
+    chapterNumber: args.chapterNumber,
+    withEval: args.withEval,
+    strictEval: args.strictEval,
+  });
+
+  return {
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    invalidation,
+    generation,
+  };
+}
+
+export async function rewriteChapterDraft(args: {
+  projectId: string;
+  chapterNumber: number;
+  withEval?: boolean;
+  strictEval?: boolean;
+}): Promise<RewriteDraftRunResult> {
+  if (args.chapterNumber < 1) {
+    throw new Error("chapterNumber must be >= 1");
+  }
+
+  const service = new LlmService();
+  const repository = new FileProjectRepository();
+  await loadEmbeddingCacheForProject(args.projectId);
+
+  const existingArtifact = await repository.loadChapterArtifact(args.projectId, args.chapterNumber);
+  if (!existingArtifact) {
+    throw new Error(
+      `chapter rewrite-draft requires an existing chapter artifact: project=${args.projectId}, chapter=${args.chapterNumber}`,
+    );
+  }
+
+  const base = await ensureBootstrappedProject(service, repository, args.projectId);
+  const allArtifacts = await loadAllChapterArtifacts(repository, args.projectId);
+  const priorArtifacts = allArtifacts.filter((artifact) => artifact.chapterNumber < args.chapterNumber);
+  const currentArc =
+    base.arcOutlines.find((item) => item.id === existingArtifact.plan.arcId) ??
+    pickArcForChapterDeterministic(base.arcOutlines, args.chapterNumber);
+  const currentBeat =
+    base.beatOutlines.find((item) => item.id === existingArtifact.plan.beatId) ??
+    pickBeatForChapterDeterministic(base.beatOutlines, currentArc, args.chapterNumber);
+  assertChapterPlanningAnchors({
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    beatOutlines: base.beatOutlines,
+    currentArc,
+    currentBeat,
+  });
+
+  const semanticOverrideHits = await resolveSemanticOverrideHits({
+    chapterPlan: existingArtifact.plan,
+    storyMemories: base.storyMemories,
+    chapterArtifacts: priorArtifacts,
+  });
+  const writerContextPack = buildContextPack({
+    task: "writer",
+    authorPack: base.authorPacks.writer,
+    themeBible: base.themeBible,
+    styleBible: base.styleBible,
+    genrePayoffPack: base.genrePayoffPack,
+    chapterPlan: existingArtifact.plan,
+    arcOutline: currentArc,
+    beatOutline: currentBeat,
+    chapterArtifacts: priorArtifacts,
+    semanticOverrideHits,
+    characterStates: base.characterStates,
+    storyMemories: base.storyMemories,
+    worldFacts: base.worldFacts,
+  });
+  const reviewerContextPack = buildContextPack({
+    task: "reviewer",
+    authorPack: base.authorPacks.reviewer,
+    themeBible: base.themeBible,
+    styleBible: base.styleBible,
+    genrePayoffPack: base.genrePayoffPack,
+    chapterPlan: existingArtifact.plan,
+    arcOutline: currentArc,
+    beatOutline: currentBeat,
+    chapterArtifacts: priorArtifacts,
+    semanticOverrideHits,
+    characterStates: base.characterStates,
+    storyMemories: base.storyMemories,
+    worldFacts: base.worldFacts,
+  });
+  const specializedReviewerViews = buildSpecializedReviewerViews({
+    chapterPlan: existingArtifact.plan,
+    storyMemories: base.storyMemories,
+    characterStates: base.characterStates,
+    chapterArtifacts: priorArtifacts,
+  });
+
+  logStage("chapter", `llm: review_missing_resource_draft chapter=${args.chapterNumber}`);
+  const missingReviewMessages = buildMissingResourceReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: existingArtifact.writerResult.draft,
+    storyMemories: base.storyMemories,
+    resourceCandidates: specializedReviewerViews.resourceCandidates,
+  });
+  const missingResourceReview = await service.generateObjectForTask({
+    task: "review_missing_resource",
+    messages: missingReviewMessages,
+    schema: missingResourceReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1800,
+  });
+
+  logStage("chapter", `llm: review_fact_draft chapter=${args.chapterNumber}`);
+  const factReviewMessages = buildFactConsistencyReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: existingArtifact.writerResult.draft,
+    storyMemories: base.storyMemories,
+    worldFacts: base.worldFacts,
+    relationshipCandidates: specializedReviewerViews.relationshipCandidates,
+  });
+  const factConsistencyReview = await service.generateObjectForTask({
+    task: "review_fact",
+    messages: factReviewMessages,
+    schema: factConsistencyReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1800,
+  });
+
+  logStage("chapter", `llm: review_commercial_draft chapter=${args.chapterNumber}`);
+  const commercialReviewMessages = buildCommercialReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: existingArtifact.writerResult.draft,
+  });
+  const commercialReview = await service.generateObjectForTask({
+    task: "review_commercial",
+    messages: commercialReviewMessages,
+    schema: commercialReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1600,
+  });
+
+  const initialNormalized = normalizeReviewerResults({
+    missing: missingResourceReview.object as MissingResourceReviewerResult,
+    fact: factConsistencyReview.object as FactConsistencyReviewerResult,
+  });
+  const initialMissing = initialNormalized.missing;
+  const initialFact = initialNormalized.fact;
+  const initialCommercial = normalizeCommercialReviewerResult(
+    commercialReview.object as CommercialReviewerResult,
+  );
+  const draftRewritePlan = buildRewritePlan({
+    missing: initialMissing,
+    fact: initialFact,
+    commercial: initialCommercial,
+  });
+  const forcedObjective =
+    draftRewritePlan.mode === "quality_boost"
+      ? "Rewrite for readability, scene clarity, hook strength, and smoother paragraph flow while preserving all established facts, outcomes, and chapter role assignments."
+      : draftRewritePlan.objective;
+
+  logStage("chapter", `llm: rewrite_draft chapter=${args.chapterNumber} mode=${draftRewritePlan.mode}`);
+  const rewriterMessages = buildRewriterMessages({
+    title: existingArtifact.writerResult.title,
+    draft: existingArtifact.writerResult.draft,
+    mode: draftRewritePlan.mode,
+    objective: forcedObjective,
+    missingResourceReview: initialMissing,
+    factConsistencyReview: initialFact,
+    commercialReview: initialCommercial,
+  });
+  const rewrittenOutput = await generateWriterLikeResult({
+    service,
+    task: "rewriter",
+    messages: rewriterMessages,
+    temperature: draftRewritePlan.mode === "repair_first" ? 0.35 : 0.5,
+    maxTokens: 3200,
+    fallbackTitle: existingArtifact.writerResult.title,
+  });
+
+  logStage("chapter", `llm: review_missing_resource_draft_final chapter=${args.chapterNumber}`);
+  const missingFinalMessages = buildMissingResourceReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: rewrittenOutput.draft,
+    storyMemories: base.storyMemories,
+    resourceCandidates: specializedReviewerViews.resourceCandidates,
+  });
+  const missingResourceReviewFinal = await service.generateObjectForTask({
+    task: "review_missing_resource",
+    messages: missingFinalMessages,
+    schema: missingResourceReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1800,
+  });
+
+  logStage("chapter", `llm: review_fact_draft_final chapter=${args.chapterNumber}`);
+  const factFinalMessages = buildFactConsistencyReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: rewrittenOutput.draft,
+    storyMemories: base.storyMemories,
+    worldFacts: base.worldFacts,
+    relationshipCandidates: specializedReviewerViews.relationshipCandidates,
+  });
+  const factConsistencyReviewFinal = await service.generateObjectForTask({
+    task: "review_fact",
+    messages: factFinalMessages,
+    schema: factConsistencyReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1800,
+  });
+
+  logStage("chapter", `llm: review_commercial_draft_final chapter=${args.chapterNumber}`);
+  const commercialFinalMessages = buildCommercialReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: rewrittenOutput.draft,
+  });
+  const commercialReviewFinal = await service.generateObjectForTask({
+    task: "review_commercial",
+    messages: commercialFinalMessages,
+    schema: commercialReviewerResultSchema,
+    temperature: 0.2,
+    maxTokens: 1600,
+  });
+
+  const draftPath = chapterDraftRewritePath(args.projectId, args.chapterNumber);
+  const metadataPath = chapterDraftRewriteMetadataPath(args.projectId, args.chapterNumber);
+  const versionId = new Date().toISOString().replace(/[:.]/g, "-");
+  const versionDraftPath = chapterDraftRewriteVersionDraftPath(
+    args.projectId,
+    args.chapterNumber,
+    versionId,
+  );
+  const versionMetadataPath = chapterDraftRewriteVersionMetadataPath(
+    args.projectId,
+    args.chapterNumber,
+    versionId,
+  );
+  const metadataPayload = {
+    versionId,
+    chapterNumber: args.chapterNumber,
+    generatedAt: new Date().toISOString(),
+    sourceResultPath: path.relative(process.cwd(), path.resolve(
+      process.cwd(),
+      "data",
+      "projects",
+      args.projectId,
+      "chapters",
+      `chapter-${String(args.chapterNumber).padStart(3, "0")}`,
+      "result.json",
+    )),
+    mode: draftRewritePlan.mode,
+    objective: forcedObjective,
+    title: rewrittenOutput.title ?? existingArtifact.writerResult.title,
+    contextSummary: {
+      chapterGoal: existingArtifact.plan.chapterGoal,
+      plannedOutcome: existingArtifact.plan.plannedOutcome,
+      emotionalGoal: existingArtifact.plan.emotionalGoal,
+    },
+    initialReviews: {
+      missingResource: initialMissing,
+      factConsistency: initialFact,
+      commercial: initialCommercial,
+    },
+    finalReviews: {
+      missingResource: missingResourceReviewFinal.object,
+      factConsistency: factConsistencyReviewFinal.object,
+      commercial: commercialReviewFinal.object,
+    },
+  };
+  await writeJsonArtifact(metadataPath, metadataPayload);
+  await writeFile(draftPath, rewrittenOutput.draft, "utf-8");
+  await writeJsonArtifact(versionMetadataPath, metadataPayload);
+  await writeFile(versionDraftPath, rewrittenOutput.draft, "utf-8");
+  await saveEmbeddingCacheForProject(args.projectId);
+
+  const retrievalEval = args.withEval
+    ? await runRetrievalEval({ projectId: args.projectId })
+    : undefined;
+  if (
+    args.strictEval &&
+    retrievalEval &&
+    retrievalEval.report.passedCases < retrievalEval.report.totalCases
+  ) {
+    throw new Error(
+      `Retrieval eval failed under --strict-eval: ${retrievalEval.report.passedCases}/${retrievalEval.report.totalCases} passed.`,
+    );
+  }
+
+  return {
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    draftPath,
+    metadataPath,
+    versionId,
+    versionDraftPath,
+    versionMetadataPath,
+    mode: draftRewritePlan.mode,
+    title: rewrittenOutput.title ?? existingArtifact.writerResult.title,
+    retrievalEval,
+  };
+}
+
+export async function applyDraftRewrite(args: {
+  projectId: string;
+  chapterNumber: number;
+  versionId?: string;
+}): Promise<ApplyDraftRewriteRunResult> {
+  if (args.chapterNumber < 1) {
+    throw new Error("chapterNumber must be >= 1");
+  }
+
+  const repository = new FileProjectRepository();
+  const existingArtifact = await repository.loadChapterArtifact(args.projectId, args.chapterNumber);
+  if (!existingArtifact) {
+    throw new Error(
+      `chapter apply-draft-rewrite requires an existing chapter artifact: project=${args.projectId}, chapter=${args.chapterNumber}`,
+    );
+  }
+
+  const metadataPath = args.versionId
+    ? chapterDraftRewriteVersionMetadataPath(args.projectId, args.chapterNumber, args.versionId)
+    : chapterDraftRewriteMetadataPath(args.projectId, args.chapterNumber);
+  const draftRewritePath = args.versionId
+    ? chapterDraftRewriteVersionDraftPath(args.projectId, args.chapterNumber, args.versionId)
+    : chapterDraftRewritePath(args.projectId, args.chapterNumber);
+  const metadata = await readJsonArtifact<{
+    versionId?: string;
+    title?: string;
+  }>(metadataPath);
+  if (!metadata) {
+    throw new Error(
+      `chapter apply-draft-rewrite requires rewrite metadata: ${metadataPath}`,
+    );
+  }
+
+  const rewrittenDraft = await readFile(draftRewritePath, "utf-8").catch(() => null);
+  if (!rewrittenDraft?.trim()) {
+    throw new Error(
+      `chapter apply-draft-rewrite requires rewrite draft content: ${draftRewritePath}`,
+    );
+  }
+
+  const backupDraftPath = chapterBackupDraftPath(args.projectId, args.chapterNumber);
+  const backupResultPath = chapterBackupResultPath(args.projectId, args.chapterNumber);
+  await writeFile(backupDraftPath, existingArtifact.writerResult.draft, "utf-8");
+  await writeJsonArtifact(backupResultPath, existingArtifact);
+
+  const promotedArtifact: ChapterArtifact = {
+    ...existingArtifact,
+    writerResult: {
+      ...existingArtifact.writerResult,
+      title: metadata.title?.trim() || existingArtifact.writerResult.title,
+      draft: rewrittenDraft,
+      notes: uniqueStrings(
+        [
+          ...existingArtifact.writerResult.notes,
+          `Promoted draft rewrite on ${new Date().toISOString()}`,
+        ],
+        12,
+      ),
+    },
+    generatedAt: new Date().toISOString(),
+  };
+
+  await repository.saveChapterArtifact(args.projectId, promotedArtifact);
+
+  return {
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    versionId: metadata.versionId ?? args.versionId ?? "latest",
+    draftRewritePath,
+    metadataPath,
+    backupDraftPath,
+    backupResultPath,
+    canonicalDraftPath: chapterCanonicalDraftPath(args.projectId, args.chapterNumber),
+    canonicalResultPath: chapterCanonicalResultPath(args.projectId, args.chapterNumber),
+    title: promotedArtifact.writerResult.title,
+  };
+}
+
+async function loadDraftRewriteVersionMetadata(args: {
+  projectId: string;
+  chapterNumber: number;
+  versionId: string;
+}): Promise<{
+  versionId?: string;
+  generatedAt?: string;
+  mode?: string;
+  title?: string;
+  objective?: string;
+} | null> {
+  return readJsonArtifact<{
+    versionId?: string;
+    generatedAt?: string;
+    mode?: string;
+    title?: string;
+    objective?: string;
+  }>(chapterDraftRewriteVersionMetadataPath(args.projectId, args.chapterNumber, args.versionId));
+}
+
+export async function listDraftRewriteVersions(args: {
+  projectId: string;
+  chapterNumber: number;
+}): Promise<ListDraftRewriteVersionsRunResult> {
+  if (args.chapterNumber < 1) {
+    throw new Error("chapterNumber must be >= 1");
+  }
+
+  const versionsDir = chapterDraftRewriteVersionsDir(args.projectId, args.chapterNumber);
+  let versionIds: string[] = [];
+  try {
+    const entries = await readdir(versionsDir, { withFileTypes: true });
+    versionIds = entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => entry.name.replace(/\.json$/i, ""))
+      .sort()
+      .reverse();
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code === "ENOENT"
+    ) {
+      return {
+        projectId: args.projectId,
+        chapterNumber: args.chapterNumber,
+        versions: [],
+      };
+    }
+    throw error;
+  }
+
+  const latestMetadata = await readJsonArtifact<{ versionId?: string }>(
+    chapterDraftRewriteMetadataPath(args.projectId, args.chapterNumber),
+  );
+  const latestVersionId = latestMetadata?.versionId;
+
+  const versions = await Promise.all(
+    versionIds.map(async (versionId) => {
+      const metadata = await loadDraftRewriteVersionMetadata({
+        projectId: args.projectId,
+        chapterNumber: args.chapterNumber,
+        versionId,
+      });
+      return {
+        versionId,
+        generatedAt: metadata?.generatedAt,
+        mode: metadata?.mode,
+        title: metadata?.title,
+        draftPath: chapterDraftRewriteVersionDraftPath(args.projectId, args.chapterNumber, versionId),
+        metadataPath: chapterDraftRewriteVersionMetadataPath(
+          args.projectId,
+          args.chapterNumber,
+          versionId,
+        ),
+        isLatest: versionId === latestVersionId,
+      } satisfies DraftRewriteVersionSummary;
+    }),
+  );
+
+  return {
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    versions,
+  };
+}
+
+function lineComparison(selected: string, baseline: string): InspectDraftRewriteRunResult["comparison"] {
+  const normalizedSelected = selected.replace(/\s+$/g, "");
+  const normalizedBaseline = baseline.replace(/\s+$/g, "");
+  const selectedLines = normalizedSelected.split(/\r?\n/);
+  const baselineLines = normalizedBaseline.split(/\r?\n/);
+  const maxLength = Math.max(selectedLines.length, baselineLines.length);
+  let firstDifferenceLine: number | null = null;
+
+  for (let index = 0; index < maxLength; index += 1) {
+    if ((selectedLines[index] ?? "") !== (baselineLines[index] ?? "")) {
+      firstDifferenceLine = index + 1;
+      break;
+    }
+  }
+
+  return {
+    selectedLines: selectedLines.length,
+    baselineLines: baselineLines.length,
+    lineDelta: selectedLines.length - baselineLines.length,
+    selectedChars: normalizedSelected.length,
+    baselineChars: normalizedBaseline.length,
+    charDelta: normalizedSelected.length - normalizedBaseline.length,
+    firstDifferenceLine,
+    exactMatch: normalizedSelected === normalizedBaseline,
+  };
+}
+
+export async function inspectDraftRewrite(args: {
+  projectId: string;
+  chapterNumber: number;
+  versionId?: string;
+}): Promise<InspectDraftRewriteRunResult> {
+  if (args.chapterNumber < 1) {
+    throw new Error("chapterNumber must be >= 1");
+  }
+
+  const list = await listDraftRewriteVersions({
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+  });
+  if (list.versions.length === 0) {
+    throw new Error(
+      `chapter inspect-draft-rewrite requires at least one rewrite version: project=${args.projectId}, chapter=${args.chapterNumber}`,
+    );
+  }
+
+  const selectedVersion =
+    (args.versionId
+      ? list.versions.find((item) => item.versionId === args.versionId)
+      : list.versions.find((item) => item.isLatest) ?? list.versions[0]) ?? null;
+  if (!selectedVersion) {
+    throw new Error(
+      `chapter inspect-draft-rewrite could not find version ${args.versionId} for chapter ${args.chapterNumber}`,
+    );
+  }
+
+  const selectedDraft = await readFile(selectedVersion.draftPath, "utf-8");
+  const canonicalDraft = await readFile(
+    chapterCanonicalDraftPath(args.projectId, args.chapterNumber),
+    "utf-8",
+  );
+  const latestDraft = await readFile(
+    chapterDraftRewritePath(args.projectId, args.chapterNumber),
+    "utf-8",
+  ).catch(() => canonicalDraft);
+  const compareAgainst: "canonical" | "latest" = selectedVersion.isLatest ? "canonical" : "latest";
+  const baselineDraft = compareAgainst === "canonical" ? canonicalDraft : latestDraft;
+  const metadata = await loadDraftRewriteVersionMetadata({
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    versionId: selectedVersion.versionId,
+  });
+
+  return {
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    versionId: selectedVersion.versionId,
+    draftPath: selectedVersion.draftPath,
+    metadataPath: selectedVersion.metadataPath,
+    title: metadata?.title,
+    mode: metadata?.mode,
+    generatedAt: metadata?.generatedAt,
+    objective: metadata?.objective,
+    compareAgainst,
+    comparison: lineComparison(selectedDraft, baselineDraft),
+  };
+}
+
 function compareRetrievalEvalReports(
   previousReport: RetrievalEvalReport | null,
   currentReport: RetrievalEvalReport,
@@ -1858,15 +2723,12 @@ async function generateChapterArtifact(args: {
     label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_writer`,
     messages: writerMessages,
   });
-  const writerTextResult = await args.service.generateForTask({
+  const writerOutput = await generateWriterLikeResult({
+    service: args.service,
     task: "writer",
     messages: writerMessages,
     temperature: 0.6,
     maxTokens: 2800,
-  });
-  const writerOutput = parseWriterLikeOutput({
-    provider: writerTextResult.provider,
-    rawText: writerTextResult.text,
   });
   const writerResult = {
     object: {
@@ -1979,15 +2841,12 @@ async function generateChapterArtifact(args: {
       label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_rewriter_${rewritePlan.mode}`,
       messages: rewriterMessages,
     });
-    const rewrittenTextResult = await args.service.generateForTask({
+    const rewrittenOutput = await generateWriterLikeResult({
+      service: args.service,
       task: "rewriter",
       messages: rewriterMessages,
       temperature: rewriteTemp,
       maxTokens: 3000,
-    });
-    const rewrittenOutput = parseWriterLikeOutput({
-      provider: rewrittenTextResult.provider,
-      rawText: rewrittenTextResult.text,
       fallbackTitle: rewrittenTitle,
     });
     rewrittenDraft = rewrittenOutput.draft;
@@ -2098,10 +2957,17 @@ async function generateChapterArtifact(args: {
     temperature: 0.2,
     maxTokens: 2200,
   });
+  const validatedMemoryUpdate = validateMemoryUpdaterResult({
+    result: memoryUpdate.object as MemoryUpdaterResult,
+    existingMemories: args.base.storyMemories,
+    chapterPlan,
+    activeCharacterIds: chapterPlan.requiredCharacters,
+    draft: rewrittenDraft,
+  });
 
   const updatedStoryMemories = applyMemoryUpdaterResult(
     args.base.storyMemories,
-    memoryUpdate.object,
+    validatedMemoryUpdate.sanitized,
     args.chapterNumber,
   );
   const updatedChapterPlans = upsertChapterPlan(args.base.chapterPlans, chapterPlan);
@@ -2118,7 +2984,7 @@ async function generateChapterArtifact(args: {
     missingResourceReview: activeMissing,
     factConsistencyReview: activeFact,
     commercialReview: activeCommercial,
-    memoryUpdate: memoryUpdate.object as MemoryUpdaterResult,
+    memoryUpdate: validatedMemoryUpdate.sanitized,
     generatedAt: new Date().toISOString(),
   };
 
@@ -2126,6 +2992,14 @@ async function generateChapterArtifact(args: {
   await args.repository.saveChapterPlans(args.projectId, updatedChapterPlans);
   await args.repository.saveStoryMemories(args.projectId, updatedStoryMemories);
   await args.repository.saveChapterArtifact(args.projectId, artifact);
+  await writeJsonArtifact(chapterMemoryValidationPath(args.projectId, args.chapterNumber), {
+    chapterNumber: args.chapterNumber,
+    generatedAt: new Date().toISOString(),
+    warningCount: validatedMemoryUpdate.warnings.length,
+    warnings: validatedMemoryUpdate.warnings,
+    evidenceChecks: validatedMemoryUpdate.evidenceChecks,
+    sanitizedMemoryUpdate: validatedMemoryUpdate.sanitized,
+  });
   await writeRetrievalDebugReport({
     projectId: args.projectId,
     chapterNumber: args.chapterNumber,
@@ -2482,6 +3356,144 @@ export function formatInvalidateTargetRunResult(result: InvalidateTargetRunResul
   lines.push(`Remaining memories: ${result.invalidation.remainingMemories}`);
 
   return lines.join("\n");
+}
+
+export function formatRegenerateFromTargetRunResult(result: RegenerateFromTargetRunResult): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Target: ${result.targetId}`);
+  lines.push(`Requested regenerate count: ${result.requestedCount}`);
+  lines.push(`Impact report: ${result.impactReportPath}`);
+  lines.push(`Rewrite plan: ${result.rewritePlanPath}`);
+  lines.push(
+    `Suggested invalidation chapter: ${result.plan.suggestedInvalidationChapter ?? "none"}`,
+  );
+
+  if (!result.invalidation) {
+    lines.push("Invalidation: skipped");
+    lines.push("Generation: skipped");
+    lines.push("Reason: no impacted chapter could be mapped to a concrete invalidation point.");
+    return lines.join("\n");
+  }
+
+  lines.push(`Invalidated from chapter: ${result.invalidation.chapterNumber}`);
+  lines.push(
+    `Deleted chapter artifacts: ${result.invalidation.deletedChapterNumbers.length > 0 ? result.invalidation.deletedChapterNumbers.join(", ") : "none"}`,
+  );
+
+  if (result.generation) {
+    lines.push(`Regenerated target chapter: ${result.generation.targetChapter}`);
+    lines.push(
+      `Generated now: ${result.generation.generatedChapterNumbers.length > 0 ? result.generation.generatedChapterNumbers.join(", ") : "none"}`,
+    );
+    if (result.generation.retrievalEval) {
+      lines.push(
+        `Retrieval eval: ${result.generation.retrievalEval.report.passedCases}/${result.generation.retrievalEval.report.totalCases} passed`,
+      );
+    }
+  }
+
+  return lines.join("\n");
+}
+
+export function formatRewriteChapterRunResult(result: RewriteChapterRunResult): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Chapter: ${result.chapterNumber}`);
+  lines.push(`Invalidated from chapter: ${result.invalidation.chapterNumber}`);
+  lines.push(
+    `Deleted chapter artifacts: ${result.invalidation.deletedChapterNumbers.length > 0 ? result.invalidation.deletedChapterNumbers.join(", ") : "none"}`,
+  );
+  lines.push(`Regenerated target chapter: ${result.generation.targetChapter}`);
+  lines.push(
+    `Generated now: ${result.generation.generatedChapterNumbers.length > 0 ? result.generation.generatedChapterNumbers.join(", ") : "none"}`,
+  );
+
+  if (result.generation.retrievalEval) {
+    lines.push(
+      `Retrieval eval: ${result.generation.retrievalEval.report.passedCases}/${result.generation.retrievalEval.report.totalCases} passed`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+export function formatRewriteDraftRunResult(result: RewriteDraftRunResult): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Chapter: ${result.chapterNumber}`);
+  lines.push(`Version: ${result.versionId}`);
+  lines.push(`Mode: ${result.mode}`);
+  lines.push(`Title: ${result.title ?? "(untitled)"}`);
+  lines.push(`Draft path: ${result.draftPath}`);
+  lines.push(`Metadata path: ${result.metadataPath}`);
+  lines.push(`Version draft: ${result.versionDraftPath}`);
+  lines.push(`Version metadata: ${result.versionMetadataPath}`);
+
+  if (result.retrievalEval) {
+    lines.push(
+      `Retrieval eval: ${result.retrievalEval.report.passedCases}/${result.retrievalEval.report.totalCases} passed`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+export function formatApplyDraftRewriteRunResult(result: ApplyDraftRewriteRunResult): string {
+  return [
+    `Project: ${result.projectId}`,
+    `Chapter: ${result.chapterNumber}`,
+    `Version: ${result.versionId}`,
+    `Title: ${result.title ?? "(untitled)"}`,
+    `Applied rewrite draft: ${result.draftRewritePath}`,
+    `Applied metadata: ${result.metadataPath}`,
+    `Backup draft: ${result.backupDraftPath}`,
+    `Backup result: ${result.backupResultPath}`,
+    `Canonical draft: ${result.canonicalDraftPath}`,
+    `Canonical result: ${result.canonicalResultPath}`,
+  ].join("\n");
+}
+
+export function formatListDraftRewriteVersionsRunResult(
+  result: ListDraftRewriteVersionsRunResult,
+): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Chapter: ${result.chapterNumber}`);
+  lines.push(`Versions: ${result.versions.length}`);
+  if (result.versions.length === 0) {
+    return lines.join("\n");
+  }
+
+  lines.push("");
+  for (const version of result.versions) {
+    lines.push(
+      `- ${version.versionId}${version.isLatest ? " [latest]" : ""} | mode=${version.mode ?? "?"} | title=${version.title ?? "(untitled)"}`,
+    );
+  }
+
+  return lines.join("\n");
+}
+
+export function formatInspectDraftRewriteRunResult(
+  result: InspectDraftRewriteRunResult,
+): string {
+  return [
+    `Project: ${result.projectId}`,
+    `Chapter: ${result.chapterNumber}`,
+    `Version: ${result.versionId}`,
+    `Title: ${result.title ?? "(untitled)"}`,
+    `Mode: ${result.mode ?? "?"}`,
+    `Generated at: ${result.generatedAt ?? "?"}`,
+    `Draft path: ${result.draftPath}`,
+    `Metadata path: ${result.metadataPath}`,
+    `Compare against: ${result.compareAgainst}`,
+    `Exact match: ${result.comparison.exactMatch ? "yes" : "no"}`,
+    `First difference line: ${result.comparison.firstDifferenceLine ?? "none"}`,
+    `Line delta: ${formatSignedNumber(result.comparison.lineDelta)}`,
+    `Char delta: ${formatSignedNumber(result.comparison.charDelta)}`,
+    `Objective: ${result.objective ?? ""}`,
+  ].join("\n");
 }
 
 function formatSignedNumber(value: number): string {
