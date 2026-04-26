@@ -7,19 +7,19 @@ export const defaultTaskRoutes: Record<TaskName, ModelRoute> = {
   },
   story_outline: {
     provider: "deepseek",
-    model: "deepseek-v4-pro",
+    model: "deepseek-v4-flash",
   },
   cast_expansion: {
     provider: "deepseek",
-    model: "deepseek-v4-pro",
+    model: "deepseek-v4-flash",
   },
   arc_outline: {
     provider: "deepseek",
-    model: "deepseek-v4-pro",
+    model: "deepseek-v4-flash",
   },
   beat_outline: {
     provider: "deepseek",
-    model: "deepseek-v4-pro",
+    model: "deepseek-v4-flash",
   },
   planner: {
     provider: "deepseek",

@@ -1,33 +1,66 @@
-# Novel AI Agent
+# Novel AI
 
-面向长篇网文创作的项目型写作原型。
+面向长篇网络小说创作的项目型写作原型。
 
-当前重点不是 UI，而是一个可跑的命令行 pipeline：
+当前重点不是 UI，而是一条可运行、可回溯、可改稿的命令行 pipeline：
 
 - 项目初始化
 - 作者配置生成
-- 大纲生成
-- 单章生成
-- reviewer 审校
-- memory 回写
+- 分层大纲生成
+- 章节生成
+- memory / retrieval
+- reviewer / rewriter
+- 局部失效、重写、续写
 
-## 运行环境
+## 当前状态
 
-- Node.js 22+
-- Windows PowerShell 或 Ubuntu Bash
-- 已安装依赖：
-  - Windows：`cmd /c npm install`
-  - Ubuntu：`npm install`
-- `.env` 中至少配置一个可用模型，目前默认走 `DeepSeek`
+这个仓库现在已经有一条能跑通的主链：
+
+- `project -> outline -> chapter -> memory -> retrieval -> rewrite`
+- 支持项目级独立配置
+- 支持 impact / rewrite-plan / invalidate / regenerate
+- 支持章节草稿 sidecar 重写、版本化保存、指定版本 promote
+- 支持 retrieval eval 回归检查
+
+它已经不是“只会写一章”的 demo，但也还不是完整产品。当前更接近一个 CLI-first 的小说 agent 基座。
+
+## 环境要求
+
+- Node.js 20+，推荐 22+
+- Windows PowerShell 或 Linux/macOS Bash
+- 本地安装依赖：`npm install`
+
+## 安装
+
+Windows:
+
+```powershell
+cmd /c npm install
+```
+
+Linux / macOS:
+
+```bash
+npm install
+```
 
 ## 环境变量
 
-在项目根目录创建 `.env`：
+在仓库根目录创建 `.env`。
+
+最小可用配置：
 
 ```env
 DEEPSEEK_API_KEY=your_key
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+```
 
+当前默认任务路由是 DeepSeek，见 [config.ts](D:/Code/NovelAi/src/llm/config.ts)。
+默认模型是 `deepseek-v4-flash`。
+
+可选 provider 配置示例：
+
+```env
 OPENAI_API_KEY=
 OPENAI_BASE_URL=https://api.openai.com/v1
 
@@ -41,38 +74,33 @@ GLM_API_KEY=
 GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 ```
 
-当前默认任务路由在 [src/llm/config.ts](./src/llm/config.ts)。
-如需启用 GLM，可将任务路由改为：`provider: "glm"`，模型例如 `glm-4.5`。
+可选 embedding 配置：
+
+```env
+NOVELAI_EMBEDDING_MODE=openai_compatible
+NOVELAI_EMBEDDING_API_KEY=
+NOVELAI_EMBEDDING_BASE_URL=https://api.openai.com/v1
+NOVELAI_EMBEDDING_MODEL=text-embedding-3-small
+```
+
+不配 embedding 时，系统会自动回退到本地语义检索。
 
 ## 启动方式
 
-不要直接依赖全局 `npm` 或全局 `tsx`。
+不要依赖全局 `tsc` 或全局 `tsx`。
 
-项目已经提供入口脚本：
+项目已提供封装脚本：
 
-- Windows:
-  - [run-v1.ps1](./run-v1.ps1)
-  - [run-demo.ps1](./run-demo.ps1)
-- Ubuntu:
-  - [run-v1.sh](./run-v1.sh)
-  - [run-demo.sh](./run-demo.sh)
+- Windows: [run-v1.ps1](D:/Code/NovelAi/run-v1.ps1)
+- Linux / macOS: [run-v1.sh](D:/Code/NovelAi/run-v1.sh)
 
 它们会：
 
-1. 使用本地 `tsc` 编译
-2. 用 `node --env-file=.env` 运行编译后的 `dist/*.js`
+1. 使用本地 TypeScript 编译到 `dist/`
+2. 自动读取 `.env`
+3. 运行 `dist/v1.js`
 
-## 最小检查
-
-安装依赖：
-
-```powershell
-cmd /c npm install
-```
-
-```bash
-npm install
-```
+## 基础检查
 
 类型检查：
 
@@ -84,247 +112,462 @@ cmd /c npm run check
 npm run check
 ```
 
-跑 demo：
+构建：
 
 ```powershell
-.\run-demo.ps1
+cmd /c npm run build
 ```
 
 ```bash
-chmod +x ./run-v1.sh ./run-demo.sh
-./run-demo.sh
+npm run build
 ```
 
-## 项目模型
+## 核心概念
 
-系统按 `project` 运转。
+### 1. Project
+
+系统按项目运行。
 
 一个项目就是一套独立的：
 
 - 作者配置
+- 世界与设定
 - 大纲
 - memory
-- 章节状态
+- chapters
 
-也就是：
-
-`一个项目 = 一套独立作者配置 + 一套独立大纲 + 一套独立 memory + 一套独立章节产物`
-
-## 常用命令
-
-### 1. 初始化项目
-
-```powershell
-.\run-v1.ps1 project bootstrap --project demo-project
-```
-
-作用：
-
-- 初始化项目目录
-- 生成或补齐默认配置文件
-- 生成作者配置与基础 packs
-- 写入默认 theme/style/setup
-
-### 2. 查看项目摘要
-
-```powershell
-.\run-v1.ps1 project inspect --project demo-project
-```
-
-输出内容包括：
-
-- premise
-- 作者配置
-- story outline 是否存在
-- arc / beat 数量
-- memory 数量
-- chapter plan 数量
-
-### 3. 查看项目文件路径
-
-```powershell
-.\run-v1.ps1 project paths --project demo-project
-```
-
-适合手动编辑 JSON/Markdown 时先定位文件。
-
-### 4. 查看当前 outline
-
-```powershell
-.\run-v1.ps1 outline inspect --project demo-project
-```
-
-会输出：
-
-- story outline
-- arc outlines
-- beat outlines
-
-### 4.1 校验 outline 完整性
-
-```bash
-./run-v1.sh outline validate --project demo-project
-```
-
-会检查：
-
-- story / arc / beat 是否齐全
-- arc 章节范围是否连续覆盖
-- beat 是否按 arc 连续覆盖且顺序合法
-
-### 5. 生成分层大纲
-
-```powershell
-.\run-v1.ps1 outline generate-stack --project demo-project --count 250
-```
-
-当前实现会按四层生成：
-
-1. `StoryOutline`
-2. `CastExpansion`
-3. `ArcOutline`
-4. `BeatOutline`
-
-产物会保存到项目目录：
-
-- `story-outline.json`
-- `cast-outlines.json`
-- `arc-outlines.json`
-
-### 6. 生成指定章节
-
-```powershell
-.\run-v1.ps1 chapter generate --project demo-project --chapter 1
-```
-
-当前单章链路是：
-
-`Planner -> Context Builder -> Writer -> Missing Resource Reviewer -> Fact Consistency Reviewer -> MemoryUpdater`
-
-### 7. 连续生成前 N 章
-
-```powershell
-.\run-v1.ps1 chapter generate-first --project demo-project --count 3
-```
-
-适合跑一个最小连续写作验证。
-
-### 8. 查看某一章结果
-
-```powershell
-.\run-v1.ps1 chapter inspect --project demo-project --chapter 1
-```
-
-输出内容包括：
-
-- chapter plan
-- summary
-- reviewer finding 数量
-- draft 路径
-- result 路径
-
-## 推荐使用流程
-
-### 流程 A：从零初始化到写第一章
-
-```powershell
-.\run-v1.ps1 project bootstrap --project my-novel
-.\run-v1.ps1 project inspect --project my-novel
-.\run-v1.ps1 outline inspect --project my-novel
-.\run-v1.ps1 chapter generate --project my-novel --chapter 1
-```
-
-### 流程 B：先做长篇总纲，再写章节
-
-```powershell
-.\run-v1.ps1 project bootstrap --project my-novel
-.\run-v1.ps1 outline generate-stack --project my-novel --count 250
-.\run-v1.ps1 outline inspect --project my-novel
-.\run-v1.ps1 chapter generate --project my-novel --chapter 1
-```
-
-### 流程 C：连续生成前几章做 smoke test
-
-```powershell
-.\run-v1.ps1 project bootstrap --project smoke-project
-.\run-v1.ps1 chapter generate-first --project smoke-project --count 3
-.\run-v1.ps1 chapter inspect --project smoke-project --chapter 1
-```
-
-## 项目目录
-
-项目默认保存在：
+所有项目数据都保存在：
 
 ```text
 data/projects/<project-id>/
 ```
 
-典型目录结构：
+### 2. Outline Gate
+
+章节生成默认要求细纲已审批。
+
+也就是说，正常流程不是直接 `chapter generate`，而是：
+
+1. 生成 outline stack
+2. 导出 markdown 草稿
+3. 人工审阅
+4. approve detail
+5. 再开始生成章节
+
+### 3. Canonical vs Sidecar
+
+系统里有两类章节产物：
+
+- 正式产物：`draft.md` / `result.json`
+- sidecar 产物：`draft_rewrite.*` / `draft_rewrite_versions/*`
+
+`rewrite-draft` 不会直接改正式稿，只有 `apply-draft-rewrite` 才会 promote。
+
+## 推荐工作流
+
+### 工作流 A：从零开始到首章
+
+```powershell
+.\run-v1.ps1 project bootstrap --project my-novel
+.\run-v1.ps1 outline generate-stack --project my-novel --count 120
+.\run-v1.ps1 outline generate-drafts --project my-novel
+.\run-v1.ps1 outline approve-detail --project my-novel --approver your-name --note "ok"
+.\run-v1.ps1 chapter generate --project my-novel --chapter 1
+```
+
+### 工作流 B：连续生成前几章
+
+```powershell
+.\run-v1.ps1 chapter generate-first --project my-novel --count 3 --with-eval
+```
+
+### 工作流 C：结构性改动后续写
+
+```powershell
+.\run-v1.ps1 project regenerate-from-target --project my-novel --target protagonist --count 4 --with-eval
+```
+
+### 工作流 D：单章正式重写
+
+```powershell
+.\run-v1.ps1 chapter rewrite --project my-novel --chapter 5 --with-eval
+```
+
+### 工作流 E：单章草稿迭代
+
+```powershell
+.\run-v1.ps1 chapter rewrite-draft --project my-novel --chapter 5
+.\run-v1.ps1 chapter list-draft-rewrites --project my-novel --chapter 5
+.\run-v1.ps1 chapter inspect-draft-rewrite --project my-novel --chapter 5
+.\run-v1.ps1 chapter apply-draft-rewrite --project my-novel --chapter 5
+```
+
+## 常用命令
+
+### 项目
+
+初始化项目：
+
+```powershell
+.\run-v1.ps1 project bootstrap --project demo_project
+```
+
+列出作者预设：
+
+```powershell
+.\run-v1.ps1 project profiles
+```
+
+基于问答生成作者配置：
+
+```powershell
+.\run-v1.ps1 project interview --project demo_project --answers A,B,C,A,B,C
+```
+
+查看项目摘要：
+
+```powershell
+.\run-v1.ps1 project inspect --project demo_project
+```
+
+查看关键路径：
+
+```powershell
+.\run-v1.ps1 project paths --project demo_project
+```
+
+分析某个 target 的影响范围：
+
+```powershell
+.\run-v1.ps1 project impact --project demo_project --target protagonist
+```
+
+生成重写计划：
+
+```powershell
+.\run-v1.ps1 project rewrite-plan --project demo_project --target protagonist
+```
+
+按 target 自动失效并续写：
+
+```powershell
+.\run-v1.ps1 project regenerate-from-target --project demo_project --target protagonist --count 4 --with-eval
+```
+
+### 大纲
+
+查看 outline：
+
+```powershell
+.\run-v1.ps1 outline inspect --project demo_project
+```
+
+生成分层大纲：
+
+```powershell
+.\run-v1.ps1 outline generate-stack --project demo_project --count 120
+```
+
+导出 markdown 草稿：
+
+```powershell
+.\run-v1.ps1 outline generate-drafts --project demo_project
+```
+
+审批细纲：
+
+```powershell
+.\run-v1.ps1 outline approve-detail --project demo_project --approver your-name --note "ok"
+```
+
+校验 outline：
+
+```powershell
+.\run-v1.ps1 outline validate --project demo_project
+```
+
+### 章节生成
+
+生成指定章节：
+
+```powershell
+.\run-v1.ps1 chapter generate --project demo_project --chapter 1
+```
+
+连续生成前 N 章：
+
+```powershell
+.\run-v1.ps1 chapter generate-first --project demo_project --count 3
+```
+
+查看章节摘要：
+
+```powershell
+.\run-v1.ps1 chapter inspect --project demo_project --chapter 1
+```
+
+从某章开始失效：
+
+```powershell
+.\run-v1.ps1 chapter invalidate-from --project demo_project --chapter 5
+```
+
+按 target 自动失效：
+
+```powershell
+.\run-v1.ps1 chapter invalidate-target --project demo_project --target protagonist
+```
+
+重置全部章节：
+
+```powershell
+.\run-v1.ps1 chapter reset-all --project demo_project
+```
+
+### 章节改稿
+
+正式重写单章：
+
+```powershell
+.\run-v1.ps1 chapter rewrite --project demo_project --chapter 5 --with-eval
+```
+
+非破坏性重写草稿：
+
+```powershell
+.\run-v1.ps1 chapter rewrite-draft --project demo_project --chapter 5
+```
+
+列出草稿重写版本：
+
+```powershell
+.\run-v1.ps1 chapter list-draft-rewrites --project demo_project --chapter 5
+```
+
+查看某个草稿重写版本：
+
+```powershell
+.\run-v1.ps1 chapter inspect-draft-rewrite --project demo_project --chapter 5 --version <version-id>
+```
+
+promote 某个草稿重写版本：
+
+```powershell
+.\run-v1.ps1 chapter apply-draft-rewrite --project demo_project --chapter 5 --version <version-id>
+```
+
+### Retrieval Eval
+
+生成 eval 集：
+
+```powershell
+.\run-v1.ps1 memory eval-seed --project demo_project
+```
+
+运行 eval：
+
+```powershell
+.\run-v1.ps1 memory eval-run --project demo_project
+```
+
+章节生成时顺手跑 eval：
+
+```powershell
+.\run-v1.ps1 chapter generate --project demo_project --chapter 9 --with-eval
+```
+
+严格模式：
+
+```powershell
+.\run-v1.ps1 chapter generate --project demo_project --chapter 9 --strict-eval
+```
+
+## 目录结构
+
+典型项目目录：
 
 ```text
-data/projects/demo-project/
+data/projects/demo_project/
   author-profile.json
   theme-bible.json
   style-bible.json
   story-setup.json
   story-outline.json
-  cast-outlines.json
   arc-outlines.json
   beat-outlines.json
+  cast-outlines.json
   character-states.json
   world-facts.json
   story-memories.json
   chapter-plans.json
-  derived/
-    author-profile-packs.json
+  detailed-outline.md
+  detailed-outline-approved.json
+  memory/
+    chapter-cards.json
+    ledgers/
+    retrieval/
+      entity-chapter-map.json
+      semantic-index.json
+      embedding-cache.json
+      chapter-001.json
+    graph/
+      story-graph.json
+    digests/
+      active-threads.json
+    eval/
+      retrieval-eval-set.json
+      retrieval-eval-report.json
+  impact/
+    protagonist.json
+    protagonist.rewrite-plan.json
   chapters/
     chapter-001/
       draft.md
       result.json
+      memory_update_validation.json
+      draft_rewrite.md
+      draft_rewrite.json
+      draft_rewrite_versions/
+      draft_before_promote.md
+      result_before_promote.json
 ```
 
-## 当前已实现
+## Memory / Retrieval
 
-- 项目型存储
-- 作者采访器与 `AuthorProfile`
-- `planner / writer / reviewer / memory updater`
-- 分层 outline 生成实验
-- 命令层
-- 本地文件持久化
+当前 memory 框架已经包括：
 
-## 当前未实现或未闭环
+- `story-memories.json` 作为长程记忆源
+- chapter cards
+- structured ledgers
+- entity-chapter index
+- semantic index
+- story graph
+- retrieval debug sidecar
+- retrieval eval
 
-- `Rewriter`
-- 完整 `StoryOutline -> ArcOutline -> BeatOutline -> ChapterPlan` 自动链路
-- opening mode 专门优化
-- memory 去噪与回滚
-- UI
+当前 retrieval 是混合式：
+
+- exact search
+- ledger-first deterministic recall
+- semantic recall
+- graph expansion
+- hybrid rerank
+
+当前仍然是 file-first，不是数据库版。
+
+## 改稿与重写
+
+当前有三条不同语义的改稿路径：
+
+### 1. `chapter rewrite`
+
+正式重写。
+
+行为：
+
+- 从该章开始 invalidation
+- 只重生成这一章
+- 会影响 canonical artifact
+
+适合：
+
+- 当前正式稿本身要被替换
+- 这章的 memory 和 chapter result 都应该跟着刷新
+
+### 2. `chapter rewrite-draft`
+
+草稿 sidecar 重写。
+
+行为：
+
+- 不删正式稿
+- 不改 canonical memory
+- 只生成 sidecar
+- 自动保留版本快照
+
+适合：
+
+- 文笔优化
+- 商业化节奏微调
+- 多版尝试
+
+### 3. `project regenerate-from-target`
+
+结构性重写。
+
+行为：
+
+- 先做 impact
+- 再做 rewrite-plan
+- 再失效
+- 再续写指定章数
+
+适合：
+
+- 角色设定改动
+- 关键记忆改动
+- 大纲节点改动
+
+## 已实现能力
+
+- 项目级独立配置
+- 作者 interview / preset
+- 分层 outline
+- chapter planning / writing / review / rewrite
+- memory updater
+- memory writeback validation v1
+- retrieval eval
+- impact / rewrite-plan / invalidate / regenerate
+- 版本化 rewrite-draft + apply/promote
+
+## 仍然是初级版的部分
+
+当前这些功能虽然能用，但还是 v1：
+
+- memory writeback evidence review 仍然是规则型
+- semantic retrieval 还没做更强 batch / fallback
+- graph expansion 还是 lightweight graph
+- retrieval eval 还是 seeded CLI regression
+- storage 还是 file-first，不是 SQLite canonical store
+
+详细 roadmap 见：
+
+- [memory-roadmap.md](D:/Code/NovelAi/docs/memory-roadmap.md)
 
 ## 相关文件
 
-核心入口：
+主入口：
 
-- [src/v1.ts](D:\Code\NovelAi\src\v1.ts)
-- [src/v1-lib.ts](D:\Code\NovelAi\src\v1-lib.ts)
-
-命令脚本：
-
-- [run-v1.ps1](D:\Code\NovelAi\run-v1.ps1)
-- [run-demo.ps1](D:\Code\NovelAi\run-demo.ps1)
+- [v1.ts](D:/Code/NovelAi/src/v1.ts)
+- [v1-lib.ts](D:/Code/NovelAi/src/v1-lib.ts)
 
 存储层：
 
-- [src/storage/project-repository.ts](D:\Code\NovelAi\src\storage\project-repository.ts)
-- [src/storage/file-project-repository.ts](D:\Code\NovelAi\src\storage\file-project-repository.ts)
+- [project-repository.ts](D:/Code/NovelAi/src/storage/project-repository.ts)
+- [file-project-repository.ts](D:/Code/NovelAi/src/storage/file-project-repository.ts)
 
-大纲实验：
+大纲与章节链路：
 
-- [src/outline-lib.ts](D:\Code\NovelAi\src\outline-lib.ts)
-- [src/prompts/story-outline.ts](D:\Code\NovelAi\src\prompts\story-outline.ts)
-- [src/prompts/cast-expansion.ts](D:\Code\NovelAi\src\prompts\cast-expansion.ts)
-- [src/prompts/arc-outline.ts](D:\Code\NovelAi\src\prompts\arc-outline.ts)
+- [outline-lib.ts](D:/Code/NovelAi/src/outline-lib.ts)
+- [planner.ts](D:/Code/NovelAi/src/prompts/planner.ts)
+- [writer.ts](D:/Code/NovelAi/src/prompts/writer.ts)
+- [rewriter.ts](D:/Code/NovelAi/src/prompts/rewriter.ts)
 
-卖点与爽感设计：
+memory / retrieval：
 
-- [docs/payoff-patterns.md](D:\Code\NovelAi\docs\payoff-patterns.md)
-- [docs/male-power-patterns.md](D:\Code\NovelAi\docs\male-power-patterns.md)
+- [memory-system.ts](D:/Code/NovelAi/src/domain/memory-system.ts)
+- [memory-updater.ts](D:/Code/NovelAi/src/domain/memory-updater.ts)
+- [retrieval-eval.ts](D:/Code/NovelAi/src/domain/retrieval-eval.ts)
+- [change-impact.ts](D:/Code/NovelAi/src/domain/change-impact.ts)
+
+商业化节奏：
+
+- [payoff-patterns.md](D:/Code/NovelAi/docs/payoff-patterns.md)
+
+## 注意事项
+
+- 章节生成默认要求细纲已审批
+- `rewrite-draft` 不会自动修改正式稿，必须显式 `apply-draft-rewrite`
+- `apply-draft-rewrite` 当前只 promote 文本和标题，不自动重写 memory
+- `--strict-eval` 会在 retrieval eval 未全通过时直接报错
+- DeepSeek 偶发空 writer-like 输出时，当前 writer / rewriter 路径会自动重试一次
