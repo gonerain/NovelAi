@@ -244,8 +244,11 @@ Deliverables:
 
 ### Later
 
-- [ ] upgrade local semantic vector search to provider-backed embeddings when cost/perf justifies it
-- [ ] add graph expansion
+- [x] upgrade local semantic vector search to provider-backed embeddings when cost/perf justifies it
+- [x] add graph expansion
+- [x] add change-impact tracing for outline / memory / character edits
+- [x] add rewrite-plan bridging from impact reports to chapter invalidation suggestions
+- [x] add target-based invalidation command that executes rewrite-plan output
 - [x] add retrieval eval set with planted facts
 - [ ] add database-backed storage
 
@@ -256,7 +259,11 @@ Deliverables:
 - Retrieval eval now has a file-based scaffold and CLI, so recall changes can be measured instead of judged only by feel.
 - Retrieval eval now supports regression-style comparison against the previous report, and chapter generation can opt into `--with-eval` / `--strict-eval`.
 - Phase 3 has an initial local slice: chapter cards and long-form memories now feed a provider-free semantic vector index, and retrieval is hybrid exact + semantic without weakening ledger-first hard fact recall.
-- The next meaningful milestone is not more memory volume. It is hybrid search or graph expansion, but only against that eval baseline.
+- Phase 4 now has a lightweight file-based graph slice: character-memory, character-card, memory-card, and character-character edges can expand retrieval candidates through 1-hop/2-hop traversal before hybrid reranking.
+- Change-impact tracing now exists as a project command, so edits can be inspected for likely blast radius before invalidating or regenerating chapters.
+- Rewrite-plan bridging now turns impact analysis into a concrete invalidation starting point, so edits can flow into regeneration with less guesswork.
+- Target-based invalidation now exists as an execution command, so the suggested rewrite boundary can be applied without manually translating the report back into chapter operations.
+- The next meaningful milestone is not more recall routes. It is moving these file-based artifacts into a stable database-backed store without losing reproducibility.
 
 ## Known Risks
 

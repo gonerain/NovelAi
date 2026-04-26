@@ -5,6 +5,7 @@ export * from "./author-profile-mapper.js";
 export * from "./author-profile-packs.js";
 export * from "./chapter-artifact.js";
 export * from "./chapter-mapping.js";
+export * from "./change-impact.js";
 export * from "./context-builder.js";
 export * from "./memory-system.js";
 export * from "./memory-updater.js";

@@ -101,6 +101,17 @@ export interface ActiveThreadDigestEntry {
   summary: string;
 }
 
+export interface StoryGraphEdge {
+  fromId: EntityId;
+  toId: EntityId;
+  relation:
+    | "character_memory"
+    | "character_card"
+    | "memory_card"
+    | "character_character";
+  weight: number;
+}
+
 export interface MemorySystemArtifacts {
   chapterCards: ChapterCard[];
   ledgers: {
@@ -114,6 +125,7 @@ export interface MemorySystemArtifacts {
   entityChapterIndex: EntityChapterIndexEntry[];
   activeThreadDigest: ActiveThreadDigestEntry[];
   semanticIndex: SemanticIndexEntry[];
+  storyGraph: StoryGraphEdge[];
 }
 
 export interface ContextLedgerSnapshot {
@@ -141,6 +153,7 @@ export interface MemoryRetrievalPack {
   relevantLedgerEntries: ContextLedgerSnapshot[];
   relevantChapterCards: ContextChapterCardSnapshot[];
   semanticHits: SemanticRetrievalHit[];
+  graphHits: GraphExpansionHit[];
   retrievalSignals: string[];
 }
 
@@ -157,6 +170,23 @@ export interface SemanticRetrievalHit {
   sourceId: EntityId;
   label: string;
   score: number;
+}
+
+export interface GraphExpansionHit {
+  kind: "memory" | "chapter_card" | "relationship";
+  sourceId: EntityId;
+  label: string;
+  score: number;
+}
+
+interface HybridCandidate {
+  kind: "ledger" | "chapter_card";
+  targetId: EntityId;
+  label: string;
+  score: number;
+  reasons: string[];
+  ledgerEntry?: LedgerEntry;
+  chapterCard?: ChapterCard;
 }
 
 export interface ExactSearchHit {
@@ -242,6 +272,11 @@ export function buildMemorySystemArtifacts(input: {
     entityChapterIndex,
     activeThreadDigest,
     semanticIndex: buildSemanticIndex(input.storyMemories, chapterCards),
+    storyGraph: buildStoryGraph({
+      storyMemories: input.storyMemories,
+      chapterCards,
+      characterStates: input.characterStates,
+    }),
   };
 }
 
@@ -273,7 +308,12 @@ export function buildMemoryRetrievalPack(input: {
       artifacts,
     });
   const semanticLookup = buildSemanticLookup(semanticHits);
-
+  const graphHits = buildGraphExpansionHits({
+    chapterPlan: input.chapterPlan,
+    storyMemories: input.storyMemories,
+    artifacts,
+  });
+  const graphLookup = buildGraphLookup(graphHits);
   const scoredLedgerEntries = [
     ...artifacts.ledgers.resources,
     ...artifacts.ledgers.promises,
@@ -305,6 +345,7 @@ export function buildMemoryRetrievalPack(input: {
         triggerKeywords,
         exactLookup,
         semanticLookup,
+        graphLookup,
       ),
     }))
     .filter(
@@ -313,47 +354,66 @@ export function buildMemoryRetrievalPack(input: {
         Boolean(input.chapterPlan.searchIntent?.ledgerTypes.includes(item.entry.ledgerType)),
     )
     .sort((left, right) => right.score - left.score)
-  const relevantLedgerEntries = ensureRequestedLedgerCoverage(
-    scoredLedgerEntries,
-    input.chapterPlan.searchIntent?.ledgerTypes ?? [],
-  )
-    .slice(0, 6)
-    .map(({ entry }) => ({
-      id: entry.id,
-      ledgerType: entry.ledgerType,
-      title: entry.title,
-      summary: entry.summary,
-      status: entry.status,
-      priority: entry.priority,
-      sourceMemoryIds: [...entry.sourceMemoryIds],
-      sourceChapterNumbers: [...entry.sourceChapterNumbers],
-    }));
-
   const currentChapterNumber = input.chapterPlan.chapterNumber ?? Number.MAX_SAFE_INTEGER;
-  const relevantChapterCards = artifacts.chapterCards
+  const scoredChapterCards = artifacts.chapterCards
     .map((card) => ({
+      card,
+      score: scoreChapterCard(
         card,
-        score: scoreChapterCard(
-          card,
-          input.chapterPlan,
-          triggerKeywords,
+        input.chapterPlan,
+        triggerKeywords,
           currentChapterNumber,
           exactLookup,
           semanticLookup,
+          graphLookup,
         ),
       }))
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score)
+  const hybridCandidates = buildHybridCandidates({
+    scoredLedgerEntries,
+    scoredChapterCards,
+    exactLookup,
+    semanticLookup,
+    graphLookup,
+    requestedLedgerTypes: input.chapterPlan.searchIntent?.ledgerTypes ?? [],
+  });
+  const rerankedCandidates = rerankHybridCandidates(hybridCandidates);
+  const relevantLedgerEntries = ensureRequestedLedgerEntriesAfterRerank(
+    rerankedCandidates
+      .filter((item) => item.kind === "ledger" && item.ledgerEntry)
+      .map((item) => item.ledgerEntry as LedgerEntry),
+    input.chapterPlan.searchIntent?.ledgerTypes ?? [],
+  )
+    .slice(0, 6)
+    .map((item) => {
+      const entry = item;
+      return {
+        id: entry.id,
+        ledgerType: entry.ledgerType,
+        title: entry.title,
+        summary: entry.summary,
+        status: entry.status,
+        priority: entry.priority,
+        sourceMemoryIds: [...entry.sourceMemoryIds],
+        sourceChapterNumbers: [...entry.sourceChapterNumbers],
+      };
+    });
+  const relevantChapterCards = rerankedCandidates
+    .filter((item) => item.kind === "chapter_card" && item.chapterCard)
     .slice(0, 3)
-    .map(({ card }) => ({
-      id: card.id,
-      chapterNumber: card.chapterNumber,
-      title: card.title,
-      summary: card.summary,
-      nextSituation: card.nextSituation,
-      characterIds: [...card.characterIds],
-      memoryIds: [...card.memoryIds],
-    }));
+    .map((item) => {
+      const card = item.chapterCard as ChapterCard;
+      return {
+        id: card.id,
+        chapterNumber: card.chapterNumber,
+        title: card.title,
+        summary: card.summary,
+        nextSituation: card.nextSituation,
+        characterIds: [...card.characterIds],
+        memoryIds: [...card.memoryIds],
+      };
+    });
 
   const retrievalSignals = uniqueStrings(
     [
@@ -390,6 +450,18 @@ export function buildMemoryRetrievalPack(input: {
             .map((item) => `${item.kind}:${item.label}`)
             .join(" | ")}`
         : "",
+      graphHits.length
+        ? `Graph expansion: ${graphHits
+            .slice(0, 4)
+            .map((item) => `${item.kind}:${item.label}`)
+            .join(" | ")}`
+        : "",
+      rerankedCandidates.length
+        ? `Hybrid top: ${rerankedCandidates
+            .slice(0, 4)
+            .map((item) => `${item.kind}:${item.label}`)
+            .join(" | ")}`
+        : "",
       relevantLedgerEntries.length
         ? `Ledger recall: ${relevantLedgerEntries
             .slice(0, 3)
@@ -415,6 +487,7 @@ export function buildMemoryRetrievalPack(input: {
     relevantLedgerEntries,
     relevantChapterCards,
     semanticHits,
+    graphHits,
     retrievalSignals,
   };
 }
@@ -710,6 +783,143 @@ function buildSemanticIndex(
   return [...memoryEntries, ...chapterEntries];
 }
 
+function buildStoryGraph(input: {
+  storyMemories: StoryMemory[];
+  chapterCards: ChapterCard[];
+  characterStates: CharacterState[];
+}): StoryGraphEdge[] {
+  const edges: StoryGraphEdge[] = [];
+  const seen = new Set<string>();
+  const push = (edge: StoryGraphEdge) => {
+    const key = `${edge.fromId}|${edge.toId}|${edge.relation}`;
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    edges.push(edge);
+  };
+
+  for (const memory of input.storyMemories) {
+    for (const characterId of uniqueStrings(
+      [memory.ownerCharacterId ?? "", ...memory.relatedCharacterIds],
+      12,
+    )) {
+      push({
+        fromId: characterId,
+        toId: memory.id,
+        relation: "character_memory",
+        weight: priorityWeight(memory.priority) * 10,
+      });
+    }
+  }
+
+  for (const card of input.chapterCards) {
+    for (const characterId of card.characterIds) {
+      push({
+        fromId: characterId,
+        toId: card.id,
+        relation: "character_card",
+        weight: 8,
+      });
+    }
+    for (const memoryId of card.memoryIds) {
+      push({
+        fromId: memoryId,
+        toId: card.id,
+        relation: "memory_card",
+        weight: 10,
+      });
+    }
+  }
+
+  for (const character of input.characterStates) {
+    for (const relationship of character.relationships) {
+      push({
+        fromId: character.id,
+        toId: relationship.targetCharacterId,
+        relation: "character_character",
+        weight: Math.max(6, Math.floor((relationship.tensionLevel + relationship.dependencyLevel) / 10)),
+      });
+    }
+  }
+
+  return edges;
+}
+
+function buildGraphExpansionHits(input: {
+  chapterPlan: ChapterPlan;
+  storyMemories: StoryMemory[];
+  artifacts: MemorySystemArtifacts;
+}): GraphExpansionHit[] {
+  const seedIds = uniqueStrings(
+    [
+      ...input.chapterPlan.requiredCharacters,
+      ...input.chapterPlan.requiredMemories,
+      ...(input.chapterPlan.searchIntent?.entityIds ?? []),
+      ...(input.chapterPlan.searchIntent?.memoryIds ?? []),
+    ],
+    20,
+  );
+  if (seedIds.length === 0) {
+    return [];
+  }
+
+  const outgoing = new Map<string, StoryGraphEdge[]>();
+  for (const edge of input.artifacts.storyGraph) {
+    const current = outgoing.get(edge.fromId) ?? [];
+    current.push(edge);
+    outgoing.set(edge.fromId, current);
+  }
+
+  const scores = new Map<string, { kind: GraphExpansionHit["kind"]; label: string; score: number }>();
+  const queue = seedIds.map((seedId) => ({ id: seedId, depth: 0, score: 24 }));
+  const visited = new Map<string, number>();
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) {
+      continue;
+    }
+    const bestDepth = visited.get(current.id);
+    if (typeof bestDepth === "number" && bestDepth <= current.depth) {
+      continue;
+    }
+    visited.set(current.id, current.depth);
+    if (current.depth >= 2) {
+      continue;
+    }
+
+    for (const edge of outgoing.get(current.id) ?? []) {
+      const nextScore = Math.max(1, current.score + edge.weight - current.depth * 8);
+      if (isMemoryId(edge.toId, input.storyMemories)) {
+        const memory = input.storyMemories.find((item) => item.id === edge.toId);
+        if (memory) {
+          upsertGraphHit(scores, edge.toId, "memory", memory.title, nextScore);
+        }
+      } else if (isChapterCardId(edge.toId)) {
+        const card = input.artifacts.chapterCards.find((item) => item.id === edge.toId);
+        if (card) {
+          upsertGraphHit(scores, edge.toId, "chapter_card", card.title, nextScore);
+        }
+      } else if (isRelationshipNodeId(edge.toId)) {
+        upsertGraphHit(scores, edge.toId, "relationship", edge.toId, nextScore);
+      }
+
+      queue.push({ id: edge.toId, depth: current.depth + 1, score: nextScore });
+    }
+  }
+
+  return [...scores.entries()]
+    .map(([sourceId, value]) => ({
+      kind: value.kind,
+      sourceId,
+      label: value.label,
+      score: value.score,
+    }))
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 8);
+}
+
 export function buildMemorySemanticText(memory: StoryMemory): string {
   return [
     memory.id,
@@ -896,6 +1106,7 @@ function scoreLedgerEntry(
   triggerKeywords: string[],
   exactLookup?: ReturnType<typeof buildExactLookup>,
   semanticLookup?: ReturnType<typeof buildSemanticLookup>,
+  graphLookup?: ReturnType<typeof buildGraphLookup>,
 ): number {
   let score = 0;
 
@@ -942,6 +1153,12 @@ function scoreLedgerEntry(
   if (semanticLookup?.chapterCardIds.size && entry.sourceChapterNumbers.some((n) => semanticLookup.chapterNumbers.has(n))) {
     score += 12;
   }
+  if (entry.sourceMemoryIds.some((id) => graphLookup?.memoryIds.has(id))) {
+    score += 18;
+  }
+  if (entry.relatedCharacterIds.some((id) => graphLookup?.characterIds.has(id))) {
+    score += 12;
+  }
 
   score += priorityWeight(entry.priority) * 10;
   score += keywordMatchCount(
@@ -963,6 +1180,7 @@ function scoreChapterCard(
   currentChapterNumber: number,
   exactLookup?: ReturnType<typeof buildExactLookup>,
   semanticLookup?: ReturnType<typeof buildSemanticLookup>,
+  graphLookup?: ReturnType<typeof buildGraphLookup>,
 ): number {
   let score = 0;
 
@@ -999,6 +1217,15 @@ function scoreChapterCard(
   }
   if (card.memoryIds.some((id) => semanticLookup?.memoryIds.has(id))) {
     score += 24;
+  }
+  if (graphLookup?.chapterCardIds.has(card.id)) {
+    score += 28;
+  }
+  if (card.memoryIds.some((id) => graphLookup?.memoryIds.has(id))) {
+    score += 14;
+  }
+  if (card.characterIds.some((id) => graphLookup?.characterIds.has(id))) {
+    score += 10;
   }
 
   score += keywordMatchCount(
@@ -1144,6 +1371,35 @@ function buildSemanticLookup(hits: SemanticRetrievalHit[]): {
   return { memoryIds, chapterCardIds, chapterNumbers };
 }
 
+function buildGraphLookup(hits: GraphExpansionHit[]): {
+  memoryIds: Set<string>;
+  chapterCardIds: Set<string>;
+  relationshipIds: Set<string>;
+  characterIds: Set<string>;
+} {
+  const memoryIds = new Set<string>();
+  const chapterCardIds = new Set<string>();
+  const relationshipIds = new Set<string>();
+  const characterIds = new Set<string>();
+
+  for (const hit of hits) {
+    if (hit.kind === "memory") {
+      memoryIds.add(hit.sourceId);
+    } else if (hit.kind === "chapter_card") {
+      chapterCardIds.add(hit.sourceId);
+    } else if (hit.kind === "relationship") {
+      relationshipIds.add(hit.sourceId);
+      const match = /^relationship-([^-]+)-(.+)$/.exec(hit.sourceId);
+      if (match) {
+        characterIds.add(match[1]);
+        characterIds.add(match[2]);
+      }
+    }
+  }
+
+  return { memoryIds, chapterCardIds, relationshipIds, characterIds };
+}
+
 function buildExactLookup(hits: ExactSearchHit[]): {
   memoryIds: Set<string>;
   ledgerIds: Set<string>;
@@ -1238,6 +1494,160 @@ function ensureRequestedLedgerCoverage<T extends { entry: { ledgerType: LedgerTy
 
   for (const item of scoredEntries) {
     push(item);
+  }
+
+  return selected;
+}
+
+function buildHybridCandidates(args: {
+  scoredLedgerEntries: Array<{ entry: LedgerEntry; score: number }>;
+  scoredChapterCards: Array<{ card: ChapterCard; score: number }>;
+  exactLookup: ReturnType<typeof buildExactLookup>;
+  semanticLookup: ReturnType<typeof buildSemanticLookup>;
+  graphLookup: ReturnType<typeof buildGraphLookup>;
+  requestedLedgerTypes: MemorySearchLedgerType[];
+}): HybridCandidate[] {
+  const candidates: HybridCandidate[] = [];
+
+  for (const item of ensureRequestedLedgerCoverage(
+    args.scoredLedgerEntries,
+    args.requestedLedgerTypes,
+  )) {
+    const reasons: string[] = [];
+    if (args.exactLookup.ledgerIds.has(item.entry.id)) {
+      reasons.push("exact_ledger");
+    }
+    if (item.entry.sourceMemoryIds.some((id) => args.exactLookup.memoryIds.has(id))) {
+      reasons.push("exact_memory");
+    }
+    if (item.entry.sourceMemoryIds.some((id) => args.semanticLookup.memoryIds.has(id))) {
+      reasons.push("semantic_memory");
+    }
+    if (item.entry.sourceMemoryIds.some((id) => args.graphLookup.memoryIds.has(id))) {
+      reasons.push("graph_memory");
+    }
+    if (item.entry.relatedCharacterIds.some((id) => args.graphLookup.characterIds.has(id))) {
+      reasons.push("graph_character");
+    }
+    if (args.requestedLedgerTypes.includes(item.entry.ledgerType)) {
+      reasons.push("requested_ledger_type");
+    }
+    if (item.entry.priority === "critical" || item.entry.priority === "high") {
+      reasons.push("high_priority");
+    }
+
+    candidates.push({
+      kind: "ledger",
+      targetId: item.entry.id,
+      label: item.entry.title,
+      score: item.score,
+      reasons,
+      ledgerEntry: item.entry,
+    });
+  }
+
+  for (const item of args.scoredChapterCards) {
+    const reasons: string[] = [];
+    if (args.exactLookup.chapterCardIds.has(item.card.id)) {
+      reasons.push("exact_card");
+    }
+    if (args.semanticLookup.chapterCardIds.has(item.card.id)) {
+      reasons.push("semantic_card");
+    }
+    if (item.card.memoryIds.some((id) => args.exactLookup.memoryIds.has(id))) {
+      reasons.push("exact_memory");
+    }
+    if (item.card.memoryIds.some((id) => args.semanticLookup.memoryIds.has(id))) {
+      reasons.push("semantic_memory");
+    }
+    if (args.graphLookup.chapterCardIds.has(item.card.id)) {
+      reasons.push("graph_card");
+    }
+    if (item.card.memoryIds.some((id) => args.graphLookup.memoryIds.has(id))) {
+      reasons.push("graph_memory");
+    }
+
+    candidates.push({
+      kind: "chapter_card",
+      targetId: item.card.id,
+      label: item.card.title,
+      score: item.score,
+      reasons,
+      chapterCard: item.card,
+    });
+  }
+
+  return candidates;
+}
+
+function rerankHybridCandidates(candidates: HybridCandidate[]): HybridCandidate[] {
+  return [...candidates]
+    .map((candidate) => ({
+      candidate,
+      rerankScore: candidate.score + candidate.reasons.length * 9 + hybridReasonBonus(candidate.reasons),
+    }))
+    .sort((left, right) => {
+      if (right.rerankScore !== left.rerankScore) {
+        return right.rerankScore - left.rerankScore;
+      }
+      if (left.candidate.kind !== right.candidate.kind) {
+        return left.candidate.kind.localeCompare(right.candidate.kind);
+      }
+      return left.candidate.targetId.localeCompare(right.candidate.targetId);
+    })
+    .map((item) => item.candidate);
+}
+
+function hybridReasonBonus(reasons: string[]): number {
+  let bonus = 0;
+  if (reasons.includes("exact_ledger") || reasons.includes("exact_card")) {
+    bonus += 20;
+  }
+  if (reasons.includes("semantic_card") || reasons.includes("semantic_memory")) {
+    bonus += 10;
+  }
+  if (reasons.includes("graph_card") || reasons.includes("graph_memory")) {
+    bonus += 7;
+  }
+  if (reasons.includes("graph_character")) {
+    bonus += 5;
+  }
+  if (reasons.includes("requested_ledger_type")) {
+    bonus += 14;
+  }
+  if (reasons.includes("high_priority")) {
+    bonus += 8;
+  }
+  return bonus;
+}
+
+function ensureRequestedLedgerEntriesAfterRerank(
+  entries: LedgerEntry[],
+  requestedLedgerTypes: MemorySearchLedgerType[],
+): LedgerEntry[] {
+  if (requestedLedgerTypes.length === 0) {
+    return entries;
+  }
+
+  const selected: LedgerEntry[] = [];
+  const seenIds = new Set<string>();
+  const push = (entry: LedgerEntry) => {
+    if (seenIds.has(entry.id)) {
+      return;
+    }
+    seenIds.add(entry.id);
+    selected.push(entry);
+  };
+
+  for (const requestedType of requestedLedgerTypes) {
+    const match = entries.find((entry) => entry.ledgerType === requestedType);
+    if (match) {
+      push(match);
+    }
+  }
+
+  for (const entry of entries) {
+    push(entry);
   }
 
   return selected;
@@ -1376,6 +1786,31 @@ function extractTopSemanticTerms(text: string, limit: number): string[] {
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .slice(0, limit)
     .map(([token]) => token);
+}
+
+function upsertGraphHit(
+  scores: Map<string, { kind: GraphExpansionHit["kind"]; label: string; score: number }>,
+  sourceId: string,
+  kind: GraphExpansionHit["kind"],
+  label: string,
+  score: number,
+): void {
+  const existing = scores.get(sourceId);
+  if (!existing || score > existing.score) {
+    scores.set(sourceId, { kind, label, score });
+  }
+}
+
+function isMemoryId(id: string, storyMemories: StoryMemory[]): boolean {
+  return storyMemories.some((memory) => memory.id === id);
+}
+
+function isChapterCardId(id: string): boolean {
+  return /^chapter-card-\d+$/.test(id);
+}
+
+function isRelationshipNodeId(id: string): boolean {
+  return /^relationship-/.test(id);
 }
 
 function compareLedgerEntries(left: LedgerEntry, right: LedgerEntry): number {

@@ -3,6 +3,7 @@ import path from "node:path";
 
 import {
   buildChapterCardSemanticText,
+  buildChangeImpactReport,
   pickArcForChapterDeterministic,
   pickBeatForChapterDeterministic,
   applyMemoryUpdaterResult,
@@ -29,6 +30,7 @@ import {
   type ChapterCommercialPlan,
   type ChapterArtifact,
   type ChapterPlan,
+  type ChangeImpactReport,
   type CharacterState,
   type CommercialReviewerResult,
   type DerivedAuthorProfilePacks,
@@ -205,6 +207,10 @@ async function writeMemorySystemOutputs(args: {
       memoryArtifacts.semanticIndex,
     ),
     writeJsonArtifact(
+      path.join(root, "graph", "story-graph.json"),
+      memoryArtifacts.storyGraph,
+    ),
+    writeJsonArtifact(
       path.join(root, "digests", "active-threads.json"),
       memoryArtifacts.activeThreadDigest,
     ),
@@ -257,6 +263,13 @@ async function writeRetrievalDebugReport(args: {
         chapterArtifacts: args.chapterArtifacts,
         semanticOverrideHits: args.semanticOverrideHits,
       }).semanticHits,
+      graphHits: buildMemoryRetrievalPack({
+        chapterPlan: args.chapterPlan,
+        storyMemories: args.storyMemories,
+        characterStates: args.characterStates,
+        chapterArtifacts: args.chapterArtifacts,
+        semanticOverrideHits: args.semanticOverrideHits,
+      }).graphHits,
       relevantLedgerEntries: args.writerContextPack.relevantLedgerEntries,
       relevantChapterCards: args.writerContextPack.relevantChapterCards,
       relevantWorldFacts: args.writerContextPack.relevantWorldFacts,
@@ -385,6 +398,30 @@ function embeddingCachePath(projectId: string): string {
   );
 }
 
+function changeImpactReportPath(projectId: string, targetId: string): string {
+  const safeTarget = targetId.replace(/[^a-zA-Z0-9_-]+/g, "_");
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "impact",
+    `${safeTarget}.json`,
+  );
+}
+
+function rewritePlanReportPath(projectId: string, targetId: string): string {
+  const safeTarget = targetId.replace(/[^a-zA-Z0-9_-]+/g, "_");
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "impact",
+    `${safeTarget}.rewrite-plan.json`,
+  );
+}
+
 export interface V1RunOptions {
   projectId: string;
   mode: "first-n" | "chapter";
@@ -426,6 +463,15 @@ interface InvalidateResult {
   remainingMemories: number;
 }
 
+export interface InvalidateTargetRunResult {
+  projectId: string;
+  targetId: string;
+  impactReportPath: string;
+  rewritePlanPath: string;
+  plan: RewritePlanReport;
+  invalidation?: InvalidateResult;
+}
+
 export interface RetrievalEvalSeedResult {
   projectId: string;
   evalSetPath: string;
@@ -438,6 +484,34 @@ export interface RetrievalEvalRunResult {
   reportPath: string;
   report: RetrievalEvalReport;
   regression?: RetrievalEvalRegressionSummary;
+}
+
+export interface ChangeImpactRunResult {
+  projectId: string;
+  targetId: string;
+  reportPath: string;
+  report: ChangeImpactReport;
+}
+
+export interface RewritePlanReport {
+  targetId: string;
+  generatedAt: string;
+  targetType: ChangeImpactReport["targetType"];
+  suggestedInvalidationChapter: number | null;
+  impactedChapterNumbers: number[];
+  impactedArtifactChapterNumbers: number[];
+  impactedPlannedChapterNumbers: number[];
+  recommendedCommand: string | null;
+  reasons: string[];
+}
+
+export interface RewritePlanRunResult {
+  projectId: string;
+  targetId: string;
+  impactReportPath: string;
+  rewritePlanPath: string;
+  impactReport: ChangeImpactReport;
+  plan: RewritePlanReport;
 }
 
 export interface RetrievalEvalRegressionSummary {
@@ -1393,6 +1467,168 @@ export async function runRetrievalEval(args: {
   };
 }
 
+export async function runChangeImpact(args: {
+  projectId: string;
+  targetId: string;
+}): Promise<ChangeImpactRunResult> {
+  const repository = new FileProjectRepository();
+  const [characterStates, storyMemories, chapterPlans, arcOutlines, beatOutlines, chapterArtifacts] =
+    await Promise.all([
+      repository.loadCharacterStates(args.projectId),
+      repository.loadStoryMemories(args.projectId),
+      repository.loadChapterPlans(args.projectId),
+      repository.loadArcOutlines(args.projectId),
+      repository.loadBeatOutlines(args.projectId),
+      loadAllChapterArtifacts(repository, args.projectId),
+    ]);
+
+  const report = buildChangeImpactReport({
+    targetId: args.targetId,
+    characterStates,
+    storyMemories,
+    chapterPlans,
+    arcOutlines,
+    beatOutlines,
+    chapterArtifacts,
+  });
+  const reportPath = changeImpactReportPath(args.projectId, args.targetId);
+  await writeJsonArtifact(reportPath, report);
+
+  return {
+    projectId: args.projectId,
+    targetId: args.targetId,
+    reportPath,
+    report,
+  };
+}
+
+function extractChapterNumberFromImpactId(id: string): number | null {
+  const chapterArtifactCardMatch = /^chapter-card-(\d+)$/.exec(id);
+  if (chapterArtifactCardMatch) {
+    return Number(chapterArtifactCardMatch[1]);
+  }
+
+  const chapterCardMatch = /^chapter-(\d+)$/.exec(id);
+  if (chapterCardMatch) {
+    return Number(chapterCardMatch[1]);
+  }
+
+  const chapterPlanMatch = /^chapter-plan-(\d+)$/.exec(id);
+  if (chapterPlanMatch) {
+    return Number(chapterPlanMatch[1]);
+  }
+
+  return null;
+}
+
+function uniqueSortedNumbers(items: number[]): number[] {
+  return [...new Set(items)].sort((left, right) => left - right);
+}
+
+function buildRewritePlanFromImpact(args: {
+  projectId: string;
+  targetId: string;
+  report: ChangeImpactReport;
+}): RewritePlanReport {
+  const impactedArtifactChapterNumbers = uniqueSortedNumbers(
+    args.report.impactedChapters
+      .filter(
+        (item) =>
+          item.id.startsWith("chapter-card-") ||
+          (item.id.startsWith("chapter-") && !item.id.startsWith("chapter-plan-")),
+      )
+      .map((item) => extractChapterNumberFromImpactId(item.id))
+      .filter((item): item is number => item !== null),
+  );
+  const impactedPlannedChapterNumbers = uniqueSortedNumbers(
+    args.report.impactedChapters
+      .filter((item) => item.id.startsWith("chapter-plan-"))
+      .map((item) => extractChapterNumberFromImpactId(item.id))
+      .filter((item): item is number => item !== null),
+  );
+  const impactedChapterNumbers = uniqueSortedNumbers([
+    ...impactedArtifactChapterNumbers,
+    ...impactedPlannedChapterNumbers,
+  ]);
+  const plannedOnlyChapterNumbers = impactedPlannedChapterNumbers.filter(
+    (chapterNumber) => !impactedArtifactChapterNumbers.includes(chapterNumber),
+  );
+  const suggestedInvalidationChapter =
+    impactedChapterNumbers.length > 0 ? impactedChapterNumbers[0] : null;
+
+  return {
+    targetId: args.targetId,
+    generatedAt: new Date().toISOString(),
+    targetType: args.report.targetType,
+    suggestedInvalidationChapter,
+    impactedChapterNumbers,
+    impactedArtifactChapterNumbers,
+    impactedPlannedChapterNumbers: plannedOnlyChapterNumbers,
+    recommendedCommand:
+      suggestedInvalidationChapter !== null
+        ? `./run-v1.sh chapter invalidate-from --project ${args.projectId} --chapter ${suggestedInvalidationChapter}`
+        : null,
+    reasons: uniqueStrings(
+      args.report.impactedChapters.flatMap((item) => item.reasons.map((reason) => reason.detail)),
+      8,
+    ),
+  };
+}
+
+export async function runRewritePlan(args: {
+  projectId: string;
+  targetId: string;
+}): Promise<RewritePlanRunResult> {
+  const impact = await runChangeImpact(args);
+  const plan = buildRewritePlanFromImpact({
+    projectId: args.projectId,
+    targetId: args.targetId,
+    report: impact.report,
+  });
+  const rewritePlanPath = rewritePlanReportPath(args.projectId, args.targetId);
+  await writeJsonArtifact(rewritePlanPath, plan);
+
+  return {
+    projectId: args.projectId,
+    targetId: args.targetId,
+    impactReportPath: impact.reportPath,
+    rewritePlanPath,
+    impactReport: impact.report,
+    plan,
+  };
+}
+
+export async function invalidateFromTarget(args: {
+  projectId: string;
+  targetId: string;
+}): Promise<InvalidateTargetRunResult> {
+  const rewritePlan = await runRewritePlan(args);
+
+  if (rewritePlan.plan.suggestedInvalidationChapter === null) {
+    return {
+      projectId: args.projectId,
+      targetId: args.targetId,
+      impactReportPath: rewritePlan.impactReportPath,
+      rewritePlanPath: rewritePlan.rewritePlanPath,
+      plan: rewritePlan.plan,
+    };
+  }
+
+  const invalidation = await invalidateFromChapter({
+    projectId: args.projectId,
+    chapterNumber: rewritePlan.plan.suggestedInvalidationChapter,
+  });
+
+  return {
+    projectId: args.projectId,
+    targetId: args.targetId,
+    impactReportPath: rewritePlan.impactReportPath,
+    rewritePlanPath: rewritePlan.rewritePlanPath,
+    plan: rewritePlan.plan,
+    invalidation,
+  };
+}
+
 function compareRetrievalEvalReports(
   previousReport: RetrievalEvalReport | null,
   currentReport: RetrievalEvalReport,
@@ -2159,6 +2395,91 @@ export function formatRetrievalEvalRunResult(result: RetrievalEvalRunResult): st
       );
     }
   }
+
+  return lines.join("\n");
+}
+
+export function formatChangeImpactRunResult(result: ChangeImpactRunResult): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Target: ${result.targetId}`);
+  lines.push(`Target type: ${result.report.targetType}`);
+  lines.push(`Report path: ${result.reportPath}`);
+  lines.push(`Impacted characters: ${result.report.impactedCharacters.length}`);
+  lines.push(`Impacted memories: ${result.report.impactedMemories.length}`);
+  lines.push(`Impacted chapters: ${result.report.impactedChapters.length}`);
+  lines.push(`Impacted arcs: ${result.report.impactedArcs.length}`);
+  lines.push(`Impacted beats: ${result.report.impactedBeats.length}`);
+
+  const topChapter = result.report.impactedChapters.slice(0, 5);
+  if (topChapter.length > 0) {
+    lines.push("");
+    lines.push("Top impacted chapters:");
+    for (const item of topChapter) {
+      lines.push(`- ${item.label} | ${item.reasons.map((reason) => reason.detail).join(" ; ")}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+export function formatRewritePlanRunResult(result: RewritePlanRunResult): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Target: ${result.targetId}`);
+  lines.push(`Target type: ${result.plan.targetType}`);
+  lines.push(`Impact report: ${result.impactReportPath}`);
+  lines.push(`Rewrite plan: ${result.rewritePlanPath}`);
+  lines.push(
+    `Suggested invalidation chapter: ${result.plan.suggestedInvalidationChapter ?? "none"}`,
+  );
+  lines.push(
+    `Impacted chapters: ${result.plan.impactedChapterNumbers.length > 0 ? result.plan.impactedChapterNumbers.join(", ") : "none"}`,
+  );
+  lines.push(
+    `Chapters with saved artifacts: ${result.plan.impactedArtifactChapterNumbers.length > 0 ? result.plan.impactedArtifactChapterNumbers.join(", ") : "none"}`,
+  );
+  lines.push(
+    `Chapters with only plans: ${result.plan.impactedPlannedChapterNumbers.length > 0 ? result.plan.impactedPlannedChapterNumbers.join(", ") : "none"}`,
+  );
+
+  if (result.plan.recommendedCommand) {
+    lines.push(`Recommended command: ${result.plan.recommendedCommand}`);
+  }
+
+  if (result.plan.reasons.length > 0) {
+    lines.push("");
+    lines.push("Key reasons:");
+    for (const reason of result.plan.reasons) {
+      lines.push(`- ${reason}`);
+    }
+  }
+
+  return lines.join("\n");
+}
+
+export function formatInvalidateTargetRunResult(result: InvalidateTargetRunResult): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Target: ${result.targetId}`);
+  lines.push(`Impact report: ${result.impactReportPath}`);
+  lines.push(`Rewrite plan: ${result.rewritePlanPath}`);
+  lines.push(
+    `Suggested invalidation chapter: ${result.plan.suggestedInvalidationChapter ?? "none"}`,
+  );
+
+  if (!result.invalidation) {
+    lines.push("Invalidation: skipped");
+    lines.push("Reason: no impacted chapter could be mapped to a concrete invalidation point.");
+    return lines.join("\n");
+  }
+
+  lines.push(`Invalidated from chapter: ${result.invalidation.chapterNumber}`);
+  lines.push(
+    `Deleted chapter artifacts: ${result.invalidation.deletedChapterNumbers.length > 0 ? result.invalidation.deletedChapterNumbers.join(", ") : "none"}`,
+  );
+  lines.push(`Remaining chapter plans: ${result.invalidation.remainingChapterPlans}`);
+  lines.push(`Remaining memories: ${result.invalidation.remainingMemories}`);
 
   return lines.join("\n");
 }

@@ -16,12 +16,18 @@ import {
   bootstrapProject,
   defaultDemoProjectId,
   formatAuthorPresetCatalog,
+  formatChangeImpactRunResult,
   formatInvalidateResult,
+  formatInvalidateTargetRunResult,
+  formatRewritePlanRunResult,
   formatRetrievalEvalRunResult,
   formatRetrievalEvalSeedResult,
   formatV1RunResult,
   interviewProject,
   invalidateFromChapter,
+  invalidateFromTarget,
+  runChangeImpact,
+  runRewritePlan,
   runRetrievalEval,
   runV1,
   seedRetrievalEvalSet,
@@ -33,6 +39,8 @@ type CommandName =
   | "project:profiles"
   | "project:inspect"
   | "project:paths"
+  | "project:impact"
+  | "project:rewrite-plan"
   | "memory:eval-seed"
   | "memory:eval-run"
   | "outline:inspect"
@@ -44,6 +52,7 @@ type CommandName =
   | "chapter:generate-first"
   | "chapter:inspect"
   | "chapter:invalidate-from"
+  | "chapter:invalidate-target"
   | "chapter:reset-all";
 
 interface ParsedArgs {
@@ -55,6 +64,7 @@ interface ParsedArgs {
   answers?: string;
   approver?: string;
   note?: string;
+  targetId?: string;
   withEval?: boolean;
   strictEval?: boolean;
 }
@@ -94,6 +104,7 @@ function parseCommand(argv: string[]): ParsedArgs {
   const answersOption = readOption(flags, "--answers");
   const approverOption = readOption(flags, "--approver");
   const noteOption = readOption(flags, "--note");
+  const targetOption = readOption(flags, "--target");
   const withEvalOption = readOption(flags, "--with-eval");
   const strictEvalOption = readOption(flags, "--strict-eval");
   const strictEval = strictEvalOption === "true";
@@ -106,6 +117,8 @@ function parseCommand(argv: string[]): ParsedArgs {
     "project:profiles",
     "project:inspect",
     "project:paths",
+    "project:impact",
+    "project:rewrite-plan",
     "memory:eval-seed",
     "memory:eval-run",
     "outline:inspect",
@@ -117,6 +130,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     "chapter:generate-first",
     "chapter:inspect",
     "chapter:invalidate-from",
+    "chapter:invalidate-target",
     "chapter:reset-all",
   ]);
 
@@ -133,6 +147,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     answers: answersOption,
     approver: approverOption,
     note: noteOption,
+    targetId: targetOption,
     withEval,
     strictEval,
   };
@@ -270,6 +285,8 @@ function summarizeProjectPaths(projectId: string): string {
     `Chapters dir: ${path.join(dir, "chapters")}`,
     `Semantic index: ${path.join(dir, "memory", "retrieval", "semantic-index.json")}`,
     `Embedding cache: ${path.join(dir, "memory", "retrieval", "embedding-cache.json")}`,
+    `Story graph: ${path.join(dir, "memory", "graph", "story-graph.json")}`,
+    `Impact reports: ${path.join(dir, "impact")}`,
     `Retrieval eval set: ${path.join(dir, "memory", "eval", "retrieval-eval-set.json")}`,
     `Retrieval eval report: ${path.join(dir, "memory", "eval", "retrieval-eval-report.json")}`,
   ].join("\n");
@@ -283,6 +300,8 @@ function usage(): string {
     "  project interview --project <id> --answers A,B,C,A,B,C",
     "  project inspect --project <id>",
     "  project paths --project <id>",
+    "  project impact --project <id> --target <entity_or_node_id>",
+    "  project rewrite-plan --project <id> --target <entity_or_node_id>",
     "  memory eval-seed --project <id>",
     "  memory eval-run --project <id>",
     "  outline inspect --project <id>",
@@ -294,6 +313,7 @@ function usage(): string {
     "  chapter generate-first --project <id> --count <n> [--with-eval] [--strict-eval]",
     "  chapter inspect --project <id> --chapter <n>",
     "  chapter invalidate-from --project <id> --chapter <n>",
+    "  chapter invalidate-target --project <id> --target <entity_or_node_id>",
     "  chapter reset-all --project <id>",
   ].join("\n");
 }
@@ -351,6 +371,30 @@ async function main(): Promise<void> {
 
     case "project:paths": {
       console.log(summarizeProjectPaths(parsed.projectId));
+      return;
+    }
+
+    case "project:impact": {
+      if (!parsed.targetId) {
+        throw new Error("project impact requires --target <entity_or_node_id>");
+      }
+      const result = await runChangeImpact({
+        projectId: parsed.projectId,
+        targetId: parsed.targetId,
+      });
+      console.log(formatChangeImpactRunResult(result));
+      return;
+    }
+
+    case "project:rewrite-plan": {
+      if (!parsed.targetId) {
+        throw new Error("project rewrite-plan requires --target <entity_or_node_id>");
+      }
+      const result = await runRewritePlan({
+        projectId: parsed.projectId,
+        targetId: parsed.targetId,
+      });
+      console.log(formatRewritePlanRunResult(result));
       return;
     }
 
@@ -475,6 +519,18 @@ async function main(): Promise<void> {
         chapterNumber: parsed.chapterNumber,
       });
       console.log(formatInvalidateResult(result));
+      return;
+    }
+
+    case "chapter:invalidate-target": {
+      if (!parsed.targetId) {
+        throw new Error("chapter invalidate-target requires --target <entity_or_node_id>");
+      }
+      const result = await invalidateFromTarget({
+        projectId: parsed.projectId,
+        targetId: parsed.targetId,
+      });
+      console.log(formatInvalidateTargetRunResult(result));
       return;
     }
 
