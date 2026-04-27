@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { URL } from "node:url";
@@ -8,6 +8,12 @@ const HOST = process.env.NOVELAI_UI_HOST ?? "127.0.0.1";
 
 function projectRoot(projectId: string): string {
   return path.resolve(process.cwd(), "data", "projects", projectId);
+}
+
+function validateProjectId(projectId: string): void {
+  if (!/^[a-zA-Z0-9_-]+$/.test(projectId)) {
+    throw new Error("projectId must match [a-zA-Z0-9_-]+");
+  }
 }
 
 type ResourceType = "json" | "text";
@@ -35,12 +41,6 @@ function jsonResponse(res: http.ServerResponse, code: number, payload: unknown):
   res.statusCode = code;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.end(JSON.stringify(payload));
-}
-
-function textResponse(res: http.ServerResponse, code: number, payload: string): void {
-  res.statusCode = code;
-  res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.end(payload);
 }
 
 async function parseBody(req: http.IncomingMessage): Promise<unknown> {
@@ -178,206 +178,111 @@ async function isDetailApproved(projectId: string): Promise<boolean> {
   }
 }
 
-const UI_HTML = `<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NovelAI 编辑台</title>
-  <style>
-    body { font-family: -apple-system, "Segoe UI", sans-serif; margin: 0; background: #f4f5f7; color: #111; }
-    .top { padding: 12px 16px; background: #0f172a; color: #fff; display: flex; gap: 8px; align-items: center; }
-    .top input, .top button, .top select { height: 32px; }
-    .layout { display: grid; grid-template-columns: 280px 1fr 360px; gap: 10px; padding: 10px; height: calc(100vh - 56px); }
-    .pane { background: #fff; border: 1px solid #d1d5db; border-radius: 8px; padding: 10px; overflow: auto; }
-    .title { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
-    textarea { width: 100%; min-height: 68vh; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-    .small { font-size: 12px; color: #555; }
-    .btns { display: flex; gap: 8px; margin-top: 8px; }
-    .btn { padding: 6px 10px; border: 1px solid #bbb; background: #f8fafc; border-radius: 6px; cursor: pointer; }
-    .btn.primary { background: #2563eb; color: #fff; border-color: #1d4ed8; }
-    .field { margin-bottom: 8px; }
-    .field input, .field textarea { width: 100%; box-sizing: border-box; }
-    .char-card { border: 1px solid #ddd; border-radius: 6px; padding: 8px; margin-bottom: 8px; background: #fafafa; }
-    .ok { color: #065f46; }
-    .warn { color: #92400e; }
-  </style>
-</head>
-<body>
-  <div class="top">
-    <strong>NovelAI 编辑台</strong>
-    <span>项目:</span>
-    <input id="projectId" value="demo-project" />
-    <button id="loadProject">加载</button>
-    <span id="approveStatus" class="small"></span>
-  </div>
-  <div class="layout">
-    <div class="pane">
-      <div class="title">资源</div>
-      <select id="resourceSelect" size="20" style="width:100%;"></select>
-      <div class="small" style="margin-top:8px;">支持：大纲/细纲/章节/世界观/记忆/角色</div>
-    </div>
-    <div class="pane">
-      <div class="title">编辑器</div>
-      <textarea id="editor"></textarea>
-      <div class="btns">
-        <button class="btn primary" id="saveBtn">保存</button>
-        <button class="btn" id="reloadBtn">重载</button>
-      </div>
-    </div>
-    <div class="pane">
-      <div class="title">角色编辑（非程序员友好）</div>
-      <div id="characterEditor" class="small">加载项目后可编辑角色核心字段。</div>
-      <div class="btns">
-        <button class="btn primary" id="saveCharacters">保存角色</button>
-      </div>
-      <hr />
-      <div class="title">细纲审批</div>
-      <div class="field"><input id="approver" placeholder="审批人" value="manual" /></div>
-      <div class="field"><textarea id="approveNote" rows="3" placeholder="审批备注"></textarea></div>
-      <button class="btn primary" id="approveBtn">通过细纲（Unlock章节生成）</button>
-      <div id="msg" class="small" style="margin-top:8px;"></div>
-    </div>
-  </div>
-<script>
-  let currentProject = "demo-project";
-  let currentKey = "";
-  let characters = [];
-
-  async function api(path, method = "GET", body) {
-    const resp = await fetch(path, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || "request failed");
-    return data;
+async function pathExists(filepath: string): Promise<boolean> {
+  try {
+    await readFile(filepath, "utf-8");
+    return true;
+  } catch {
+    return false;
   }
+}
 
-  function setMsg(text, ok = true) {
-    const el = document.getElementById("msg");
-    el.className = ok ? "small ok" : "small warn";
-    el.textContent = text;
-  }
-
-  function renderResources(resources) {
-    const sel = document.getElementById("resourceSelect");
-    sel.innerHTML = "";
-    for (const r of resources) {
-      const opt = document.createElement("option");
-      opt.value = r.key;
-      opt.textContent = r.label;
-      sel.appendChild(opt);
+async function copyDirectoryRecursive(sourceDir: string, targetDir: string): Promise<void> {
+  await mkdir(targetDir, { recursive: true });
+  const entries = await readdir(sourceDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceDir, entry.name);
+    const targetPath = path.join(targetDir, entry.name);
+    if (entry.isDirectory()) {
+      await copyDirectoryRecursive(sourcePath, targetPath);
+      continue;
     }
-    if (resources.length > 0) {
-      sel.selectedIndex = 0;
-      currentKey = resources[0].key;
+    if (entry.isFile()) {
+      await copyFile(sourcePath, targetPath);
+    }
+  }
+}
+
+async function ensureTextFile(filePath: string, fallbackContent: string): Promise<void> {
+  if (!(await pathExists(filePath))) {
+    await writeFile(filePath, fallbackContent, "utf-8");
+  }
+}
+
+async function ensureJsonFile(filePath: string, fallbackData: unknown): Promise<void> {
+  if (!(await pathExists(filePath))) {
+    await writeFile(filePath, `${JSON.stringify(fallbackData, null, 2)}\n`, "utf-8");
+  }
+}
+
+async function createProjectFromTemplate(projectId: string, templateProjectId = "demo_project"): Promise<void> {
+  validateProjectId(projectId);
+  validateProjectId(templateProjectId);
+
+  const source = projectRoot(templateProjectId);
+  const target = projectRoot(projectId);
+  if (source === target) {
+    throw new Error("projectId cannot be same as templateProjectId");
+  }
+
+  try {
+    await readdir(target);
+    throw new Error(`project already exists: ${projectId}`);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      (error as NodeJS.ErrnoException).code !== "ENOENT"
+    ) {
+      throw error;
     }
   }
 
-  function renderCharacters() {
-    const root = document.getElementById("characterEditor");
-    if (!Array.isArray(characters) || characters.length === 0) {
-      root.textContent = "未检测到角色数据。";
-      return;
-    }
-    root.innerHTML = "";
-    characters.forEach((c, idx) => {
-      const box = document.createElement("div");
-      box.className = "char-card";
-      box.innerHTML = \`
-        <div><strong>\${c.name || "角色"}</strong> (\${c.id || ""})</div>
-        <div class="field"><label>原型</label><input data-idx="\${idx}" data-k="archetype" value="\${c.archetype || ""}" /></div>
-        <div class="field"><label>当前目标（|分隔）</label><input data-idx="\${idx}" data-k="currentGoals" value="\${(c.currentGoals || []).join(" | ")}" /></div>
-        <div class="field"><label>情绪状态（|分隔）</label><input data-idx="\${idx}" data-k="emotionalState" value="\${(c.emotionalState || []).join(" | ")}" /></div>
-        <div class="field"><label>语气备注（|分隔）</label><input data-idx="\${idx}" data-k="voiceNotes" value="\${(c.voiceNotes || []).join(" | ")}" /></div>
-      \`;
-      root.appendChild(box);
-    });
+  await readdir(source);
+  await copyDirectoryRecursive(source, target);
 
-    root.querySelectorAll("input").forEach((input) => {
-      input.addEventListener("change", (e) => {
-        const t = e.target;
-        const idx = Number(t.dataset.idx);
-        const k = t.dataset.k;
-        if (!characters[idx]) return;
-        if (k === "currentGoals" || k === "emotionalState" || k === "voiceNotes") {
-          characters[idx][k] = t.value.split("|").map(x => x.trim()).filter(Boolean);
-        } else {
-          characters[idx][k] = t.value;
-        }
-      });
-    });
+  await ensureJsonFile(path.join(target, "chapter-plans.json"), []);
+  await ensureTextFile(path.join(target, "story-outline.md"), "# Story Outline\n\n");
+  await ensureTextFile(path.join(target, "detailed-outline.md"), "# Detailed Outline\n\n");
+}
+
+const UI_ASSET_DIR = path.resolve(process.cwd(), "src", "ui");
+const UI_ASSET_MAP: Record<string, { fileName: string; contentType: string }> = {
+  "/": { fileName: "index.html", contentType: "text/html; charset=utf-8" },
+  "/ui/styles.css": { fileName: "styles.css", contentType: "text/css; charset=utf-8" },
+  "/ui/app.js": { fileName: "app.js", contentType: "application/javascript; charset=utf-8" },
+};
+
+function rawResponse(
+  res: http.ServerResponse,
+  code: number,
+  contentType: string,
+  payload: string,
+): void {
+  res.statusCode = code;
+  res.setHeader("Content-Type", contentType);
+  res.end(payload);
+}
+
+async function serveUiAsset(
+  res: http.ServerResponse,
+  pathname: string,
+): Promise<boolean> {
+  const mapped = UI_ASSET_MAP[pathname];
+  if (!mapped) {
+    return false;
   }
-
-  async function refreshProject() {
-    currentProject = document.getElementById("projectId").value.trim();
-    const data = await api(\`/api/project?projectId=\${encodeURIComponent(currentProject)}\`);
-    renderResources(data.resources);
-    document.getElementById("approveStatus").textContent = data.detailApproved ? "细纲审批: 已通过" : "细纲审批: 未通过";
-    await loadCurrentResource();
-    const c = await api(\`/api/characters?projectId=\${encodeURIComponent(currentProject)}\`);
-    characters = c.characters;
-    renderCharacters();
-    setMsg("项目已加载");
-  }
-
-  async function loadCurrentResource() {
-    const sel = document.getElementById("resourceSelect");
-    currentKey = sel.value;
-    if (!currentKey) return;
-    const data = await api(\`/api/resource?projectId=\${encodeURIComponent(currentProject)}&key=\${encodeURIComponent(currentKey)}\`);
-    document.getElementById("editor").value = data.content;
-  }
-
-  document.getElementById("resourceSelect").addEventListener("change", loadCurrentResource);
-  document.getElementById("loadProject").addEventListener("click", () => refreshProject().catch((e) => setMsg(e.message, false)));
-  document.getElementById("reloadBtn").addEventListener("click", () => loadCurrentResource().catch((e) => setMsg(e.message, false)));
-  document.getElementById("saveBtn").addEventListener("click", async () => {
-    try {
-      await api("/api/resource", "POST", {
-        projectId: currentProject,
-        key: currentKey,
-        content: document.getElementById("editor").value
-      });
-      setMsg("保存成功");
-    } catch (e) {
-      setMsg(e.message, false);
-    }
-  });
-  document.getElementById("saveCharacters").addEventListener("click", async () => {
-    try {
-      await api("/api/characters", "POST", { projectId: currentProject, characters });
-      setMsg("角色保存成功");
-    } catch (e) {
-      setMsg(e.message, false);
-    }
-  });
-  document.getElementById("approveBtn").addEventListener("click", async () => {
-    try {
-      await api("/api/approve-detail", "POST", {
-        projectId: currentProject,
-        approver: document.getElementById("approver").value || "manual",
-        note: document.getElementById("approveNote").value || ""
-      });
-      setMsg("细纲审批已通过");
-      await refreshProject();
-    } catch (e) {
-      setMsg(e.message, false);
-    }
-  });
-
-  refreshProject().catch((e) => setMsg(e.message, false));
-</script>
-</body>
-</html>`;
+  const content = await readFile(path.join(UI_ASSET_DIR, mapped.fileName), "utf-8");
+  rawResponse(res, 200, mapped.contentType, content);
+  return true;
+}
 
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url ?? "/", `http://${HOST}:${PORT}`);
-    if (req.method === "GET" && url.pathname === "/") {
-      return textResponse(res, 200, UI_HTML);
+    if (req.method === "GET" && (await serveUiAsset(res, url.pathname))) {
+      return;
     }
 
     if (req.method === "GET" && url.pathname === "/api/project") {
@@ -387,7 +292,14 @@ const server = http.createServer(async (req, res) => {
       }
       const chapters = await listChapterNumbers(projectId);
       const resources = [
-        ...STATIC_RESOURCES.map((item) => ({ key: item.key, label: item.label })),
+        ...STATIC_RESOURCES.filter((item) => item.type === "text").map((item) => ({
+          key: item.key,
+          label: item.label,
+        })),
+        ...STATIC_RESOURCES.filter((item) => item.type === "json").map((item) => ({
+          key: item.key,
+          label: item.label,
+        })),
         ...chapters.flatMap((chapterNumber) => [
           {
             key: `chapter-${String(chapterNumber).padStart(3, "0")}-draft`,
@@ -404,6 +316,18 @@ const server = http.createServer(async (req, res) => {
         detailApproved: await isDetailApproved(projectId),
         resources,
       });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/project/create") {
+      const body = (await parseBody(req)) as {
+        projectId?: string;
+        templateProjectId?: string;
+      };
+      if (!body.projectId) {
+        return jsonResponse(res, 400, { error: "projectId required" });
+      }
+      await createProjectFromTemplate(body.projectId, body.templateProjectId ?? "demo_project");
+      return jsonResponse(res, 200, { ok: true, projectId: body.projectId });
     }
 
     if (req.method === "GET" && url.pathname === "/api/resource") {

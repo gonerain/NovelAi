@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NovelAI Studio</title>
+  <link rel="stylesheet" href="/ui/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div class="brand">
+        <h1>NovelAI Studio</h1>
+        <span>项目编辑控制台</span>
+      </div>
+      <div class="top-actions">
+        <span class="chip" id="approveStatus">细纲审批: 检测中</span>
+        <input id="projectId" class="input-inline" value="demo-project" placeholder="projectId" />
+        <input id="templateProjectId" class="input-inline" value="demo_project" placeholder="templateProjectId" />
+        <button id="createProject">创建项目</button>
+        <button id="loadProject" class="btn-primary">加载项目</button>
+      </div>
+    </div>
+
+    <div class="shell">
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-title">资源导航</p>
+            <p class="panel-subtitle">快速定位大纲、章节、角色与记忆文件</p>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="field resource-search">
+            <input id="resourceSearch" placeholder="搜索资源名（如 章节 / world / outline）" />
+          </div>
+          <div id="resourceList" class="resource-list"></div>
+          <p id="resourceHint" class="small" style="margin: 10px 0 0;">支持：大纲 / 细纲 / 章节 / 世界观 / 记忆 / 角色</p>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <div>
+            <p id="editorTitle" class="panel-title">编辑器</p>
+            <p class="panel-subtitle">修改后直接保存到项目文件</p>
+          </div>
+          <span class="tag" id="resourceTypeTag">TEXT</span>
+        </div>
+        <div class="panel-body editor-wrap">
+          <div class="btn-row">
+            <button id="friendlyViewBtn">友好视图</button>
+            <button id="rawViewBtn">原始数据</button>
+            <button id="saveBtn" class="btn-primary">保存</button>
+            <button id="reloadBtn">重载</button>
+            <button id="formatBtn">格式化 JSON</button>
+          </div>
+          <div id="friendlyView" class="friendly-view"></div>
+          <textarea id="editor" spellcheck="false"></textarea>
+          <div class="editor-meta">
+            <span id="editorMeta">0 行 · 0 字符</span>
+            <span id="currentProjectMeta">项目: demo-project</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel right-panel">
+        <div class="panel-head">
+          <div>
+            <p class="panel-title">工作台</p>
+            <p class="panel-subtitle">角色维护与细纲审批</p>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="section">
+            <h3>角色编辑（非程序员友好）</h3>
+            <div id="characterEditor" class="small">加载项目后可编辑角色核心字段。</div>
+            <div class="btn-row" style="margin-top: 10px;">
+              <button class="btn-primary" id="saveCharacters">保存角色</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>细纲审批</h3>
+            <div class="field">
+              <label for="approver">审批人</label>
+              <input id="approver" placeholder="审批人" value="manual" />
+            </div>
+            <div class="field">
+              <label for="approveNote">审批备注</label>
+              <textarea id="approveNote" rows="4" placeholder="记录审批说明，会写入项目文件"></textarea>
+            </div>
+            <button class="btn-primary" id="approveBtn">通过细纲（Unlock章节生成）</button>
+          </div>
+
+          <div id="msg" class="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/ui/app.js"></script>
+</body>
+</html>
