@@ -2,6 +2,7 @@ import type {
   CommercialReviewerResult,
   FactConsistencyReviewerResult,
   MissingResourceReviewerResult,
+  RoleDrivenReviewerResult,
 } from "../domain/index.js";
 import type { ChatMessage } from "../llm/types.js";
 
@@ -13,6 +14,7 @@ interface RewriterInput {
   missingResourceReview: MissingResourceReviewerResult;
   factConsistencyReview: FactConsistencyReviewerResult;
   commercialReview?: CommercialReviewerResult;
+  roleDrivenReview?: RoleDrivenReviewerResult;
 }
 
 function summarizeFindings(args: RewriterInput): string {
@@ -24,6 +26,10 @@ function summarizeFindings(args: RewriterInput): string {
     (item, index) =>
       `${index + 1}. [${item.severity}] ${item.title} | type=${item.issueType} | fix=${item.suggestedFix}`,
   );
+  const roleDriven = (args.roleDrivenReview?.findings ?? []).map(
+    (item, index) =>
+      `${index + 1}. [${item.severity}] ${item.title} | type=${item.issueType} | fix=${item.suggestedFix}`,
+  );
 
   return [
     "Consistency findings (fact + role consistency only):",
@@ -32,10 +38,16 @@ function summarizeFindings(args: RewriterInput): string {
     "Commercial findings:",
     ...(commercial.length > 0 ? commercial : ["none"]),
     "",
+    "Role-driven findings:",
+    ...(roleDriven.length > 0 ? roleDriven : ["none"]),
+    "",
     `Scores only (do not rewrite for these): emotion=${args.factConsistencyReview.scoring.emotion}/10, pacing=${args.factConsistencyReview.scoring.pacing}/10`,
     args.commercialReview
       ? `Commercial scores: hook=${args.commercialReview.scoring.hookClarity}/10, payoff=${args.commercialReview.scoring.payoffDelivery}/10, scanability=${args.commercialReview.scoring.scanability}/10`
       : "Commercial scores: n/a",
+    args.roleDrivenReview
+      ? `Role-driven scores: choice=${args.roleDrivenReview.scoring.choiceClarity}/10, pressure=${args.roleDrivenReview.scoring.pressureBelievability}/10, consequence=${args.roleDrivenReview.scoring.consequenceStrength}/10`
+      : "Role-driven scores: n/a",
   ].join("\n");
 }
 

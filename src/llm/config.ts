@@ -45,6 +45,10 @@ export const defaultTaskRoutes: Record<TaskName, ModelRoute> = {
     provider: "deepseek",
     model: "deepseek-v4-flash",
   },
+  review_role_drive: {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+  },
   review_voice: {
     provider: "deepseek",
     model: "deepseek-v4-flash",

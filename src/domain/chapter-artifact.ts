@@ -5,6 +5,7 @@ import type {
   CommercialReviewerResult,
   FactConsistencyReviewerResult,
   MissingResourceReviewerResult,
+  RoleDrivenReviewerResult,
 } from "./reviewer.js";
 import type { WriterResult } from "./writer.js";
 
@@ -16,6 +17,7 @@ export interface ChapterArtifact {
   missingResourceReview: MissingResourceReviewerResult;
   factConsistencyReview: FactConsistencyReviewerResult;
   commercialReview?: CommercialReviewerResult;
+  roleDrivenReview?: RoleDrivenReviewerResult;
   memoryUpdate: MemoryUpdaterResult;
   generatedAt: string;
 }

@@ -66,5 +66,6 @@ export type TaskName =
   | "review_commercial"
   | "review_missing_resource"
   | "review_fact"
+  | "review_role_drive"
   | "review_voice"
   | "memory_updater";

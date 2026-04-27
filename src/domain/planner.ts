@@ -3,6 +3,7 @@ import type {
   ArcOutline,
   BeatOutline,
   ChapterPlan,
+  CharacterState,
   EntityId,
   GenrePayoffPack,
   StoryOutline,
@@ -25,8 +26,10 @@ export interface PlannerInput {
   currentSituation: string;
   genrePayoffPack?: GenrePayoffPack;
   activeCharacterIds: EntityId[];
+  activeCharacters?: CharacterState[];
   candidateMemoryIds: EntityId[];
   recentConsequences: string[];
+  unresolvedDelayedConsequences?: string[];
   recentCommercialHistory?: string[];
 }
 

@@ -66,6 +66,9 @@ export interface RetrievalEvalReport {
   skippedCases: number;
   caseResults: RetrievalEvalCaseResult[];
   chapterSummaries: RetrievalEvalChapterSummary[];
+  caseTypeSummaries: RetrievalEvalCaseTypeSummary[];
+  failureGroups: RetrievalEvalFailureGroup[];
+  skippedGroups: RetrievalEvalSkippedGroup[];
 }
 
 interface RetrievalEvalChapterView {
@@ -75,6 +78,26 @@ interface RetrievalEvalChapterView {
   exactSearchHits: ExactSearchHit[];
   corpusTexts: string[];
   availableLedgerTypes: string[];
+}
+
+export interface RetrievalEvalCaseTypeSummary {
+  caseType: RetrievalEvalCaseType;
+  totalCases: number;
+  passedCases: number;
+  failedCases: number;
+}
+
+export interface RetrievalEvalFailureGroup {
+  caseType: RetrievalEvalCaseType;
+  failedCases: number;
+  chapters: number[];
+  expectedValues: string[];
+}
+
+export interface RetrievalEvalSkippedGroup {
+  reason: string;
+  skippedCases: number;
+  caseIds: EntityId[];
 }
 
 export function buildRetrievalEvalSeed(args: {
@@ -282,16 +305,19 @@ export function evaluateRetrievalCases(args: {
   const viewMap = new Map(args.chapterViews.map((view) => [view.chapterNumber, view]));
   const caseResults: RetrievalEvalCaseResult[] = [];
   let skippedCases = 0;
+  const skippedGroupMap = new Map<string, RetrievalEvalSkippedGroup>();
 
   for (const item of args.evalSet.cases) {
     if (!item.enabled) {
       skippedCases += 1;
+      collectSkippedCase(skippedGroupMap, item, firstSkipReason(item));
       continue;
     }
 
     const view = viewMap.get(item.chapterNumber);
     if (!view) {
       skippedCases += 1;
+      collectSkippedCase(skippedGroupMap, item, "No chapter view available.");
       continue;
     }
 
@@ -318,6 +344,8 @@ export function evaluateRetrievalCases(args: {
   }
 
   const passedCases = caseResults.filter((item) => item.passed).length;
+  const caseTypeSummaries = summarizeCaseTypes(caseResults);
+  const failureGroups = summarizeFailureGroups(caseResults);
 
   return {
     projectId: args.projectId,
@@ -328,6 +356,11 @@ export function evaluateRetrievalCases(args: {
     caseResults,
     chapterSummaries: [...chapterSummaryMap.values()].sort(
       (left, right) => left.chapterNumber - right.chapterNumber,
+    ),
+    caseTypeSummaries,
+    failureGroups,
+    skippedGroups: [...skippedGroupMap.values()].sort(
+      (left, right) => right.skippedCases - left.skippedCases || left.reason.localeCompare(right.reason),
     ),
   };
 }
@@ -582,4 +615,90 @@ function uniqueStrings<T extends string>(items: T[], limit: number): T[] {
   }
 
   return result;
+}
+
+function summarizeCaseTypes(
+  caseResults: RetrievalEvalCaseResult[],
+): RetrievalEvalCaseTypeSummary[] {
+  const map = new Map<RetrievalEvalCaseType, RetrievalEvalCaseTypeSummary>();
+
+  for (const result of caseResults) {
+    const summary =
+      map.get(result.caseType) ??
+      {
+        caseType: result.caseType,
+        totalCases: 0,
+        passedCases: 0,
+        failedCases: 0,
+      };
+    summary.totalCases += 1;
+    if (result.passed) {
+      summary.passedCases += 1;
+    } else {
+      summary.failedCases += 1;
+    }
+    map.set(result.caseType, summary);
+  }
+
+  return [...map.values()].sort((left, right) => left.caseType.localeCompare(right.caseType));
+}
+
+function summarizeFailureGroups(
+  caseResults: RetrievalEvalCaseResult[],
+): RetrievalEvalFailureGroup[] {
+  const map = new Map<RetrievalEvalCaseType, RetrievalEvalFailureGroup>();
+
+  for (const result of caseResults) {
+    if (result.passed) {
+      continue;
+    }
+
+    const group =
+      map.get(result.caseType) ??
+      {
+        caseType: result.caseType,
+        failedCases: 0,
+        chapters: [],
+        expectedValues: [],
+      };
+    group.failedCases += 1;
+    if (!group.chapters.includes(result.chapterNumber)) {
+      group.chapters.push(result.chapterNumber);
+    }
+    if (!group.expectedValues.includes(result.expectedValue)) {
+      group.expectedValues.push(result.expectedValue);
+    }
+    map.set(result.caseType, group);
+  }
+
+  return [...map.values()]
+    .map((group) => ({
+      ...group,
+      chapters: [...group.chapters].sort((left, right) => left - right),
+      expectedValues: group.expectedValues.slice(0, 12),
+    }))
+    .sort((left, right) => right.failedCases - left.failedCases || left.caseType.localeCompare(right.caseType));
+}
+
+function collectSkippedCase(
+  groups: Map<string, RetrievalEvalSkippedGroup>,
+  item: RetrievalEvalCase,
+  reason: string,
+): void {
+  const group =
+    groups.get(reason) ??
+    {
+      reason,
+      skippedCases: 0,
+      caseIds: [],
+    };
+  group.skippedCases += 1;
+  if (!group.caseIds.includes(item.id)) {
+    group.caseIds.push(item.id);
+  }
+  groups.set(reason, group);
+}
+
+function firstSkipReason(item: RetrievalEvalCase): string {
+  return item.notes.find((note) => note.startsWith("Disabled:")) ?? "Disabled by eval set.";
 }

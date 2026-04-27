@@ -87,3 +87,30 @@ export interface CommercialReviewerResult {
   };
   notes: string[];
 }
+
+export interface RoleDrivenReviewerInput {
+  contextPack: ContextPack;
+  draft: string;
+}
+
+export interface RoleDrivenReviewerFinding {
+  issueType:
+    | "author_pushed_turn"
+    | "choice_pressure_missing"
+    | "character_cost_missing"
+    | "consequence_chain_weak";
+  severity: ReviewerSeverity;
+  title: string;
+  evidence: string;
+  suggestedFix: string;
+}
+
+export interface RoleDrivenReviewerResult {
+  findings: RoleDrivenReviewerFinding[];
+  scoring: {
+    choiceClarity: number;
+    pressureBelievability: number;
+    consequenceStrength: number;
+  };
+  notes: string[];
+}

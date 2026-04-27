@@ -177,6 +177,24 @@ export const demoBeatOutlines: BeatOutline[] = [
       "保持都市现实压力，不写灾厄副本或怪物事件",
       "前段只证明红字会修正，不提前揭露天衡会全貌",
     ],
+    decisionOwnerIds: ["yejin", "shenzhixia"],
+    decisionPressure:
+      "Ye Jin must choose whether to cross from observer to actor before he fully understands the red-letter rules, while Shen Zhixia must decide whether to trust a stranger who seems to know her death.",
+    availableOptions: [
+      "Stay distant and only watch.",
+      "Intervene physically without changing fate.",
+      "Commit to a first risky rewrite and accept unknown backlash.",
+    ],
+    likelyChoice:
+      "Ye Jin intervenes and begins crossing the line into authorship; Shen Zhixia chooses conditional cooperation instead of passive trust.",
+    immediateConsequence:
+      "The anomaly becomes a shared live problem instead of a distant tragedy.",
+    delayedConsequence:
+      "Their alliance starts with unequal information, which later turns rescue into mistrust.",
+    relationshipShift:
+      "Rescuer and victim becomes tactical alliance with built-in suspicion.",
+    themeShift:
+      "Seeing fate stops being morally neutral once action becomes possible.",
     chapterRangeHint: {
       start: 1,
       end: 8,
@@ -224,6 +242,24 @@ export const demoBeatOutlines: BeatOutline[] = [
       "维持主角棋手感，但不能让队友显得无用",
       "保持‘改判终点、谋划道路’的能力边界",
     ],
+    decisionOwnerIds: ["yejin", "shenzhixia", "gulinchuan"],
+    decisionPressure:
+      "Saving Shen Zhixia now requires replacing a death ending with a public-truth ending, which exposes everyone to retaliation and future distrust.",
+    availableOptions: [
+      "Hide Shen Zhixia and stall.",
+      "Expose only a fragment while preserving anonymity.",
+      "Turn the death ending into a public accusation and build the route to it.",
+    ],
+    likelyChoice:
+      "Ye Jin chooses the loud, costly route; Shen Zhixia accepts because silence now equals erasure; Gu Linchuan starts following the disturbance instead of the official story.",
+    immediateConsequence:
+      "The team now has to build a believable path to the new ending rather than merely dodging the old one.",
+    delayedConsequence:
+      "Any hidden price in the rewrite will later poison trust inside White Paper Society.",
+    relationshipShift:
+      "Shared survival becomes shared liability.",
+    themeShift:
+      "Changing fate creates moral debt that has to be carried by real people.",
     chapterRangeHint: {
       start: 9,
       end: 16,
@@ -257,6 +293,24 @@ export const demoBeatOutlines: BeatOutline[] = [
       "中段禁止让天衡会主脑亲自下场",
       "胜利必须附带代价：夜烬母亲病情或自身命书出现新红字",
     ],
+    decisionOwnerIds: ["yejin", "gulinchuan"],
+    decisionPressure:
+      "Ye Jin must decide how much of himself to expose to make the live accusation land, while Gu Linchuan must decide whether procedure matters more than stopping the system behind the case.",
+    availableOptions: [
+      "Win quietly and preserve anonymity.",
+      "Force exposure and accept that the reviser now enters the board as hunted prey.",
+      "Let legal caution stall the moment and preserve procedural safety.",
+    ],
+    likelyChoice:
+      "Ye Jin forces exposure; Gu Linchuan partially enables the truth even while preparing to hunt the person behind it.",
+    immediateConsequence:
+      "The live turn succeeds, but the board now knows a wild reviser exists.",
+    delayedConsequence:
+      "Future conflict moves from whether Ye Jin acted to what his method is turning him into.",
+    relationshipShift:
+      "Parallel goals become adversarial respect.",
+    themeShift:
+      "Victory against corruption still risks reproducing its logic.",
     chapterRangeHint: {
       start: 17,
       end: 24,
@@ -278,6 +332,31 @@ export const demoCharacterStates: CharacterState[] = [
     emotionalState: ["冷静", "警惕", "压抑亢奋"],
     knowledgeBoundary: ["知道黑字未来可变", "初步知道红字和金字必须改判才能破局"],
     secretsKept: ["执笔人身份", "母亲病历上出现过金字债印"],
+    decisionProfile: {
+      coreDesire: "Save people without becoming the kind of controller he hates.",
+      coreFear: "That every rescue turns into ownership and moral corruption.",
+      falseBelief: "If he controls the board tightly enough, he can remove cost from other people's lives.",
+      defaultCopingStyle: "Preempt, conceal the price, and move before anyone can object.",
+      controlPattern: "Narrows other people's options and calls it protection.",
+      unacceptableCosts: [
+        "Publicly admitting uncertainty before he has leverage.",
+        "Letting someone he marked for rescue make an irreversible uninformed choice.",
+        "Exposing his mother's contract thread before he understands it.",
+      ],
+      likelyCompromises: [
+        "He will lie about the price before he gives up on a rescue.",
+        "He will accept personal blame if it buys another move.",
+        "He will use institutions he despises if they create a survivable route.",
+      ],
+      relationshipSoftSpots: [
+        "Shen Zhixia seeing him as another buyer of fate.",
+        "Gu Linchuan recognizing how much he already resembles Tianheng methods.",
+      ],
+      breakThresholds: [
+        "Someone dies because he waited for cleaner proof.",
+        "His mother is used as direct leverage in front of him.",
+      ],
+    },
     relationships: [
       {
         targetCharacterId: "shenzhixia",
@@ -314,6 +393,29 @@ export const demoCharacterStates: CharacterState[] = [
     emotionalState: ["恐惧", "愤怒", "强撑理智"],
     knowledgeBoundary: ["不知道天衡会全貌", "知道自己自杀结局不是自然形成"],
     secretsKept: ["手里可能有一份能指向买家的残缺证据"],
+    decisionProfile: {
+      coreDesire: "Reclaim authorship over her own life and testimony.",
+      coreFear: "Being rewritten into a silent victim again, even by an ally.",
+      falseBelief: "If she accepts protection, she will lose the right to choose.",
+      defaultCopingStyle: "Demand proof, test motives, and resist emotional debt.",
+      controlPattern: "Makes every rescuer earn trust through evidence and cost.",
+      unacceptableCosts: [
+        "Being hidden away while others decide the case for her.",
+        "Publicly surviving but privately surrendering decision power.",
+      ],
+      likelyCompromises: [
+        "She will cooperate tactically while keeping a private exit.",
+        "She will use someone else's plan if she still controls the final statement.",
+      ],
+      relationshipSoftSpots: [
+        "People who risk something concrete instead of promising safety.",
+        "Anyone who lets her speak first when the cost is real.",
+      ],
+      breakThresholds: [
+        "Learning that Ye Jin changed her ending without telling the full price.",
+        "Being reduced to evidence by official process.",
+      ],
+    },
     relationships: [
       {
         targetCharacterId: "yejin",
@@ -340,6 +442,29 @@ export const demoCharacterStates: CharacterState[] = [
     emotionalState: ["克制", "怀疑", "被迫动摇"],
     knowledgeBoundary: ["知道异常案件存在共同利益链", "不知道命书改判的具体规则"],
     secretsKept: ["对执笔人方法有隐秘认同，但不能承认"],
+    decisionProfile: {
+      coreDesire: "Stop reality from being privatized by people above the law.",
+      coreFear: "Becoming the kind of investigator who preserves order by abandoning truth.",
+      falseBelief: "If he keeps procedure intact, justice will eventually catch up.",
+      defaultCopingStyle: "Constrain the field, verify quietly, move only when the chain is solid.",
+      controlPattern: "Withholds trust until evidence is stacked, even when delay costs lives.",
+      unacceptableCosts: [
+        "Sanctioning a vigilante method without a containment plan.",
+        "Destroying admissible evidence for a faster emotional win.",
+      ],
+      likelyCompromises: [
+        "He will tolerate a dirty method if it exposes a bigger system.",
+        "He will protect a suspect long enough to reach the buyer above them.",
+      ],
+      relationshipSoftSpots: [
+        "Competence under pressure without performance or self-pity.",
+        "Witnesses who keep choosing truth after they are given a chance to run.",
+      ],
+      breakThresholds: [
+        "Proof that legal process itself is one of the trading tools.",
+        "Watching someone die because he waited for a cleaner chain of custody.",
+      ],
+    },
     relationships: [
       {
         targetCharacterId: "linlu",

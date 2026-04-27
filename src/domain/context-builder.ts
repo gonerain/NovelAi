@@ -30,6 +30,7 @@ export interface ContextBuilderInput {
   beatOutline?: BeatOutline;
   chapterArtifacts?: MemoryChapterArtifactSnapshot[];
   semanticOverrideHits?: SemanticRetrievalHit[];
+  unresolvedDelayedConsequences?: string[];
   characterStates: CharacterState[];
   storyMemories: StoryMemory[];
   worldFacts: WorldFact[];
@@ -42,6 +43,17 @@ export interface ContextCharacterSnapshot {
   emotionalState: string[];
   wounds: string[];
   voiceNotes: string[];
+  decisionProfile?: {
+    coreDesire: string;
+    coreFear: string;
+    falseBelief: string;
+    defaultCopingStyle: string;
+    controlPattern: string;
+    unacceptableCosts: string[];
+    likelyCompromises: string[];
+    relationshipSoftSpots: string[];
+    breakThresholds: string[];
+  };
   activeRelationships: Array<{
     targetCharacterId: EntityId;
     publicLabel: string;
@@ -116,6 +128,7 @@ export interface ContextPack {
   arcSignals: string[];
   chapterSignals: string[];
   retrievalSignals: string[];
+  unresolvedDelayedConsequences: string[];
 }
 
 function uniqueTrimmed(items: string[], limit: number): string[] {
@@ -289,6 +302,19 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       emotionalState: character.emotionalState.slice(0, 3),
       wounds: character.wounds.slice(0, 2),
       voiceNotes: character.voiceNotes.slice(0, 2),
+      decisionProfile: character.decisionProfile
+        ? {
+            coreDesire: character.decisionProfile.coreDesire,
+            coreFear: character.decisionProfile.coreFear,
+            falseBelief: character.decisionProfile.falseBelief,
+            defaultCopingStyle: character.decisionProfile.defaultCopingStyle,
+            controlPattern: character.decisionProfile.controlPattern,
+            unacceptableCosts: character.decisionProfile.unacceptableCosts.slice(0, 3),
+            likelyCompromises: character.decisionProfile.likelyCompromises.slice(0, 3),
+            relationshipSoftSpots: character.decisionProfile.relationshipSoftSpots.slice(0, 3),
+            breakThresholds: character.decisionProfile.breakThresholds.slice(0, 3),
+          }
+        : undefined,
       activeRelationships: character.relationships.slice(0, 3).map((relationship) => ({
         targetCharacterId: relationship.targetCharacterId,
         publicLabel: relationship.publicLabel,
@@ -359,6 +385,21 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       input.chapterPlan.commercial?.readerPromise
         ? `Reader promise: ${input.chapterPlan.commercial.readerPromise}`
         : "",
+      input.beatOutline?.decisionPressure
+        ? `Decision pressure: ${input.beatOutline.decisionPressure}`
+        : "",
+      input.beatOutline?.likelyChoice
+        ? `Likely choice: ${input.beatOutline.likelyChoice}`
+        : "",
+      input.beatOutline?.immediateConsequence
+        ? `Immediate consequence: ${input.beatOutline.immediateConsequence}`
+        : "",
+      input.beatOutline?.delayedConsequence
+        ? `Delayed consequence: ${input.beatOutline.delayedConsequence}`
+        : "",
+      ...(input.unresolvedDelayedConsequences ?? []).map(
+        (item) => `Unresolved delayed consequence: ${item}`,
+      ),
     ],
     10,
   );
@@ -455,6 +496,20 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
     relevantWorldFacts,
     arcSignals,
     chapterSignals,
-    retrievalSignals: retrievalPack.retrievalSignals,
+    retrievalSignals: uniqueTrimmed(
+      [
+        ...retrievalPack.retrievalSignals,
+        ...(input.unresolvedDelayedConsequences?.length
+          ? [
+              `Role-driven carryover: ${input.unresolvedDelayedConsequences.length} unresolved delayed consequences are still active.`,
+            ]
+          : []),
+      ],
+      12,
+    ),
+    unresolvedDelayedConsequences: uniqueTrimmed(
+      input.unresolvedDelayedConsequences ?? [],
+      6,
+    ),
   };
 }

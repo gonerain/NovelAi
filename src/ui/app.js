@@ -1,4 +1,4 @@
-let currentProject = "demo-project";
+let currentProject = "demo_project";
 let currentKey = "";
 let characters = [];
 let resources = [];
@@ -596,17 +596,51 @@ function renderCharacters() {
       <div class="field"><label>当前目标（|分隔）</label><input data-idx="${idx}" data-k="currentGoals" value="${escapeHtml((c.currentGoals || []).join(" | "))}" /></div>
       <div class="field"><label>情绪状态（|分隔）</label><input data-idx="${idx}" data-k="emotionalState" value="${escapeHtml((c.emotionalState || []).join(" | "))}" /></div>
       <div class="field"><label>语气备注（|分隔）</label><input data-idx="${idx}" data-k="voiceNotes" value="${escapeHtml((c.voiceNotes || []).join(" | "))}" /></div>
+      <div class="field"><label>Decision / Core Desire</label><input data-idx="${idx}" data-k="decisionProfile.coreDesire" value="${escapeHtml(c.decisionProfile?.coreDesire || "")}" /></div>
+      <div class="field"><label>Decision / Core Fear</label><input data-idx="${idx}" data-k="decisionProfile.coreFear" value="${escapeHtml(c.decisionProfile?.coreFear || "")}" /></div>
+      <div class="field"><label>Decision / False Belief</label><input data-idx="${idx}" data-k="decisionProfile.falseBelief" value="${escapeHtml(c.decisionProfile?.falseBelief || "")}" /></div>
+      <div class="field"><label>Decision / Coping Style</label><textarea data-idx="${idx}" data-k="decisionProfile.defaultCopingStyle">${escapeHtml(c.decisionProfile?.defaultCopingStyle || "")}</textarea></div>
+      <div class="field"><label>Decision / Control Pattern</label><textarea data-idx="${idx}" data-k="decisionProfile.controlPattern">${escapeHtml(c.decisionProfile?.controlPattern || "")}</textarea></div>
+      <div class="field"><label>Decision / Unacceptable Costs（|分隔）</label><textarea data-idx="${idx}" data-k="decisionProfile.unacceptableCosts">${escapeHtml((c.decisionProfile?.unacceptableCosts || []).join(" | "))}</textarea></div>
+      <div class="field"><label>Decision / Likely Compromises（|分隔）</label><textarea data-idx="${idx}" data-k="decisionProfile.likelyCompromises">${escapeHtml((c.decisionProfile?.likelyCompromises || []).join(" | "))}</textarea></div>
+      <div class="field"><label>Decision / Relationship Soft Spots（|分隔）</label><textarea data-idx="${idx}" data-k="decisionProfile.relationshipSoftSpots">${escapeHtml((c.decisionProfile?.relationshipSoftSpots || []).join(" | "))}</textarea></div>
+      <div class="field"><label>Decision / Break Thresholds（|分隔）</label><textarea data-idx="${idx}" data-k="decisionProfile.breakThresholds">${escapeHtml((c.decisionProfile?.breakThresholds || []).join(" | "))}</textarea></div>
     `;
     root.appendChild(box);
   });
 
-  root.querySelectorAll("input").forEach((input) => {
+  root.querySelectorAll("input, textarea").forEach((input) => {
     input.addEventListener("change", (e) => {
       const t = e.target;
       const idx = Number(t.dataset.idx);
       const k = t.dataset.k;
       if (!characters[idx]) return;
-      if (k === "currentGoals" || k === "emotionalState" || k === "voiceNotes") {
+      if (k.startsWith("decisionProfile.")) {
+        const nestedKey = k.replace("decisionProfile.", "");
+        if (!characters[idx].decisionProfile) {
+          characters[idx].decisionProfile = {
+            coreDesire: "",
+            coreFear: "",
+            falseBelief: "",
+            defaultCopingStyle: "",
+            controlPattern: "",
+            unacceptableCosts: [],
+            likelyCompromises: [],
+            relationshipSoftSpots: [],
+            breakThresholds: [],
+          };
+        }
+        if (
+          nestedKey === "unacceptableCosts" ||
+          nestedKey === "likelyCompromises" ||
+          nestedKey === "relationshipSoftSpots" ||
+          nestedKey === "breakThresholds"
+        ) {
+          characters[idx].decisionProfile[nestedKey] = splitPipe(t.value);
+        } else {
+          characters[idx].decisionProfile[nestedKey] = t.value;
+        }
+      } else if (k === "currentGoals" || k === "emotionalState" || k === "voiceNotes") {
         characters[idx][k] = splitPipe(t.value);
       } else {
         characters[idx][k] = t.value;

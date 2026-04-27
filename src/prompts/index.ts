@@ -8,5 +8,6 @@ export * from "./rewriter.js";
 export * from "./review-commercial.js";
 export * from "./review-fact-consistency.js";
 export * from "./review-missing-resource.js";
+export * from "./review-role-driven.js";
 export * from "./story-outline.js";
 export * from "./writer.js";

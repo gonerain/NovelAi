@@ -54,6 +54,30 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         input.beatOutline.constraints.length > 0
           ? `beat constraints=${input.beatOutline.constraints.join(" | ")}`
           : undefined,
+        input.beatOutline.decisionOwnerIds?.length
+          ? `decision owners=${input.beatOutline.decisionOwnerIds.join(" | ")}`
+          : undefined,
+        input.beatOutline.decisionPressure
+          ? `decision pressure=${input.beatOutline.decisionPressure}`
+          : undefined,
+        input.beatOutline.availableOptions?.length
+          ? `decision options=${input.beatOutline.availableOptions.join(" | ")}`
+          : undefined,
+        input.beatOutline.likelyChoice
+          ? `likely choice=${input.beatOutline.likelyChoice}`
+          : undefined,
+        input.beatOutline.immediateConsequence
+          ? `immediate consequence=${input.beatOutline.immediateConsequence}`
+          : undefined,
+        input.beatOutline.delayedConsequence
+          ? `delayed consequence=${input.beatOutline.delayedConsequence}`
+          : undefined,
+        input.beatOutline.relationshipShift
+          ? `relationship shift=${input.beatOutline.relationshipShift}`
+          : undefined,
+        input.beatOutline.themeShift
+          ? `theme shift=${input.beatOutline.themeShift}`
+          : undefined,
         input.beatOutline.openingAnchor
           ? `opening hook=${input.beatOutline.openingAnchor.hook}`
           : undefined,
@@ -76,6 +100,9 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "- Use beat conflict/expectedChange as hard anchor when beat is provided.",
         "- Treat currentSituation and recentConsequences as already happened facts. Do not rewind, replay, or replace them.",
         "- Each new chapter must advance from the current situation, not restage the same cancellation attempt or obstacle in the same form unless the escalation is materially different.",
+        "- Role-driven rule: every major turn should be caused by a character choosing under pressure, not by author convenience alone.",
+        "- If beat decision fields are present, treat them as structural anchors. Preserve the decision owner, pressure, likely choice, and consequence chain.",
+        "- chapterGoal and plannedOutcome should reflect who makes the decisive choice and what new pressure that choice creates.",
         "- Keep payoffPatternIds to 1-2 aligned ids.",
         "- Output searchIntent for retrieval. searchIntent should point to entities, memories, ledger types, and phrases that must be searched before writing.",
         "- Output commercial controls. commercial must describe how this chapter sells itself to web-novel readers without forcing the same rhythm every time.",
@@ -149,11 +176,33 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         input.recentConsequences.length > 0
           ? "Continuity directive: all recent consequences above are already true at chapter start. Build the next turn from them."
           : undefined,
+        input.unresolvedDelayedConsequences?.length
+          ? `Unresolved delayed consequences: ${input.unresolvedDelayedConsequences.join(" | ")}`
+          : undefined,
+        input.unresolvedDelayedConsequences?.length
+          ? "Role-driven continuity directive: at least one unresolved delayed consequence above should either intensify, complicate a relationship, or constrain the next choice."
+          : undefined,
         input.recentCommercialHistory?.length
           ? `Recent commercial history: ${input.recentCommercialHistory.join(" | ")}`
           : undefined,
         input.recentCommercialHistory?.length
           ? "Commercial rotation directive: avoid repeating the same rewardType and the same small-payoff shape from recent chapters unless escalation is materially different."
+          : undefined,
+        input.activeCharacters?.length
+          ? `Active character decision profiles:\n${JSON.stringify(
+              input.activeCharacters.map((character) => ({
+                id: character.id,
+                name: character.name,
+                currentGoals: character.currentGoals,
+                emotionalState: character.emotionalState,
+                decisionProfile: character.decisionProfile ?? null,
+              })),
+              null,
+              2,
+            )}`
+          : undefined,
+        input.activeCharacters?.length
+          ? "Decision directive: for each major scene turn, ask which active character is under pressure, what choice they can tolerate, and what cost they refuse."
           : undefined,
         `Author summary: ${input.authorPack.summary}`,
         `Author must rules: ${input.authorPack.mustRules.join(" | ")}`,

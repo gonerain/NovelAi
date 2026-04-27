@@ -3,6 +3,23 @@ import path from "node:path";
 
 import type { ChapterArtifact, StoryProject } from "./domain/index.js";
 import {
+  formatApplyDraftRewriteRunResult,
+  formatChangeImpactRunResult,
+  formatConsequenceInspectionRunResult,
+  formatInspectDraftRewriteRunResult,
+  formatInvalidateResult,
+  formatInvalidateTargetRunResult,
+  formatListDraftRewriteVersionsRunResult,
+  formatOutlinePatchSuggestionRunResult,
+  formatRegenerateFromTargetRunResult,
+  formatRetrievalEvalRunResult,
+  formatRetrievalEvalSeedResult,
+  formatRewriteChapterRunResult,
+  formatRewriteDraftRunResult,
+  formatRewritePlanRunResult,
+  formatV1RunResult,
+} from "./v1-formatters.js";
+import {
   approveDetailedOutline,
   exportOutlineDrafts,
   formatOutlineStackResult,
@@ -16,31 +33,20 @@ import {
   bootstrapProject,
   defaultDemoProjectId,
   formatAuthorPresetCatalog,
-  formatChangeImpactRunResult,
-  formatInvalidateResult,
-  formatInvalidateTargetRunResult,
-  formatRegenerateFromTargetRunResult,
-  formatApplyDraftRewriteRunResult,
-  formatInspectDraftRewriteRunResult,
-  formatListDraftRewriteVersionsRunResult,
-  formatRewriteChapterRunResult,
-  formatRewriteDraftRunResult,
-  formatRewritePlanRunResult,
-  formatRetrievalEvalRunResult,
-  formatRetrievalEvalSeedResult,
-  formatV1RunResult,
   interviewProject,
   invalidateFromChapter,
   invalidateFromTarget,
   regenerateFromTarget,
   applyDraftRewrite,
   inspectDraftRewrite,
+  inspectConsequences,
   listDraftRewriteVersions,
   rewriteChapter,
   rewriteChapterDraft,
   runChangeImpact,
   runRewritePlan,
   runRetrievalEval,
+  suggestOutlinePatches,
   runV1,
   seedRetrievalEvalSet,
 } from "./v1-lib.js";
@@ -52,11 +58,13 @@ type CommandName =
   | "project:inspect"
   | "project:paths"
   | "project:impact"
+  | "project:inspect-consequences"
   | "project:rewrite-plan"
   | "project:regenerate-from-target"
   | "memory:eval-seed"
   | "memory:eval-run"
   | "outline:inspect"
+  | "outline:suggest-patches"
   | "outline:generate-stack"
   | "outline:generate-drafts"
   | "outline:approve-detail"
@@ -77,6 +85,7 @@ interface ParsedArgs {
   command: CommandName;
   projectId: string;
   chapterNumber?: number;
+  fromChapter?: number;
   count?: number;
   versionId?: string;
   profileId?: string;
@@ -118,6 +127,7 @@ function parseCommand(argv: string[]): ParsedArgs {
   const flags = parseFlags(argv);
   const projectId = readOption(flags, "--project") ?? defaultDemoProjectId;
   const chapterOption = readOption(flags, "--chapter");
+  const fromChapterOption = readOption(flags, "--from-chapter");
   const countOption = readOption(flags, "--count");
   const versionOption = readOption(flags, "--version");
   const profileOption = readOption(flags, "--profile");
@@ -138,11 +148,13 @@ function parseCommand(argv: string[]): ParsedArgs {
     "project:inspect",
     "project:paths",
     "project:impact",
+    "project:inspect-consequences",
     "project:rewrite-plan",
     "project:regenerate-from-target",
     "memory:eval-seed",
     "memory:eval-run",
     "outline:inspect",
+    "outline:suggest-patches",
     "outline:generate-stack",
     "outline:generate-drafts",
     "outline:approve-detail",
@@ -168,6 +180,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     command,
     projectId,
     chapterNumber: chapterOption ? Number(chapterOption) : undefined,
+    fromChapter: fromChapterOption ? Number(fromChapterOption) : undefined,
     count: countOption ? Number(countOption) : undefined,
     versionId: versionOption,
     profileId: profileOption,
@@ -328,11 +341,13 @@ function usage(): string {
     "  project inspect --project <id>",
     "  project paths --project <id>",
     "  project impact --project <id> --target <entity_or_node_id>",
+    "  project inspect-consequences --project <id> --chapter <n>",
     "  project rewrite-plan --project <id> --target <entity_or_node_id>",
     "  project regenerate-from-target --project <id> --target <entity_or_node_id> --count <n> [--with-eval] [--strict-eval]",
     "  memory eval-seed --project <id>",
     "  memory eval-run --project <id>",
     "  outline inspect --project <id>",
+    "  outline suggest-patches --project <id> --from-chapter <n>",
     "  outline generate-stack --project <id> [--count <chapters>]",
     "  outline generate-drafts --project <id>",
     "  outline approve-detail --project <id> [--approver <name>] [--note <text>]",
@@ -419,6 +434,18 @@ async function main(): Promise<void> {
       return;
     }
 
+    case "project:inspect-consequences": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("project inspect-consequences requires --chapter <n>");
+      }
+      const result = await inspectConsequences({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatConsequenceInspectionRunResult(result));
+      return;
+    }
+
     case "project:rewrite-plan": {
       if (!parsed.targetId) {
         throw new Error("project rewrite-plan requires --target <entity_or_node_id>");
@@ -472,6 +499,18 @@ async function main(): Promise<void> {
         throw new Error(`Project not found or incomplete: ${parsed.projectId}`);
       }
       console.log(summarizeOutline(project));
+      return;
+    }
+
+    case "outline:suggest-patches": {
+      if (!parsed.fromChapter || parsed.fromChapter < 1) {
+        throw new Error("outline suggest-patches requires --from-chapter <n>");
+      }
+      const result = await suggestOutlinePatches({
+        projectId: parsed.projectId,
+        fromChapter: parsed.fromChapter,
+      });
+      console.log(formatOutlinePatchSuggestionRunResult(result));
       return;
     }
 

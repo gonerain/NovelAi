@@ -140,6 +140,18 @@ export interface RelationshipState {
   lastUpdatedInChapter?: number;
 }
 
+export interface CharacterDecisionProfile {
+  coreDesire: string;
+  coreFear: string;
+  falseBelief: string;
+  defaultCopingStyle: string;
+  controlPattern: string;
+  unacceptableCosts: string[];
+  likelyCompromises: string[];
+  relationshipSoftSpots: string[];
+  breakThresholds: string[];
+}
+
 export interface CharacterState {
   id: EntityId;
   name: string;
@@ -153,6 +165,7 @@ export interface CharacterState {
   emotionalState: string[];
   knowledgeBoundary: string[];
   secretsKept: string[];
+  decisionProfile?: CharacterDecisionProfile;
   relationships: RelationshipState[];
 }
 
@@ -300,6 +313,14 @@ export interface BeatOutline {
   payoffPatternIds?: EntityId[];
   revealTargets: string[];
   constraints: string[];
+  decisionOwnerIds?: EntityId[];
+  decisionPressure?: string;
+  availableOptions?: string[];
+  likelyChoice?: string;
+  immediateConsequence?: string;
+  delayedConsequence?: string;
+  relationshipShift?: string;
+  themeShift?: string;
   openingAnchor?: {
     readerAnchor: string[];
     relationshipAnchor: string[];
