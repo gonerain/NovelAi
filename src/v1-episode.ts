@@ -85,6 +85,7 @@ async function loadRecentPacketSummaries(args: {
       primaryThreadId: packet.primaryThreadId,
       chapterMode: packet.chapterMode,
       payoffType: packet.payoffType,
+      endHook: packet.endHook,
     });
   }
   return summaries;
@@ -318,19 +319,95 @@ export interface RecentPacketSummary {
   primaryThreadId: string;
   chapterMode: ChapterMode;
   payoffType: EpisodePayoffType;
+  endHook?: string;
+}
+
+function tokenizeHookForCompare(text: string): Set<string> {
+  if (!text) {
+    return new Set();
+  }
+  const cleaned = text.replace(/[\s\p{P}\p{S}]+/gu, " ");
+  const tokens = new Set<string>();
+  for (const part of cleaned.split(" ")) {
+    if (!part) {
+      continue;
+    }
+    if (/^[一-鿿]+$/.test(part) && part.length >= 2) {
+      for (let i = 0; i < part.length - 1; i += 1) {
+        tokens.add(part.slice(i, i + 2));
+      }
+    } else if (part.length >= 2) {
+      tokens.add(part.toLowerCase());
+    }
+  }
+  return tokens;
+}
+
+function jaccardOverlap(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 || b.size === 0) {
+    return 0;
+  }
+  let intersection = 0;
+  for (const token of a) {
+    if (b.has(token)) {
+      intersection += 1;
+    }
+  }
+  return intersection / (a.size + b.size - intersection);
 }
 
 function buildEndHook(args: {
   primaryThread: NarrativeThread;
   unresolvedDelayedConsequences: string[];
   recentConsequences: string[];
+  previousEndHook?: string;
 }): string {
-  const carryover = args.unresolvedDelayedConsequences[0] ?? args.recentConsequences[0];
-  const move = args.primaryThread.nextUsefulMoves[0] ?? args.primaryThread.pressure;
-  if (carryover) {
-    return `尾钩需要承接：${carryover}；并把下一章压力落到：${move}`;
+  const carryoverCandidates = [
+    ...args.unresolvedDelayedConsequences,
+    ...args.recentConsequences,
+  ].filter(Boolean);
+  const moveCandidates = [
+    ...args.primaryThread.nextUsefulMoves,
+    args.primaryThread.pressure,
+  ].filter((value): value is string => Boolean(value && value.trim()));
+
+  const previousTokens = tokenizeHookForCompare(args.previousEndHook ?? "");
+  const formats = (carryover: string | undefined, move: string) =>
+    carryover
+      ? `尾钩需要承接：${carryover}；并把下一章压力落到：${move}`
+      : `尾钩必须把下一章压力落到：${move}`;
+
+  // Build candidate hooks: prefer carryover-prefixed forms (richer signal) first,
+  // and only fall back to the bare-move form if every carryover overlaps the previous hook.
+  const candidates: string[] = [];
+  for (const carryover of carryoverCandidates) {
+    for (const move of moveCandidates) {
+      candidates.push(formats(carryover, move));
+    }
   }
-  return `尾钩必须把下一章压力落到：${move}`;
+  for (const move of moveCandidates) {
+    candidates.push(formats(undefined, move));
+  }
+  if (candidates.length === 0) {
+    return formats(undefined, args.primaryThread.pressure);
+  }
+  if (previousTokens.size === 0) {
+    return candidates[0]!;
+  }
+  // Pick the candidate with lowest token overlap against the previous chapter's hook.
+  let best = candidates[0]!;
+  let bestOverlap = jaccardOverlap(tokenizeHookForCompare(best), previousTokens);
+  for (let i = 1; i < candidates.length; i += 1) {
+    const overlap = jaccardOverlap(tokenizeHookForCompare(candidates[i]!), previousTokens);
+    if (overlap < bestOverlap) {
+      best = candidates[i]!;
+      bestOverlap = overlap;
+      if (bestOverlap === 0) {
+        break;
+      }
+    }
+  }
+  return best;
 }
 
 function buildReaderPayoff(args: {
@@ -427,6 +504,7 @@ export function buildEpisodePacketFromRuntime(args: {
       primaryThread: primary.thread,
       unresolvedDelayedConsequences: args.unresolvedDelayedConsequences,
       recentConsequences: args.recentConsequences,
+      previousEndHook: previous?.endHook,
     }),
     stateDeltasExpected: buildExpectedStateDeltas({
       primary,

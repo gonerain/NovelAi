@@ -87,6 +87,26 @@ test("passive observation fails agency eval", () => {
   assert.ok(report.failureReasons.includes("Packet contains passive observation/receiving-info language."));
 });
 
+test("quoted arc-goal pressure with passive verb does not trigger passive false positive", () => {
+  // The episode packet quotes the primary thread's pressure inside 「…」 brackets.
+  // If the arc goal happens to mention "旁观" while *describing* the protagonist's
+  // transition AWAY from passivity, that text must not flip the passive check.
+  const report = evaluateEpisodeAgency({
+    packet: makePacket({
+      nonTransferableChoice:
+        "林见月必须亲自回应「推动林见月从旁观预知者变成第一次改判命运的执笔人」。 代价必须触及：每一次救援变成所有权与道德腐败。",
+      protagonistConsequence: "林见月的选择必须导致「林见月会为了目标付出什么代价？」出现新的可见局面。",
+    }),
+    agencyOwner: hero,
+  });
+
+  assert.equal(
+    report.checks.find((check) => check.id === "not_passive_observer")?.passed,
+    true,
+    "passive check should ignore content inside 「…」 quotes",
+  );
+});
+
 test("recent-consequence carryover does not trigger passive false positive", () => {
   // Reproduces the chapter-4 false positive: the prior chapter summary embedded inside
   // nonTransferableChoice contains backstory verbs (e.g. "得知") that previously

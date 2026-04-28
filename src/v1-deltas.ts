@@ -36,8 +36,18 @@ function confidence(value: number): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(2))));
 }
 
+const MIN_DELTA_EVIDENCE_LENGTH = 8;
+
 function snippet(value: string | null | undefined, fallback: string): string {
-  return value?.trim() || fallback;
+  const primary = value?.trim();
+  if (primary && primary.length >= MIN_DELTA_EVIDENCE_LENGTH) {
+    return primary;
+  }
+  const fallbackTrim = fallback?.trim() ?? "";
+  if (fallbackTrim.length >= MIN_DELTA_EVIDENCE_LENGTH) {
+    return primary ? `${primary} ｜ ${fallbackTrim}` : fallbackTrim;
+  }
+  return primary ?? fallback;
 }
 
 function impactsFromContracts(contractIds: string[], note: string): StateDeltaContractImpact[] {

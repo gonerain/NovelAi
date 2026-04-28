@@ -36,6 +36,17 @@ function hasSubstantialText(text: string | undefined): boolean {
   return Boolean(text && text.trim().length >= 8);
 }
 
+function stripQuotedContext(text: string): string {
+  // The episode packet builder quotes the primary thread's pressure / readerQuestion
+  // inside Chinese 「…」 brackets ("夜烬必须亲自回应「…」"). That quoted segment is
+  // descriptive context, not the protagonist's own decision, so it must not feed
+  // the passive-language scan. Same logic for English "..." double quotes.
+  return text
+    .replace(/「[^」]*」/g, "")
+    .replace(/“[^”]*”/g, "")
+    .replace(/"[^"]*"/g, "");
+}
+
 function stripRecentConsequenceContext(text: string): string {
   // The episode packet builder embeds the prior chapter's recent-consequence summary as
   //   "...不能绕开上一轮后果：<recent>。 代价必须触及：..."
@@ -45,7 +56,8 @@ function stripRecentConsequenceContext(text: string): string {
 }
 
 function isPassiveText(text: string): boolean {
-  const normalized = normalizeText(stripRecentConsequenceContext(text));
+  const cleaned = stripQuotedContext(stripRecentConsequenceContext(text));
+  const normalized = normalizeText(cleaned);
   return includesAny(normalized, [
     "观察",
     "旁观",

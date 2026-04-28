@@ -195,6 +195,7 @@ export function findDecisionEvidenceSnippets(args: {
   likelyChoice?: string;
   immediateConsequence?: string;
 }): string[] {
+  const MIN_EVIDENCE_LENGTH = 16;
   const sentences = args.draft
     .split(/[\r\n]+|(?<=[。！？!?])/)
     .map((item) => item.trim())
@@ -208,14 +209,39 @@ export function findDecisionEvidenceSnippets(args: {
     .filter((item) => item.length >= 2);
 
   const scored = sentences
-    .map((sentence) => ({
+    .map((sentence, index) => ({
       sentence,
+      index,
       score: tokens.filter((token) => sentence.includes(token)).length,
     }))
     .filter((item) => item.score > 0)
-    .sort((left, right) => right.score - left.score || left.sentence.length - right.sentence.length)
+    .sort(
+      (left, right) =>
+        right.score - left.score ||
+        // Prefer snippets that already meet min length over very short sentences.
+        Number(right.sentence.length >= MIN_EVIDENCE_LENGTH) -
+          Number(left.sentence.length >= MIN_EVIDENCE_LENGTH) ||
+        left.sentence.length - right.sentence.length,
+    )
     .slice(0, 3)
-    .map((item) => item.sentence);
+    .map((item) => {
+      // If the chosen snippet is too terse for downstream eval (>= 8 chars),
+      // splice in adjacent sentences from the draft so the evidence is anchorable.
+      if (item.sentence.length >= MIN_EVIDENCE_LENGTH) {
+        return item.sentence;
+      }
+      const expanded: string[] = [item.sentence];
+      const before = sentences[item.index - 1];
+      const after = sentences[item.index + 1];
+      if (before) {
+        expanded.unshift(before);
+      }
+      if (after) {
+        expanded.push(after);
+      }
+      const merged = expanded.join("");
+      return merged.length >= MIN_EVIDENCE_LENGTH ? merged : item.sentence;
+    });
 
   return uniqueStrings(scored, 3);
 }
