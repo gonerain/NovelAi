@@ -252,6 +252,9 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         `Relevant ledger entries:\n${formatRelevantLedgers(input)}`,
         `Relevant chapter cards:\n${formatRelevantChapterCards(input)}`,
         `Relevant world facts:\n${formatRelevantWorldFacts(input)}`,
+        // Re-stated at the tail because earlier system-prompt length directives lose
+        // weight as retrieval/memory context grows over later chapters.
+        `Length contract (HARD): produce 3000–4500 Chinese characters. If you finish below 2500 characters, expand sensory detail, beat texture, dialogue, and reaction shots before stopping. Do NOT pad with summary or restate prior chapters; expand the current scene.`,
       ]
         .filter(Boolean)
         .join("\n\n"),

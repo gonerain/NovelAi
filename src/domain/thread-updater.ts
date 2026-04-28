@@ -105,6 +105,36 @@ function addDelta(left: ThreadSchedulerDelta, right: ThreadSchedulerDelta): Thre
   };
 }
 
+// Per-chapter aggregate caps. Without these, multiple deltas on the same thread
+// stack to saturation in 2-3 chapters (every thread hitting payoffReadiness=100,
+// readerDebt=0, etc.), which collapses the scheduler's discrimination power.
+const PER_CHAPTER_CAP_POS = 30;
+const PER_CHAPTER_CAP_NEG = -30;
+
+function clampField(value: number, posCap = PER_CHAPTER_CAP_POS, negCap = PER_CHAPTER_CAP_NEG): number {
+  if (value > posCap) {
+    return posCap;
+  }
+  if (value < negCap) {
+    return negCap;
+  }
+  return value;
+}
+
+function capAggregate(delta: ThreadSchedulerDelta): ThreadSchedulerDelta {
+  return {
+    urgency: clampField(delta.urgency),
+    heat: clampField(delta.heat),
+    staleness: clampField(delta.staleness),
+    payoffReadiness: clampField(delta.payoffReadiness),
+    // Set/reader debt can move further per chapter (e.g. a major payoff legitimately wipes debt).
+    setupDebt: clampField(delta.setupDebt, 25, -40),
+    readerDebt: clampField(delta.readerDebt, 25, -50),
+    agencyPotential: clampField(delta.agencyPotential, 20, -20),
+    offscreenPressure: clampField(delta.offscreenPressure, 40, -25),
+  };
+}
+
 function applySchedulerDelta(
   state: ThreadSchedulerState,
   delta: ThreadSchedulerDelta,
@@ -413,7 +443,8 @@ export function applyDeltasToThreads(args: {
 
     appliedDeltaCount += applied.length;
 
-    let nextScheduler = applySchedulerDelta(thread.scheduler, aggregate);
+    const cappedAggregate = capAggregate(aggregate);
+    let nextScheduler = applySchedulerDelta(thread.scheduler, cappedAggregate);
     if (args.chapterNumber > thread.lastTouchedChapter) {
       nextScheduler = { ...nextScheduler, staleness: 0 };
     }
@@ -441,7 +472,7 @@ export function applyDeltasToThreads(args: {
         scheduler: snapshotScheduler(nextScheduler),
         lastTouchedChapter,
       },
-      schedulerDelta: aggregate,
+      schedulerDelta: cappedAggregate,
       appliedDeltas: applied,
       statusChangeReasons: status.reasons,
       matchReasons: Array.from(matchReasons),

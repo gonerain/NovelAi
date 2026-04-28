@@ -189,6 +189,7 @@ async function generateWriterLikeResult(args: {
 async function generateStructuredTaskWithRetry<TSchema extends object>(args: {
   service: LlmService;
   task:
+    | "planner"
     | "review_missing_resource"
     | "review_fact"
     | "review_commercial"
@@ -201,7 +202,7 @@ async function generateStructuredTaskWithRetry<TSchema extends object>(args: {
 }): Promise<{ object: TSchema }> {
   let lastError: unknown;
 
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
       const result = await args.service.generateObjectForTask({
         task: args.task,
@@ -218,7 +219,7 @@ async function generateStructuredTaskWithRetry<TSchema extends object>(args: {
         message.includes("truncated before valid JSON completed") ||
         message.includes("Invalid structured JSON output") ||
         message.includes("Unterminated string in JSON");
-      if (!retryable || attempt >= 1) {
+      if (!retryable || attempt >= 2) {
         throw error;
       }
       console.warn(`[llm] task=${args.task} structured parse failure, retrying once: ${message}`);

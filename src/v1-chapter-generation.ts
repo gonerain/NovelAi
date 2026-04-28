@@ -63,6 +63,7 @@ import type { DecisionLogArtifact } from "./v1-role-drive.js";
 type GenerateStructuredTaskWithRetry = <TSchema extends object>(args: {
   service: LlmService;
   task:
+    | "planner"
     | "review_missing_resource"
     | "review_fact"
     | "review_commercial"
@@ -298,12 +299,13 @@ export async function generateChapterArtifact(args: {
     label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_planner`,
     messages: plannerMessages,
   });
-  const plannerResult = await args.service.generateObjectForTask({
+  const plannerResult = await args.generateStructuredTaskWithRetry({
+    service: args.service,
     task: "planner",
     messages: plannerMessages,
     schema: plannerResultSchema,
     temperature: 0.2,
-    maxTokens: 2200,
+    maxTokens: 2800,
   });
 
   const planned = plannerResult.object.chapterPlan;
@@ -609,6 +611,53 @@ export async function generateChapterArtifact(args: {
     });
     rewrittenDraft = rewrittenOutput.draft;
     rewrittenTitle = rewrittenOutput.title ?? rewrittenTitle;
+  }
+
+  // Length floor: if the draft is still well below the target after the standard
+  // rewrite pass, run a focused expansion pass. Web-novel chapters under 2500
+  // Chinese chars feel undercooked; later chapters tend to shrink as retrieval
+  // context grows, so we enforce a hard floor here.
+  const cnCharCount = (text: string) => (text.match(/[一-鿿]/gu) ?? []).length;
+  const LENGTH_FLOOR = 2500;
+  if (cnCharCount(rewrittenDraft) < LENGTH_FLOOR) {
+    args.logStage(
+      "chapter",
+      `llm: rewriter chapter=${args.chapterNumber} mode=length_expand pass=1 cn_chars=${cnCharCount(rewrittenDraft)}`,
+    );
+    const expandMessages = buildRewriterMessages({
+      title: rewrittenTitle,
+      draft: rewrittenDraft,
+      mode: "quality_boost",
+      objective: `Expand the existing draft to 3000-4500 Chinese characters by deepening sensory detail, dialogue beats, internal-state shifts, and reaction shots within the SAME scene structure. Do NOT add new plot turns. Do NOT contradict any prior chapter. Do NOT pad with summary or recap. Current draft length is below 2500 Chinese characters; the next pass must close that gap.`,
+      missingResourceReview: activeMissing,
+      factConsistencyReview: activeFact,
+      commercialReview: activeCommercial,
+      roleDrivenReview: activeRoleDriven,
+    });
+    await args.writePromptDebug({
+      projectId: args.projectId,
+      scope: "chapter",
+      label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_rewriter_length_expand`,
+      messages: expandMessages,
+    });
+    const expandedOutput = await args.generateWriterLikeResult({
+      service: args.service,
+      task: "rewriter",
+      messages: expandMessages,
+      temperature: 0.55,
+      maxTokens: 5000,
+      fallbackTitle: rewrittenTitle,
+    });
+    // Only accept the expansion if it actually grew the draft.
+    if (cnCharCount(expandedOutput.draft) > cnCharCount(rewrittenDraft)) {
+      rewrittenDraft = expandedOutput.draft;
+      rewrittenTitle = expandedOutput.title ?? rewrittenTitle;
+    } else {
+      args.logStage(
+        "chapter",
+        `WARN: length_expand pass did not grow draft chapter=${args.chapterNumber} (kept original)`,
+      );
+    }
   }
 
   args.logStage("chapter", `llm: review_missing_resource_final chapter=${args.chapterNumber} pass=1`);

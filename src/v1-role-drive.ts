@@ -272,28 +272,70 @@ function combineFromBeatAndPacket(
 function deriveRelationshipShift(args: {
   beatOutline?: BeatOutline;
   episodePacket?: EpisodePacket;
+  recentConsequences?: string[];
 }): string | null {
   const beatShift = args.beatOutline?.relationshipShift?.trim();
   if (!args.episodePacket) {
     return beatShift ?? null;
   }
+
+  const segments: string[] = [];
+  if (beatShift) {
+    segments.push(beatShift);
+  }
+
   if (args.episodePacket.payoffType === "relationship_shift") {
     const supportingRelationship = args.episodePacket.activeThreadsUsed.find(
       (item) => item.threadId.includes("relationship"),
     );
     if (supportingRelationship) {
-      const detail = `${args.episodePacket.payoffType} 推动关系状态变化（线程 ${supportingRelationship.threadId}）`;
-      return beatShift ? `${beatShift} ｜ ${detail}` : detail;
+      segments.push(
+        `${args.episodePacket.payoffType} 推动关系状态变化（线程 ${supportingRelationship.threadId}）`,
+      );
     }
   }
+
   const relationshipDelta = args.episodePacket.stateDeltasExpected.find(
     (delta) => delta.targetType === "relationship",
   );
-  if (relationshipDelta) {
-    const detail = relationshipDelta.description;
-    return beatShift ? `${beatShift} ｜ ${detail}` : detail;
+  if (relationshipDelta && !segments.some((segment) => segment.includes(relationshipDelta.description))) {
+    segments.push(relationshipDelta.description);
   }
-  return beatShift ?? null;
+
+  // Always emit a chapter-specific suffix so role-drive sidecars diverge across a
+  // multi-chapter beat even when the beat default repeats.
+  // Priority order, most narrative-grounded first:
+  //  1. recentConsequences[0] — the actual prior-chapter outcome (varies per chapter)
+  //  2. supporting relationship thread's readerQuestion — thread-specific text
+  //  3. protagonistConsequence — templated, last resort because it tends to repeat
+  //  4. mode/payoff stamp — bare differentiator if nothing else exists
+  const chapterStamp = `ch${args.episodePacket.chapterNumber}`;
+  const recentConsequence = args.recentConsequences?.[0]?.trim();
+  const relationshipThread = args.episodePacket.activeThreadsUsed.find(
+    (item) => item.threadId.includes("relationship"),
+  );
+  const protagonistConsequence = args.episodePacket.protagonistConsequence?.trim();
+
+  if (
+    recentConsequence &&
+    !segments.some((segment) => segment.includes(recentConsequence.slice(0, 32)))
+  ) {
+    segments.push(`${chapterStamp} 承接上一章：${recentConsequence.slice(0, 140)}`);
+  } else if (
+    relationshipThread &&
+    !segments.some((segment) => segment.includes(relationshipThread.threadId))
+  ) {
+    segments.push(`${chapterStamp} 关系线 ${relationshipThread.threadId}（${args.episodePacket.payoffType}）`);
+  } else if (
+    protagonistConsequence &&
+    !segments.some((segment) => segment.includes(protagonistConsequence))
+  ) {
+    segments.push(`${chapterStamp} 主角后果：${protagonistConsequence.slice(0, 120)}`);
+  } else {
+    segments.push(`${chapterStamp} 推进于 ${args.episodePacket.chapterMode}/${args.episodePacket.payoffType}`);
+  }
+
+  return segments.length > 0 ? segments.join(" ｜ ") : null;
 }
 
 export function buildDecisionLogArtifact(args: {
@@ -349,6 +391,7 @@ export function buildDecisionLogArtifact(args: {
   const relationshipShift = deriveRelationshipShift({
     beatOutline: args.beatOutline,
     episodePacket: args.episodePacket,
+    recentConsequences: args.recentConsequences,
   });
 
   const owners: DecisionLogOwnerRecord[] = ownerIds

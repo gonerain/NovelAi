@@ -247,6 +247,58 @@ test("seeded thread receiving its first delta becomes active", () => {
   assert.equal(result.threads[0].currentStatus, "active");
 });
 
+test("aggregate per-chapter delta is capped to prevent saturation", () => {
+  const thread = makeThread({
+    relatedContracts: [baseContract.id],
+    scheduler: {
+      urgency: 50,
+      heat: 50,
+      staleness: 0,
+      payoffReadiness: 30,
+      setupDebt: 30,
+      readerDebt: 60,
+      agencyPotential: 60,
+      offscreenPressure: 20,
+    },
+  });
+  // 6 reader-visible major deltas all touching the same thread, plus a fulfills impact
+  // — uncapped, this would add +120 to payoffReadiness and -210 to readerDebt.
+  const deltas: StateDelta[] = Array.from({ length: 6 }, (_, i) =>
+    makeDelta({
+      id: `delta-flood-${i + 1}`,
+      causalWeight: "major",
+      visibility: "reader_visible",
+      contractImpact:
+        i === 0
+          ? [
+              {
+                contractId: baseContract.id,
+                impact: "fulfills",
+                note: "explicit payoff",
+              },
+            ]
+          : [],
+    }),
+  );
+  const result = applyDeltasToThreads({
+    threads: [thread],
+    deltas,
+    contracts: [baseContract],
+    chapterNumber: 5,
+  });
+  const updated = result.threads[0];
+  // Per-chapter cap is +30 for payoffReadiness, so payoffReadiness <= 60 after one pass.
+  assert.ok(
+    updated.scheduler.payoffReadiness - thread.scheduler.payoffReadiness <= 30,
+    `payoffReadiness rose by ${updated.scheduler.payoffReadiness - thread.scheduler.payoffReadiness}, expected <= 30`,
+  );
+  // readerDebt cap is -50.
+  assert.ok(
+    thread.scheduler.readerDebt - updated.scheduler.readerDebt <= 50,
+    `readerDebt dropped by ${thread.scheduler.readerDebt - updated.scheduler.readerDebt}, expected <= 50`,
+  );
+});
+
 test("character-target delta matches threads sharing owner ids", () => {
   const thread = makeThread({ ownerCharacterIds: ["protagonist"] });
   const result = applyDeltasToThreads({

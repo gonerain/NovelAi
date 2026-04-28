@@ -59,10 +59,11 @@ test("age beyond expectedSpanChapters flags thread_overstretched", () => {
   assert.ok(report.entries[0].warnings.includes("thread_overstretched"));
 });
 
-test("high payoff readiness before window start flags payoff_too_early", () => {
+test("high payoff readiness before window start flags payoff_too_early on slow_burn", () => {
   const thread = makeThread({
     introducedChapter: 1,
     expectedSpanChapters: 50,
+    cadenceTarget: "slow_burn",
     scheduler: {
       urgency: 70,
       heat: 70,
@@ -76,6 +77,74 @@ test("high payoff readiness before window start flags payoff_too_early", () => {
   });
   const report = computeThreadEconomyReport({ threads: [thread], chapterNumber: 5 });
   assert.ok(report.entries[0].warnings.includes("payoff_too_early"));
+});
+
+test("frequent cadence threads are exempt from payoff_too_early", () => {
+  // Web-fiction reality: a 500-chapter "frequent" or "every_chapter" thread is
+  // designed to produce micro-payoffs almost every chapter. Hitting
+  // payoffReadiness=100 at chapter 3 isn't a bug; it's the genre.
+  const frequent = makeThread({
+    id: "thread-frequent",
+    introducedChapter: 1,
+    expectedSpanChapters: 500,
+    cadenceTarget: "frequent",
+    scheduler: {
+      urgency: 95,
+      heat: 95,
+      staleness: 0,
+      payoffReadiness: 100,
+      setupDebt: 0,
+      readerDebt: 0,
+      agencyPotential: 95,
+      offscreenPressure: 30,
+    },
+  });
+  const everyChapter = makeThread({
+    id: "thread-every-chapter",
+    introducedChapter: 1,
+    expectedSpanChapters: 500,
+    cadenceTarget: "every_chapter",
+    scheduler: { ...frequent.scheduler },
+  });
+  const report = computeThreadEconomyReport({
+    threads: [frequent, everyChapter],
+    chapterNumber: 3,
+  });
+  for (const entry of report.entries) {
+    assert.ok(
+      !entry.warnings.includes("payoff_too_early"),
+      `${entry.threadId} should be exempt from payoff_too_early on cadence=${entry.threadType}`,
+    );
+  }
+});
+
+test("periodic cadence uses tighter threshold for payoff_too_early", () => {
+  // payoffReadiness=80 below the 90 threshold for periodic should NOT trigger.
+  const safe = makeThread({
+    introducedChapter: 1,
+    expectedSpanChapters: 50,
+    cadenceTarget: "periodic",
+    scheduler: {
+      urgency: 70,
+      heat: 70,
+      staleness: 0,
+      payoffReadiness: 80,
+      setupDebt: 30,
+      readerDebt: 30,
+      agencyPotential: 70,
+      offscreenPressure: 20,
+    },
+  });
+  const safeReport = computeThreadEconomyReport({ threads: [safe], chapterNumber: 5 });
+  assert.ok(!safeReport.entries[0].warnings.includes("payoff_too_early"));
+
+  // payoffReadiness=95 above the 90 threshold should trigger.
+  const noisy = makeThread({
+    ...safe,
+    scheduler: { ...safe.scheduler, payoffReadiness: 95 },
+  });
+  const noisyReport = computeThreadEconomyReport({ threads: [noisy], chapterNumber: 5 });
+  assert.ok(noisyReport.entries[0].warnings.includes("payoff_too_early"));
 });
 
 test("past payoff window with high readerDebt flags payoff_overdue (error)", () => {

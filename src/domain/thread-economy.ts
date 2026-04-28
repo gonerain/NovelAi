@@ -105,10 +105,19 @@ function buildEntry(args: {
     });
   }
 
+  // Web-fiction reality: long-running serials with cadence "frequent" or
+  // "every_chapter" are *designed* to produce micro-payoffs constantly. Flagging
+  // payoff_too_early on those is noise — slow burn is the exception, not the rule.
+  // For periodic threads we tighten the threshold; for slow_burn we keep the
+  // standard rule because hitting payoffReadiness=100 there really is too early.
+  const cadenceExempt =
+    thread.cadenceTarget === "frequent" || thread.cadenceTarget === "every_chapter";
+  const cadenceThreshold = thread.cadenceTarget === "periodic" ? 90 : PAYOFF_READY_FLAG;
   if (
+    !cadenceExempt &&
     thread.currentStatus !== "resolved" &&
     thread.currentStatus !== "retired" &&
-    thread.scheduler.payoffReadiness >= PAYOFF_READY_FLAG &&
+    thread.scheduler.payoffReadiness >= cadenceThreshold &&
     chapterNumber < window.start
   ) {
     warnings.push("payoff_too_early");
@@ -116,7 +125,7 @@ function buildEntry(args: {
       threadId: thread.id,
       code: "payoff_too_early",
       severity: "warning",
-      message: `Payoff readiness ${thread.scheduler.payoffReadiness} signals payoff before window start ${window.start}.`,
+      message: `Payoff readiness ${thread.scheduler.payoffReadiness} signals payoff before window start ${window.start} (cadence=${thread.cadenceTarget}).`,
     });
   }
 
