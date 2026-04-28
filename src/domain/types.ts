@@ -69,6 +69,113 @@ export type GenrePayoffPackId =
   | "female_relationship_v1"
   | "suspense_v1";
 
+export type StoryContractType =
+  | "story_truth"
+  | "reader_promise"
+  | "genre_contract"
+  | "character_arc"
+  | "ending_obligation"
+  | "forbidden_move";
+
+export type NarrativeThreadType =
+  | "plot_threat"
+  | "mystery"
+  | "relationship"
+  | "character_wound"
+  | "resource"
+  | "world_rule"
+  | "promise"
+  | "rival_pressure"
+  | "theme_argument";
+
+export type NarrativeThreadStatus =
+  | "seeded"
+  | "active"
+  | "intensifying"
+  | "paused"
+  | "ready_for_payoff"
+  | "resolved"
+  | "retired";
+
+export type ChapterMode =
+  | "seed"
+  | "pressure"
+  | "investigate"
+  | "confront"
+  | "payoff"
+  | "aftermath"
+  | "braid";
+
+export type EpisodePayoffType =
+  | "information_reveal"
+  | "power_growth"
+  | "status_gain"
+  | "relationship_shift"
+  | "villain_setback"
+  | "emotional_impact"
+  | "resource_gain"
+  | "strategic_reversal";
+
+export type StateDeltaVisibility = "reader_visible" | "character_visible" | "offscreen";
+
+export type StateDeltaTargetType =
+  | "character"
+  | "relationship"
+  | "thread"
+  | "contract"
+  | "world"
+  | "resource"
+  | "knowledge";
+
+export type StateDeltaType =
+  | "character_state"
+  | "relationship_shift"
+  | "thread_progress"
+  | "contract_progress"
+  | "world_fact"
+  | "resource_change"
+  | "knowledge_change"
+  | "memory_change";
+
+export type OffscreenActorType =
+  | "antagonist"
+  | "rival"
+  | "institution"
+  | "ally_with_agenda"
+  | "social_pressure"
+  | "systemic_force";
+
+export type OffscreenMoveType =
+  | "advance_plan"
+  | "cover_tracks"
+  | "pressure_ally"
+  | "exploit_resource"
+  | "create_deadline"
+  | "mislead"
+  | "escalate_cost";
+
+export type OffscreenMoveVisibility = "hidden" | "hinted" | "revealed";
+
+export type OffscreenMoveStatus = "pending" | "applied" | "revealed" | "skipped";
+
+export interface OffscreenMove {
+  id: EntityId;
+  actorId: EntityId;
+  actorName: string;
+  actorType: OffscreenActorType;
+  targetThreadId: EntityId;
+  moveType: OffscreenMoveType;
+  description: string;
+  scheduledChapter: number;
+  visibility: OffscreenMoveVisibility;
+  expectedRevealWindow: number;
+  pressureAdded: number;
+  counterplayOpportunity: string;
+  status: OffscreenMoveStatus;
+  appliedAtChapter?: number;
+  revealedAtChapter?: number;
+}
+
 export interface ThemeBible {
   coreTheme: string;
   subThemes: string[];
@@ -195,6 +302,121 @@ export interface StoryMemory {
   priority: Priority;
   visibility: "public" | "private" | "hidden";
   notes: string[];
+}
+
+export interface StoryContract {
+  id: EntityId;
+  contractType: StoryContractType;
+  statement: string;
+  readerVisible: boolean;
+  createdAtChapter: number;
+  dueByChapter?: number;
+  priority: Priority;
+  evidence: string[];
+  forbiddenMoves: string[];
+  payoffSignals: string[];
+  status: "active" | "fulfilled" | "broken" | "retired";
+}
+
+export interface ThreadSchedulerState {
+  urgency: number;
+  heat: number;
+  staleness: number;
+  payoffReadiness: number;
+  setupDebt: number;
+  readerDebt: number;
+  agencyPotential: number;
+  offscreenPressure: number;
+  lastScore?: number;
+  lastScoreReasons?: string[];
+}
+
+export interface NarrativeThread {
+  id: EntityId;
+  threadType: NarrativeThreadType;
+  title: string;
+  ownerCharacterIds: EntityId[];
+  introducedChapter: number;
+  currentStatus: NarrativeThreadStatus;
+  readerQuestion: string;
+  pressure: string;
+  stakes: string;
+  nextUsefulMoves: string[];
+  blockedBy: string[];
+  payoffConditions: string[];
+  payoffTypeOptions: EpisodePayoffType[];
+  lastTouchedChapter: number;
+  cadenceTarget: "every_chapter" | "frequent" | "periodic" | "slow_burn" | "only_when_hot";
+  expectedSpanChapters: number;
+  minTouchInterval: number;
+  maxDormantChapters: number;
+  allowedModes: ChapterMode[];
+  relatedContracts: EntityId[];
+  scheduler: ThreadSchedulerState;
+}
+
+export interface EpisodeThreadUse {
+  threadId: EntityId;
+  role: "primary" | "supporting";
+  score: number;
+  reasons: string[];
+  warnings: string[];
+}
+
+export interface ExpectedStateDelta {
+  targetType: StateDeltaTargetType;
+  targetId?: EntityId;
+  description: string;
+  causalWeight: "minor" | "major" | "irreversible";
+  visibility: StateDeltaVisibility;
+}
+
+export interface StateDeltaContractImpact {
+  contractId: EntityId;
+  impact: "supports" | "risks" | "violates" | "fulfills";
+  note: string;
+}
+
+export interface StateDelta {
+  id: EntityId;
+  chapterNumber: number;
+  deltaType: StateDeltaType;
+  targetType: StateDeltaTargetType;
+  targetId?: EntityId;
+  before: string;
+  after: string;
+  causalWeight: "minor" | "major" | "irreversible";
+  visibility: StateDeltaVisibility;
+  evidenceSnippet: string;
+  confidence: number;
+  contractImpact: StateDeltaContractImpact[];
+  source: "episode_packet" | "memory_update" | "decision_log" | "relationship_shift" | "consequence_edge";
+}
+
+export interface EpisodePacket {
+  id: EntityId;
+  projectId: EntityId;
+  chapterNumber: number;
+  generatedAt: string;
+  chapterMode: ChapterMode;
+  payoffType: EpisodePayoffType;
+  primaryThreadId: EntityId;
+  activeThreadsUsed: EpisodeThreadUse[];
+  primaryChoiceOwner: EntityId;
+  agencyOwnerId: EntityId;
+  nonTransferableChoice: string;
+  tolerableOptions: string[];
+  choiceCost: string;
+  protagonistConsequence: string;
+  readerPayoff: string;
+  endHook: string;
+  stateDeltasExpected: ExpectedStateDelta[];
+  doNotResolve: string[];
+  contractIds: EntityId[];
+  schedulerWarnings: string[];
+  recentConsequences: string[];
+  unresolvedDelayedConsequences: string[];
+  recentCommercialHistory: string[];
 }
 
 export interface PlannerSearchIntent {
@@ -372,6 +594,8 @@ export interface StoryProject {
   characters: CharacterState[];
   worldFacts: WorldFact[];
   memories: StoryMemory[];
+  storyContracts?: StoryContract[];
+  narrativeThreads?: NarrativeThread[];
   chapterPlans: ChapterPlan[];
 }
 

@@ -13,9 +13,12 @@ import type {
   StoryOutline,
   StoryProject,
   StorySetup,
+  StoryContract,
   StoryMemory,
   StyleBible,
   ThemeBible,
+  NarrativeThread,
+  OffscreenMove,
   WorldFact,
 } from "../domain/index.js";
 import type { ProjectRepository } from "./project-repository.js";
@@ -161,6 +164,30 @@ export class FileProjectRepository implements ProjectRepository {
     );
   }
 
+  async saveStoryContracts(projectId: string, contracts: StoryContract[]): Promise<void> {
+    await this.writeProjectFile(projectId, "story-contracts.json", contracts);
+  }
+
+  async loadStoryContracts(projectId: string): Promise<StoryContract[]> {
+    return (await this.readProjectFile<StoryContract[]>(projectId, "story-contracts.json")) ?? [];
+  }
+
+  async saveNarrativeThreads(projectId: string, threads: NarrativeThread[]): Promise<void> {
+    await this.writeProjectFile(projectId, "narrative-threads.json", threads);
+  }
+
+  async loadNarrativeThreads(projectId: string): Promise<NarrativeThread[]> {
+    return (await this.readProjectFile<NarrativeThread[]>(projectId, "narrative-threads.json")) ?? [];
+  }
+
+  async saveOffscreenMoves(projectId: string, moves: OffscreenMove[]): Promise<void> {
+    await this.writeProjectFile(projectId, "offscreen-moves.json", moves);
+  }
+
+  async loadOffscreenMoves(projectId: string): Promise<OffscreenMove[]> {
+    return (await this.readProjectFile<OffscreenMove[]>(projectId, "offscreen-moves.json")) ?? [];
+  }
+
   async saveChapterPlans(projectId: string, chapterPlans: ChapterPlan[]): Promise<void> {
     await this.writeProjectFile(projectId, "chapter-plans.json", chapterPlans);
   }
@@ -244,6 +271,8 @@ export class FileProjectRepository implements ProjectRepository {
       characters,
       worldFacts,
       memories,
+      storyContracts,
+      narrativeThreads,
       chapterPlans,
     ] = await Promise.all([
       this.loadAuthorProfile(projectId),
@@ -257,6 +286,8 @@ export class FileProjectRepository implements ProjectRepository {
       this.loadCharacterStates(projectId),
       this.loadWorldFacts(projectId),
       this.loadStoryMemories(projectId),
+      this.loadStoryContracts(projectId),
+      this.loadNarrativeThreads(projectId),
       this.loadChapterPlans(projectId),
     ]);
 
@@ -281,6 +312,8 @@ export class FileProjectRepository implements ProjectRepository {
       characters,
       worldFacts,
       memories,
+      storyContracts,
+      narrativeThreads,
       chapterPlans,
     };
   }

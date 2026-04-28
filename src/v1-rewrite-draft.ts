@@ -300,7 +300,7 @@ export async function rewriteChapterDraft(args: {
     task: "rewriter",
     messages: rewriterMessages,
     temperature: draftRewritePlan.mode === "repair_first" ? 0.35 : 0.5,
-    maxTokens: 3200,
+    maxTokens: 4500,
     fallbackTitle: existingArtifact.writerResult.title,
   });
 

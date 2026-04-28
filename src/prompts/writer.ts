@@ -117,6 +117,7 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
   const genreAvoidPatterns = contextPack.readerValue?.genreAvoidPatterns.slice(0, 2) ?? [];
   const commercialSignals = contextPack.commercialSignals;
   const paragraphRhythm = commercialSignals?.paragraphRhythm ?? "balanced";
+  const episode = contextPack.episodePacket;
 
   return [
     {
@@ -147,6 +148,21 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
           : undefined,
         "Each chapter must contain at least one external event that changes investigation status, relationship state, or risk level.",
         `Current chapterType=${chapterType}. Type intent: setup=seed hooks/world context; progress=advance investigation/relationships; payoff=deliver concrete turn/revelation with cost; aftermath=land consequences and set next target.`,
+        episode
+          ? `Episode runtime control: chapterMode=${episode.chapterMode}; payoffType=${episode.payoffType}; primaryThread=${episode.primaryThreadId}.`
+          : undefined,
+        episode
+          ? `Agency gate: ${episode.agencyOwnerId} must make this non-transferable choice on-page: ${episode.nonTransferableChoice}`
+          : undefined,
+        episode
+          ? `Choice options: ${episode.tolerableOptions.join(" | ")}. Explicit cost: ${episode.choiceCost}. Consequence: ${episode.protagonistConsequence}.`
+          : undefined,
+        episode
+          ? `Reader payoff: ${episode.readerPayoff}. End hook target: ${episode.endHook}.`
+          : undefined,
+        episode?.doNotResolve.length
+          ? `Do not resolve in this chapter: ${episode.doNotResolve.join(" | ")}`
+          : undefined,
         "Do not force a big climax in every chapter; follow chapterType pacing.",
         commercialSignals?.coreSellPoint
           ? `Commercial priority: surface this chapter's core sell point clearly on-page: ${commercialSignals.coreSellPoint}`
@@ -195,7 +211,8 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         "Prefer short to medium sentences, clean Chinese punctuation, and sharp paragraph rhythm.",
         "Do not narrate like a plan document.",
         "Soft format preference: output chapter正文 first, then optionally append [[META]] JSON [[/META]] with fields like title and notes.",
-        `Keep the draft between ${input.minParagraphs ?? 5} and ${input.maxParagraphs ?? 8} paragraphs.`,
+        `Keep the draft between ${input.minParagraphs ?? 8} and ${input.maxParagraphs ?? 14} paragraphs.`,
+        `Target draft length: 3000–4500 中文字符 (Chinese characters). Web-novel chapters under 2500 characters feel undercooked; expand sensory detail, dialogue, and beat texture before stopping.`,
       ]
         .filter(Boolean)
         .join("\n"),
@@ -216,6 +233,9 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         `Scene type: ${contextPack.chapterObjective.sceneType}`,
         `Scene tags: ${sceneTags.join(" | ")}`,
         `Commercial signals: ${formatCommercialSignals(input)}`,
+        episode
+          ? `Episode packet: mode=${episode.chapterMode}; payoffType=${episode.payoffType}; choice=${episode.nonTransferableChoice}; cost=${episode.choiceCost}; consequence=${episode.protagonistConsequence}; readerPayoff=${episode.readerPayoff}; endHook=${episode.endHook}`
+          : undefined,
         `Chapter signals: ${contextPack.chapterSignals.join(" | ")}`,
         `Retrieval signals: ${contextPack.retrievalSignals.join(" | ")}`,
         payoffPatterns.length

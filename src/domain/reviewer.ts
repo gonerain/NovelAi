@@ -91,6 +91,13 @@ export interface CommercialReviewerResult {
 export interface RoleDrivenReviewerInput {
   contextPack: ContextPack;
   draft: string;
+  previousChapter?: {
+    chapterNumber: number;
+    decisionPressure: string | null;
+    likelyChoice: string | null;
+    immediateConsequence: string | null;
+    relationshipShift: string | null;
+  };
 }
 
 export interface RoleDrivenReviewerFinding {

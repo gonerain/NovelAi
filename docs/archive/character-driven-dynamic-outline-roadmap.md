@@ -36,12 +36,20 @@ Already in code:
   - `relationship_shift.json`
   - `consequence_edges.json`
 - planner can see unresolved delayed consequences from prior chapters
+- `project inspect-consequences` reports delayed consequence status as `active`, `resolved`, or `indeterminate`
+- `outline suggest-patches` produces local beat patch suggestions and suppresses delayed-consequence carry-forward when the source is already resolved
+- `outline apply-patches` applies approved patch suggestions back into `beat-outlines.json` with an audit report
+- `project regenerate-with-patches` routes suggested/applied outline patches into targeted regeneration
+- patch application supports first-class selection/rejection flags: `--only-beat`, `--skip-beat`, `--only-type`, `--skip-type`
+- planner is instructed and post-processed to prefer active consequence chains over stale beat wording
+- UI resource navigation exposes existing role-driven sidecars and impact/patch reports for review
+- `project role-eval` checks decision-log completeness, consequence-edge presence, and active consequence carryover with regression deltas
+- UI friendly view summarizes role-driven review artifacts, patch reports, consequence inspections, and role-driven eval reports
+- UI can explicitly run consequence inspection, patch suggestion, patch application, and role-driven eval from the workbench
 
 Still missing:
 
-- future beat patching from consequence edges
-- project-level inspection tools for decision propagation
-- stronger distinction between "resolved" and "still active" delayed consequences
+- richer graph-style visualization beyond card summaries
 
 ## Design Rules
 
@@ -112,7 +120,7 @@ Exit condition:
 
 ### Phase 3: Outline Patch Suggestions
 
-Status: in progress
+Status: done enough for v1
 
 Owns:
 
@@ -122,10 +130,12 @@ Owns:
 
 Deliverables:
 
-- `outline_patch_suggestions.json`
-- command for inspecting chapter-to-beat pressure propagation
-- `project inspect-consequences --project <id> --chapter <n>`
-- `outline suggest-patches --project <id> --from-chapter <n>`
+- `outline_patch_suggestions.json` - done
+- command for inspecting chapter-to-beat pressure propagation - done
+- `project inspect-consequences --project <id> --chapter <n>` - done
+- `outline suggest-patches --project <id> --from-chapter <n>` - done
+- apply/reject patch workflow - done through editable suggestions, selection/rejection flags, and `outline apply-patches`
+- `project regenerate-with-patches --project <id> --target <id>` - done
 
 Exit condition:
 
@@ -133,7 +143,7 @@ Exit condition:
 
 ### Phase 4: Decision-Aware Regeneration
 
-Status: later
+Status: partially done
 
 Owns:
 
@@ -146,21 +156,25 @@ Exit condition:
 
 ## Priority Order
 
-1. make beat patch suggestions
-2. add consequence propagation inspection
-3. tighten delayed-consequence resolution logic
-4. only then consider visualization
+1. add graph-style visualization if card summaries are not enough
+2. expand role-driven eval cases as failure modes appear
+3. tighten UI affordances around destructive patch application if needed
 
 ## Commands To Add
 
-### Next
+### Added
 
 - `project inspect-consequences --project <id> --chapter <n>`
 - `outline suggest-patches --project <id> --from-chapter <n>`
+- `outline apply-patches --project <id> --from-chapter <n>`
+- `project regenerate-with-patches --project <id> --target <id>`
+- `project role-eval --project <id>`
+- patch selection flags: `--only-beat <ids>`, `--skip-beat <ids>`, `--only-type <types>`, `--skip-type <types>`
 
 ### Later
 
-- `project regenerate-with-patches --project <id> --target <id>`
+- graph-style UI visualization for decision propagation
+- UI patch review and approval flow - basic explicit actions done
 
 ## Guardrails
 
@@ -174,9 +188,10 @@ Exit condition:
 
 UI should expose this system as inspection and editing support only:
 
-- view decision logs
-- view relationship shifts
-- view consequence edges
-- review patch suggestions
+- view decision logs - friendly card view done
+- view relationship shifts - friendly card view done
+- view consequence edges - friendly card view done
+- review patch suggestions - friendly card view done
+- review role-driven eval reports - friendly card view done
 
 UI should not become the place where story logic is invented.

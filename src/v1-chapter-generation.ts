@@ -10,6 +10,7 @@ import {
   type ChapterCommercialPlan,
   type ChapterPlan,
   type CommercialReviewerResult,
+  type EpisodePacket,
   type FactConsistencyReviewerResult,
   type MemoryUpdaterResult,
   type MissingResourceReviewerResult,
@@ -40,15 +41,24 @@ import { FileProjectRepository } from "./storage/index.js";
 import {
   chapterConsequenceEdgesPath,
   chapterDecisionLogPath,
+  chapterEpisodeEvalPath,
+  chapterEpisodePacketPath,
   chapterMemoryValidationPath,
   chapterRelationshipShiftPath,
+  chapterStatsPath,
 } from "./v1-paths.js";
 import {
   buildConsequenceEdgesArtifact,
   buildDecisionLogArtifact,
   buildRelationshipShiftArtifact,
 } from "./v1-role-drive.js";
+import { buildRoleDrivenPlannerCarryover } from "./v1-shared.js";
 import type { ProjectBaseState } from "./v1-lib.js";
+import { evalEpisodePacket, planEpisodePacket } from "./v1-episode.js";
+import { updateThreadsFromChapter } from "./v1-threads.js";
+import { applyOffscreenMovesForChapter } from "./v1-offscreen.js";
+import { readJsonArtifact } from "./v1-artifacts.js";
+import type { DecisionLogArtifact } from "./v1-role-drive.js";
 
 type GenerateStructuredTaskWithRetry = <TSchema extends object>(args: {
   service: LlmService;
@@ -202,6 +212,46 @@ export async function generateChapterArtifact(args: {
     beatOutlines: args.base.beatOutlines,
     currentChapterNumber: args.chapterNumber,
   });
+  const roleDrivenCarryover = buildRoleDrivenPlannerCarryover({
+    unresolvedDelayedConsequences,
+  });
+  try {
+    const offscreenApply = await applyOffscreenMovesForChapter({
+      projectId: args.projectId,
+      chapterNumber: args.chapterNumber,
+    });
+    if (offscreenApply.applyReport.appliedCount > 0 || offscreenApply.applyReport.skippedCount > 0) {
+      args.logStage(
+        "chapter",
+        `offscreen applied chapter=${args.chapterNumber} applied=${offscreenApply.applyReport.appliedCount} skipped=${offscreenApply.applyReport.skippedCount}`,
+      );
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    args.logStage("chapter", `WARN: offscreen apply skipped chapter=${args.chapterNumber}: ${message}`);
+  }
+
+  args.logStage("chapter", `episode: plan chapter=${args.chapterNumber}`);
+  const episodePlan = await planEpisodePacket({
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+  });
+  args.logStage("chapter", `episode: eval chapter=${args.chapterNumber}`);
+  const episodeEval = await evalEpisodePacket({
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+  });
+  if (!episodeEval.report.passed) {
+    throw new Error(
+      [
+        `Episode agency gate failed: project=${args.projectId}, chapter=${args.chapterNumber}`,
+        `Agency score: ${episodeEval.report.agencyScore}`,
+        `Eval path: ${episodeEval.evalPath}`,
+        ...episodeEval.report.failureReasons.map((reason) => `- ${reason}`),
+      ].join("\n"),
+    );
+  }
+  const episodePacket: EpisodePacket = episodePlan.packet;
 
   const plannerMessages = buildPlannerMessages({
     authorPack: args.base.authorPacks.planner,
@@ -238,6 +288,7 @@ export async function generateChapterArtifact(args: {
       args.base.chapterPlans,
       args.chapterNumber,
     ),
+    episodePacket,
   });
 
   args.logStage("chapter", `llm: planner chapter=${args.chapterNumber}`);
@@ -291,7 +342,10 @@ export async function generateChapterArtifact(args: {
     beatConstraints: args.uniqueStrings([...(currentBeat?.constraints ?? [])], 6),
     mustHitConflicts: args.uniqueStrings(
       [
+        ...roleDrivenCarryover.mustHitConflicts,
         ...planned.mustHitConflicts,
+        episodePacket.nonTransferableChoice,
+        episodePacket.protagonistConsequence,
         planned.chapterGoal,
         planned.emotionalGoal,
         planned.plannedOutcome,
@@ -299,7 +353,23 @@ export async function generateChapterArtifact(args: {
       ],
       6,
     ),
-    disallowedMoves: args.uniqueStrings([...planned.disallowedMoves], 6),
+    disallowedMoves: args.uniqueStrings(
+      [
+        ...episodePacket.doNotResolve,
+        ...roleDrivenCarryover.disallowedMoves,
+        ...planned.disallowedMoves,
+      ],
+      6,
+    ),
+    styleReminders: args.uniqueStrings(
+      [
+        `Episode mode=${episodePacket.chapterMode}; payoffType=${episodePacket.payoffType}`,
+        `Agency gate passed score=${episodeEval.report.agencyScore}`,
+        ...roleDrivenCarryover.styleReminders,
+        ...planned.styleReminders,
+      ],
+      6,
+    ),
     payoffPatternIds: args.normalizePayoffPatternIds({
       plannerIds: planned.payoffPatternIds,
       currentArc,
@@ -328,6 +398,7 @@ export async function generateChapterArtifact(args: {
     characterStates: args.base.characterStates,
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
+    episodePacket,
   });
   const reviewerContextPack = buildContextPack({
     task: "reviewer",
@@ -344,6 +415,7 @@ export async function generateChapterArtifact(args: {
     characterStates: args.base.characterStates,
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
+    episodePacket,
   });
   const specializedReviewerViews = buildSpecializedReviewerViews({
     chapterPlan,
@@ -355,8 +427,8 @@ export async function generateChapterArtifact(args: {
   args.logStage("chapter", `llm: writer chapter=${args.chapterNumber}`);
   const writerMessages = buildWriterMessages({
     contextPack: writerContextPack,
-    minParagraphs: 5,
-    maxParagraphs: 8,
+    minParagraphs: 8,
+    maxParagraphs: 14,
   });
   await args.writePromptDebug({
     projectId: args.projectId,
@@ -369,7 +441,7 @@ export async function generateChapterArtifact(args: {
     task: "writer",
     messages: writerMessages,
     temperature: 0.6,
-    maxTokens: 2800,
+    maxTokens: 4500,
   });
   const writerResult = {
     object: {
@@ -445,9 +517,25 @@ export async function generateChapterArtifact(args: {
   });
 
   args.logStage("chapter", `llm: review_role_drive chapter=${args.chapterNumber}`);
+  const previousChapterDecisionLog =
+    args.chapterNumber > 1
+      ? await readJsonArtifact<DecisionLogArtifact>(
+          chapterDecisionLogPath(args.projectId, args.chapterNumber - 1),
+        )
+      : null;
+  const previousChapterRoleSnapshot = previousChapterDecisionLog
+    ? {
+        chapterNumber: previousChapterDecisionLog.chapterNumber,
+        decisionPressure: previousChapterDecisionLog.decisionPressure,
+        likelyChoice: previousChapterDecisionLog.likelyChoice,
+        immediateConsequence: previousChapterDecisionLog.immediateConsequence,
+        relationshipShift: previousChapterDecisionLog.relationshipShift,
+      }
+    : undefined;
   const roleDrivenReviewMessages = buildRoleDrivenReviewMessages({
     contextPack: reviewerContextPack,
     draft: writerResult.object.draft,
+    previousChapter: previousChapterRoleSnapshot,
   });
   await args.writePromptDebug({
     projectId: args.projectId,
@@ -516,7 +604,7 @@ export async function generateChapterArtifact(args: {
       task: "rewriter",
       messages: rewriterMessages,
       temperature: rewriteTemp,
-      maxTokens: 3000,
+      maxTokens: 4500,
       fallbackTitle: rewrittenTitle,
     });
     rewrittenDraft = rewrittenOutput.draft;
@@ -592,6 +680,7 @@ export async function generateChapterArtifact(args: {
   const roleDrivenFinalMessages = buildRoleDrivenReviewMessages({
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
+    previousChapter: previousChapterRoleSnapshot,
   });
   await args.writePromptDebug({
     projectId: args.projectId,
@@ -693,6 +782,8 @@ export async function generateChapterArtifact(args: {
     draft: rewrittenDraft,
     characterStates: args.base.characterStates,
     roleDrivenReview: activeRoleDriven,
+    episodePacket,
+    recentConsequences: args.recentConsequences,
   });
   const relationshipShift = buildRelationshipShiftArtifact({
     decisionLog,
@@ -701,6 +792,23 @@ export async function generateChapterArtifact(args: {
   const consequenceEdges = buildConsequenceEdgesArtifact({
     decisionLog,
   });
+
+  const chineseCharCount = (rewrittenDraft.match(/[一-鿿]/gu) ?? []).length;
+  const totalCharCount = Array.from(rewrittenDraft).length;
+  const paragraphCount = rewrittenDraft
+    .split(/\n\s*\n/)
+    .map((segment) => segment.trim())
+    .filter(Boolean).length;
+  const draftLengthWarning =
+    chineseCharCount < 2500
+      ? "below_target"
+      : chineseCharCount > 6000
+        ? "above_target"
+        : "ok";
+  args.logStage(
+    "chapter",
+    `draft length chapter=${args.chapterNumber} cn_chars=${chineseCharCount} chars=${totalCharCount} paragraphs=${paragraphCount} status=${draftLengthWarning}`,
+  );
 
   args.logStage("chapter", `save artifacts chapter=${args.chapterNumber}`);
   await args.repository.saveChapterPlans(args.projectId, updatedChapterPlans);
@@ -735,6 +843,34 @@ export async function generateChapterArtifact(args: {
     chapterConsequenceEdgesPath(args.projectId, args.chapterNumber),
     consequenceEdges,
   );
+  await args.writeJsonArtifact(
+    chapterEpisodePacketPath(args.projectId, args.chapterNumber),
+    episodePacket,
+  );
+  await args.writeJsonArtifact(
+    chapterEpisodeEvalPath(args.projectId, args.chapterNumber),
+    episodeEval.report,
+  );
+  await args.writeJsonArtifact(
+    chapterStatsPath(args.projectId, args.chapterNumber),
+    {
+      chapterNumber: args.chapterNumber,
+      generatedAt: new Date().toISOString(),
+      chineseCharCount,
+      totalCharCount,
+      paragraphCount,
+      draftLengthStatus: draftLengthWarning,
+      title: rewrittenTitle ?? null,
+      chapterMode: episodePacket.chapterMode,
+      payoffType: episodePacket.payoffType,
+      primaryThreadId: episodePacket.primaryThreadId,
+      agencyScore: episodeEval.report.agencyScore,
+      missingResourceFindingCount: activeMissing.findings.length,
+      factFindingCount: activeFact.findings.length,
+      commercialFindingCount: activeCommercial.findings.length,
+      roleDrivenFindingCount: activeRoleDriven.findings.length,
+    },
+  );
   await args.writeRetrievalDebugReport({
     projectId: args.projectId,
     chapterNumber: args.chapterNumber,
@@ -753,6 +889,20 @@ export async function generateChapterArtifact(args: {
     characterStates: args.base.characterStates,
     chapterArtifacts: [...args.availableChapterArtifacts, artifact],
   });
+
+  try {
+    const update = await updateThreadsFromChapter({
+      projectId: args.projectId,
+      chapterNumber: args.chapterNumber,
+    });
+    args.logStage(
+      "chapter",
+      `threads updated chapter=${args.chapterNumber} touched=${update.threadsTouched} applied=${update.appliedDeltaCount} conflicts=${update.conflictCount}`,
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    args.logStage("chapter", `WARN: threads update skipped chapter=${args.chapterNumber}: ${message}`);
+  }
 
   args.logStage("chapter", `done chapter=${args.chapterNumber}`);
   return {

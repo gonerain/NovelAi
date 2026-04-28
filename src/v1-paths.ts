@@ -24,6 +24,58 @@ export function retrievalEvalReportPath(projectId: string): string {
   );
 }
 
+export function roleDrivenEvalReportPath(projectId: string): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "memory",
+    "eval",
+    "role-driven-eval-report.json",
+  );
+}
+
+export function storyContractsPath(projectId: string): string {
+  return path.resolve(process.cwd(), "data", "projects", projectId, "story-contracts.json");
+}
+
+export function narrativeThreadsPath(projectId: string): string {
+  return path.resolve(process.cwd(), "data", "projects", projectId, "narrative-threads.json");
+}
+
+export function offscreenMovesPath(projectId: string): string {
+  return path.resolve(process.cwd(), "data", "projects", projectId, "offscreen-moves.json");
+}
+
+export function threadEconomyReportPath(projectId: string): string {
+  return path.resolve(process.cwd(), "data", "projects", projectId, "thread-economy-report.json");
+}
+
+export function runtimeEvalReportPath(projectId: string): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "memory",
+    "eval",
+    "runtime-eval-report.json",
+  );
+}
+
+export function runtimeEvalRegressionPath(projectId: string): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "memory",
+    "eval",
+    "runtime-eval-regression.json",
+  );
+}
+
 export function embeddingCachePath(projectId: string): string {
   return path.resolve(
     process.cwd(),
@@ -79,6 +131,17 @@ export function outlinePatchSuggestionsPath(projectId: string, chapterNumber: nu
     projectId,
     "impact",
     `chapter-${String(chapterNumber).padStart(3, "0")}.outline-patches.json`,
+  );
+}
+
+export function outlinePatchApplyReportPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "impact",
+    `chapter-${String(chapterNumber).padStart(3, "0")}.outline-patches.applied.json`,
   );
 }
 
@@ -185,6 +248,113 @@ export function chapterConsequenceEdgesPath(projectId: string, chapterNumber: nu
     "chapters",
     `chapter-${String(chapterNumber).padStart(3, "0")}`,
     "consequence_edges.json",
+  );
+}
+
+export function chapterEpisodePacketPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "episode_packet.json",
+  );
+}
+
+export function chapterEpisodeEvalPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "episode_eval.json",
+  );
+}
+
+export function chapterStateDeltasPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "state_deltas.json",
+  );
+}
+
+export function chapterStateDeltasEvalPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "state_deltas_eval.json",
+  );
+}
+
+export function chapterThreadUpdateReportPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "thread_update_report.json",
+  );
+}
+
+export function chapterStatsPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "chapter_stats.json",
+  );
+}
+
+export function chapterThreadsSuggestNextPath(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "threads_suggest_next.json",
+  );
+}
+
+export function chapterEpisodePacketRevisionsDir(projectId: string, chapterNumber: number): string {
+  return path.resolve(
+    process.cwd(),
+    "data",
+    "projects",
+    projectId,
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    "episode_packet_revisions",
+  );
+}
+
+export function chapterEpisodePacketRevisionPath(
+  projectId: string,
+  chapterNumber: number,
+  revisionId: string,
+): string {
+  return path.join(
+    chapterEpisodePacketRevisionsDir(projectId, chapterNumber),
+    `${revisionId}.json`,
   );
 }
 

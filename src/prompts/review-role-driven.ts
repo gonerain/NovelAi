@@ -27,8 +27,22 @@ export function buildRoleDrivenReviewMessages(
         `Chapter signals: ${input.contextPack.chapterSignals.join(" | ")}`,
         `Active characters: ${JSON.stringify(input.contextPack.activeCharacters, null, 2)}`,
         `Task rules: ${input.contextPack.taskRules.join(" | ")}`,
+        input.previousChapter
+          ? `Previous chapter ${input.previousChapter.chapterNumber} role-drive snapshot (must NOT repeat verbatim): ${JSON.stringify(
+              {
+                decisionPressure: input.previousChapter.decisionPressure,
+                likelyChoice: input.previousChapter.likelyChoice,
+                immediateConsequence: input.previousChapter.immediateConsequence,
+                relationshipShift: input.previousChapter.relationshipShift,
+              },
+              null,
+              2,
+            )}\nIf this chapter's decision pressure or relationship shift is essentially identical to the previous chapter, raise a "consequence_chain_weak" finding.`
+          : "Previous chapter role-drive snapshot: (none)",
         `Draft:\n${input.draft}`,
-      ].join("\n\n"),
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
     },
   ];
 }

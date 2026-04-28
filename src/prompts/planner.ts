@@ -85,6 +85,24 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         .filter(Boolean)
         .join("; ")
     : undefined;
+  const episodePacketLine = input.episodePacket
+    ? [
+        `Episode packet: mode=${input.episodePacket.chapterMode}`,
+        `payoffType=${input.episodePacket.payoffType}`,
+        `primaryThread=${input.episodePacket.primaryThreadId}`,
+        `agencyOwner=${input.episodePacket.agencyOwnerId}`,
+        `choice=${input.episodePacket.nonTransferableChoice}`,
+        input.episodePacket.tolerableOptions.length
+          ? `options=${input.episodePacket.tolerableOptions.join(" | ")}`
+          : undefined,
+        `cost=${input.episodePacket.choiceCost}`,
+        `consequence=${input.episodePacket.protagonistConsequence}`,
+        `readerPayoff=${input.episodePacket.readerPayoff}`,
+        `endHook=${input.episodePacket.endHook}`,
+      ]
+        .filter(Boolean)
+        .join("; ")
+    : undefined;
 
   return [
     {
@@ -97,12 +115,16 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "- For semantic text fields, concise Chinese is preferred; English is allowed when clearer.",
         "- Keep mixed-language style consistent: structural control in English, content payload can be Chinese.",
         "- You must output chapterType as one of: setup | progress | payoff | aftermath.",
-        "- Use beat conflict/expectedChange as hard anchor when beat is provided.",
+        "- Treat beat conflict/expectedChange as soft scaffolding when beat is provided; current causal state outranks stale beat wording.",
         "- Treat currentSituation and recentConsequences as already happened facts. Do not rewind, replay, or replace them.",
         "- Each new chapter must advance from the current situation, not restage the same cancellation attempt or obstacle in the same form unless the escalation is materially different.",
         "- Role-driven rule: every major turn should be caused by a character choosing under pressure, not by author convenience alone.",
-        "- If beat decision fields are present, treat them as structural anchors. Preserve the decision owner, pressure, likely choice, and consequence chain.",
+        "- If beat decision fields are present, treat them as proposed causal scaffolding. Preserve hard constraints and irreversible obligations, but adapt stale local wording to current pressure.",
+        "- If unresolved delayed consequences conflict with stale beat wording, the active consequence chain wins. Adapt the local execution while preserving story truth, reader promises, hard arc obligations, and ending obligations.",
+        "- Do not plan a chapter that ignores active consequence pressure just because the original beat goal is broader or older.",
         "- chapterGoal and plannedOutcome should reflect who makes the decisive choice and what new pressure that choice creates.",
+        "- If an Episode Packet is provided, it outranks beat wording for chapter mode, payoff type, primary thread, agency owner, non-transferable choice, reader payoff, and do-not-resolve constraints.",
+        "- If an Episode Packet is provided, chapterGoal/plannedOutcome/mustHitConflicts must preserve its agency requirement and protagonist consequence.",
         "- Keep payoffPatternIds to 1-2 aligned ids.",
         "- Output searchIntent for retrieval. searchIntent should point to entities, memories, ledger types, and phrases that must be searched before writing.",
         "- Output commercial controls. commercial must describe how this chapter sells itself to web-novel readers without forcing the same rhythm every time.",
@@ -182,11 +204,21 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         input.unresolvedDelayedConsequences?.length
           ? "Role-driven continuity directive: at least one unresolved delayed consequence above should either intensify, complicate a relationship, or constrain the next choice."
           : undefined,
+        input.unresolvedDelayedConsequences?.length
+          ? "Priority directive: when the beat outline and unresolved delayed consequences pull in different directions, keep hard constraints and irreversible obligations, but make the active consequence chain drive chapterGoal, mustHitConflicts, and endHook."
+          : undefined,
         input.recentCommercialHistory?.length
           ? `Recent commercial history: ${input.recentCommercialHistory.join(" | ")}`
           : undefined,
         input.recentCommercialHistory?.length
           ? "Commercial rotation directive: avoid repeating the same rewardType and the same small-payoff shape from recent chapters unless escalation is materially different."
+          : undefined,
+        episodePacketLine,
+        input.episodePacket
+          ? `Episode do-not-resolve: ${input.episodePacket.doNotResolve.slice(0, 8).join(" | ")}`
+          : undefined,
+        input.episodePacket
+          ? "Episode directive: build this ChapterPlan around the Episode Packet. Do not replace the primary agency choice with a transferable event."
           : undefined,
         input.activeCharacters?.length
           ? `Active character decision profiles:\n${JSON.stringify(

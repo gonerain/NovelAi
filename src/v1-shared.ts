@@ -193,6 +193,37 @@ export function uniqueStrings(items: string[], limit: number): string[] {
   return result;
 }
 
+export function buildRoleDrivenPlannerCarryover(args: {
+  unresolvedDelayedConsequences: string[];
+  limit?: number;
+}): {
+  mustHitConflicts: string[];
+  disallowedMoves: string[];
+  styleReminders: string[];
+} {
+  const activeConsequences = uniqueStrings(args.unresolvedDelayedConsequences, args.limit ?? 2);
+  if (activeConsequences.length === 0) {
+    return {
+      mustHitConflicts: [],
+      disallowedMoves: [],
+      styleReminders: [],
+    };
+  }
+
+  return {
+    mustHitConflicts: activeConsequences.map(
+      (item) => `Active delayed consequence must shape an on-page choice: ${item}`,
+    ),
+    disallowedMoves: [
+      "Do not ignore active delayed consequences in favor of stale beat wording.",
+      "Do not resolve delayed consequence pressure off-page or without a visible character choice.",
+    ],
+    styleReminders: [
+      "Let active consequence pressure constrain the next choice before adding new plot machinery.",
+    ],
+  };
+}
+
 function normalizeLooseMatcher(text: string): string {
   return text
     .toLowerCase()

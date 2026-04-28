@@ -2,21 +2,41 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 
 import type { ChapterArtifact, StoryProject } from "./domain/index.js";
+import type { OutlinePatchApplyFilters, OutlinePatchSuggestion } from "./v1-role-drive.js";
 import {
   formatApplyDraftRewriteRunResult,
   formatChangeImpactRunResult,
   formatConsequenceInspectionRunResult,
+  formatEpisodeEvalRunResult,
+  formatEpisodeInspectRunResult,
+  formatEpisodePlanRunResult,
   formatInspectDraftRewriteRunResult,
   formatInvalidateResult,
   formatInvalidateTargetRunResult,
   formatListDraftRewriteVersionsRunResult,
+  formatOutlinePatchApplyRunResult,
   formatOutlinePatchSuggestionRunResult,
   formatRegenerateFromTargetRunResult,
+  formatRegenerateWithPatchesRunResult,
   formatRetrievalEvalRunResult,
   formatRetrievalEvalSeedResult,
+  formatRoleDrivenEvalRunResult,
   formatRewriteChapterRunResult,
   formatRewriteDraftRunResult,
   formatRewritePlanRunResult,
+  formatStateDeltaInspectRunResult,
+  formatThreadInspectRunResult,
+  formatThreadRankRunResult,
+  formatThreadSeedRunResult,
+  formatThreadUpdateRunResult,
+  formatThreadEconomyRunResult,
+  formatThreadEvalRunResult,
+  formatThreadSuggestNextRunResult,
+  formatEpisodeRevisePacketRunResult,
+  formatOffscreenScheduleRunResult,
+  formatOffscreenInspectRunResult,
+  formatOffscreenApplyRunResult,
+  formatRuntimeEvalRunResult,
   formatV1RunResult,
 } from "./v1-formatters.js";
 import {
@@ -32,23 +52,42 @@ import { FileProjectRepository } from "./storage/index.js";
 import {
   bootstrapProject,
   defaultDemoProjectId,
+  evalEpisodePacket,
   formatAuthorPresetCatalog,
   interviewProject,
   invalidateFromChapter,
   invalidateFromTarget,
+  inspectEpisodePacket,
+  inspectNarrativeRuntime,
+  inspectStateDeltas,
+  planEpisodePacket,
   regenerateFromTarget,
+  regenerateWithPatches,
   applyDraftRewrite,
+  applyOutlinePatches,
   inspectDraftRewrite,
   inspectConsequences,
   listDraftRewriteVersions,
   rewriteChapter,
   rewriteChapterDraft,
   runChangeImpact,
+  runRoleDrivenEval,
   runRewritePlan,
+  rankNarrativeRuntime,
   runRetrievalEval,
   suggestOutlinePatches,
   runV1,
+  seedNarrativeRuntime,
   seedRetrievalEvalSet,
+  updateThreadsFromChapter,
+  computeThreadEconomy,
+  runThreadEval,
+  suggestNextThreadMoves,
+  reviseEpisodePacket,
+  applyOffscreenMovesForChapter,
+  inspectOffscreenMoves,
+  scheduleOffscreenMoves,
+  runRuntimeEval,
 } from "./v1-lib.js";
 
 type CommandName =
@@ -61,9 +100,29 @@ type CommandName =
   | "project:inspect-consequences"
   | "project:rewrite-plan"
   | "project:regenerate-from-target"
+  | "project:regenerate-with-patches"
+  | "project:role-eval"
   | "memory:eval-seed"
   | "memory:eval-run"
+  | "story:inspect-contracts"
+  | "threads:seed"
+  | "threads:inspect"
+  | "threads:rank"
+  | "threads:inspect-deltas"
+  | "threads:update-from-chapter"
+  | "threads:economy"
+  | "threads:eval"
+  | "threads:suggest-next"
+  | "episode:revise-packet"
+  | "offscreen:schedule"
+  | "offscreen:inspect"
+  | "offscreen:apply"
+  | "runtime:eval"
+  | "episode:plan"
+  | "episode:inspect"
+  | "episode:eval"
   | "outline:inspect"
+  | "outline:apply-patches"
   | "outline:suggest-patches"
   | "outline:generate-stack"
   | "outline:generate-drafts"
@@ -93,6 +152,10 @@ interface ParsedArgs {
   approver?: string;
   note?: string;
   targetId?: string;
+  onlyBeatIds?: string[];
+  skipBeatIds?: string[];
+  onlySuggestionTypes?: Array<OutlinePatchSuggestion["suggestionType"]>;
+  skipSuggestionTypes?: Array<OutlinePatchSuggestion["suggestionType"]>;
   withEval?: boolean;
   strictEval?: boolean;
 }
@@ -122,6 +185,40 @@ function parseFlags(argv: string[]): Map<string, string> {
   return args;
 }
 
+function parseCsvOption(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parsePatchSuggestionTypes(
+  value: string | undefined,
+): Array<OutlinePatchSuggestion["suggestionType"]> {
+  const allowed = new Set<OutlinePatchSuggestion["suggestionType"]>([
+    "decision_pressure_alignment",
+    "relationship_shift_alignment",
+    "delayed_consequence_alignment",
+  ]);
+  return parseCsvOption(value).map((item) => {
+    if (!allowed.has(item as OutlinePatchSuggestion["suggestionType"])) {
+      throw new Error(
+        `Unsupported patch suggestion type: ${item}. Allowed: ${[...allowed].join(", ")}`,
+      );
+    }
+    return item as OutlinePatchSuggestion["suggestionType"];
+  });
+}
+
+function patchApplyFilters(parsed: ParsedArgs): OutlinePatchApplyFilters {
+  return {
+    onlyBeatIds: parsed.onlyBeatIds ?? [],
+    skipBeatIds: parsed.skipBeatIds ?? [],
+    onlySuggestionTypes: parsed.onlySuggestionTypes ?? [],
+    skipSuggestionTypes: parsed.skipSuggestionTypes ?? [],
+  };
+}
+
 function parseCommand(argv: string[]): ParsedArgs {
   const [group = "chapter", action = "generate"] = argv.filter((item) => !item.startsWith("--"));
   const flags = parseFlags(argv);
@@ -135,6 +232,10 @@ function parseCommand(argv: string[]): ParsedArgs {
   const approverOption = readOption(flags, "--approver");
   const noteOption = readOption(flags, "--note");
   const targetOption = readOption(flags, "--target");
+  const onlyBeatOption = readOption(flags, "--only-beat");
+  const skipBeatOption = readOption(flags, "--skip-beat");
+  const onlyTypeOption = readOption(flags, "--only-type");
+  const skipTypeOption = readOption(flags, "--skip-type");
   const withEvalOption = readOption(flags, "--with-eval");
   const strictEvalOption = readOption(flags, "--strict-eval");
   const strictEval = strictEvalOption === "true";
@@ -151,9 +252,29 @@ function parseCommand(argv: string[]): ParsedArgs {
     "project:inspect-consequences",
     "project:rewrite-plan",
     "project:regenerate-from-target",
+    "project:regenerate-with-patches",
+    "project:role-eval",
     "memory:eval-seed",
     "memory:eval-run",
+    "story:inspect-contracts",
+    "threads:seed",
+    "threads:inspect",
+    "threads:rank",
+    "threads:inspect-deltas",
+    "threads:update-from-chapter",
+    "threads:economy",
+    "threads:eval",
+    "threads:suggest-next",
+    "episode:revise-packet",
+    "offscreen:schedule",
+    "offscreen:inspect",
+    "offscreen:apply",
+    "runtime:eval",
+    "episode:plan",
+    "episode:inspect",
+    "episode:eval",
     "outline:inspect",
+    "outline:apply-patches",
     "outline:suggest-patches",
     "outline:generate-stack",
     "outline:generate-drafts",
@@ -188,6 +309,10 @@ function parseCommand(argv: string[]): ParsedArgs {
     approver: approverOption,
     note: noteOption,
     targetId: targetOption,
+    onlyBeatIds: parseCsvOption(onlyBeatOption),
+    skipBeatIds: parseCsvOption(skipBeatOption),
+    onlySuggestionTypes: parsePatchSuggestionTypes(onlyTypeOption),
+    skipSuggestionTypes: parsePatchSuggestionTypes(skipTypeOption),
     withEval,
     strictEval,
   };
@@ -243,6 +368,8 @@ function summarizeProject(project: StoryProject): string {
   lines.push(`Characters: ${project.characters.length}`);
   lines.push(`World facts: ${project.worldFacts.length}`);
   lines.push(`Memories: ${project.memories.length}`);
+  lines.push(`Story contracts: ${project.storyContracts?.length ?? 0}`);
+  lines.push(`Narrative threads: ${project.narrativeThreads?.length ?? 0}`);
   lines.push(`Chapter plans: ${project.chapterPlans.length}`);
 
   return lines.join("\n");
@@ -321,6 +448,8 @@ function summarizeProjectPaths(projectId: string): string {
     `Character states: ${path.join(dir, "character-states.json")}`,
     `World facts: ${path.join(dir, "world-facts.json")}`,
     `Story memories: ${path.join(dir, "story-memories.json")}`,
+    `Story contracts: ${path.join(dir, "story-contracts.json")}`,
+    `Narrative threads: ${path.join(dir, "narrative-threads.json")}`,
     `Chapter plans: ${path.join(dir, "chapter-plans.json")}`,
     `Chapters dir: ${path.join(dir, "chapters")}`,
     `Semantic index: ${path.join(dir, "memory", "retrieval", "semantic-index.json")}`,
@@ -344,10 +473,30 @@ function usage(): string {
     "  project inspect-consequences --project <id> --chapter <n>",
     "  project rewrite-plan --project <id> --target <entity_or_node_id>",
     "  project regenerate-from-target --project <id> --target <entity_or_node_id> --count <n> [--with-eval] [--strict-eval]",
+    "  project regenerate-with-patches --project <id> --target <entity_or_node_id> [--count <n>] [--approver <name>] [--note <text>] [--only-beat <ids>] [--skip-beat <ids>] [--only-type <types>] [--skip-type <types>] [--with-eval] [--strict-eval]",
+    "  project role-eval --project <id>",
     "  memory eval-seed --project <id>",
     "  memory eval-run --project <id>",
+    "  story inspect-contracts --project <id>",
+    "  threads seed --project <id>",
+    "  threads inspect --project <id>",
+    "  threads rank --project <id> --chapter <n>",
+    "  threads inspect-deltas --project <id> --chapter <n>",
+    "  threads update-from-chapter --project <id> --chapter <n>",
+    "  threads economy --project <id> [--chapter <n>]",
+    "  threads eval --project <id> [--chapter <n>]",
+    "  threads suggest-next --project <id> --chapter <n>",
+    "  episode revise-packet --project <id> --chapter <n>",
+    "  offscreen schedule --project <id> [--chapter <n>]",
+    "  offscreen inspect --project <id> [--chapter <n>]",
+    "  offscreen apply --project <id> --chapter <n>",
+    "  runtime eval --project <id> [--chapter <n>] [--strict-eval]",
+    "  episode plan --project <id> --chapter <n>",
+    "  episode inspect --project <id> --chapter <n>",
+    "  episode eval --project <id> --chapter <n>",
     "  outline inspect --project <id>",
     "  outline suggest-patches --project <id> --from-chapter <n>",
+    "  outline apply-patches --project <id> --from-chapter <n> [--approver <name>] [--note <text>] [--only-beat <ids>] [--skip-beat <ids>] [--only-type <types>] [--skip-type <types>]",
     "  outline generate-stack --project <id> [--count <chapters>]",
     "  outline generate-drafts --project <id>",
     "  outline approve-detail --project <id> [--approver <name>] [--note <text>]",
@@ -477,6 +626,33 @@ async function main(): Promise<void> {
       return;
     }
 
+    case "project:regenerate-with-patches": {
+      await assertDetailedOutlineApproved(parsed.projectId);
+      if (!parsed.targetId) {
+        throw new Error("project regenerate-with-patches requires --target <entity_or_node_id>");
+      }
+      const result = await regenerateWithPatches({
+        projectId: parsed.projectId,
+        targetId: parsed.targetId,
+        count: parsed.count,
+        approver: parsed.approver,
+        note: parsed.note,
+        filters: patchApplyFilters(parsed),
+        withEval: parsed.withEval,
+        strictEval: parsed.strictEval,
+      });
+      console.log(formatRegenerateWithPatchesRunResult(result));
+      return;
+    }
+
+    case "project:role-eval": {
+      const result = await runRoleDrivenEval({
+        projectId: parsed.projectId,
+      });
+      console.log(formatRoleDrivenEvalRunResult(result));
+      return;
+    }
+
     case "memory:eval-seed": {
       const result = await seedRetrievalEvalSet({
         projectId: parsed.projectId,
@@ -490,6 +666,215 @@ async function main(): Promise<void> {
         projectId: parsed.projectId,
       });
       console.log(formatRetrievalEvalRunResult(result));
+      return;
+    }
+
+    case "story:inspect-contracts": {
+      const result = await inspectNarrativeRuntime({
+        projectId: parsed.projectId,
+      });
+      console.log(formatThreadInspectRunResult({
+        ...result,
+        threads: [],
+        threadCount: 0,
+        activeThreadCount: 0,
+      }));
+      return;
+    }
+
+    case "threads:seed": {
+      const result = await seedNarrativeRuntime({
+        projectId: parsed.projectId,
+      });
+      console.log(formatThreadSeedRunResult(result));
+      return;
+    }
+
+    case "threads:inspect": {
+      const result = await inspectNarrativeRuntime({
+        projectId: parsed.projectId,
+      });
+      console.log(formatThreadInspectRunResult(result));
+      return;
+    }
+
+    case "threads:rank": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("threads rank requires --chapter <n>");
+      }
+      const result = await rankNarrativeRuntime({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatThreadRankRunResult(result));
+      return;
+    }
+
+    case "threads:inspect-deltas": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("threads inspect-deltas requires --chapter <n>");
+      }
+      const result = await inspectStateDeltas({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatStateDeltaInspectRunResult(result));
+      if (!result.report.passed) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "threads:update-from-chapter": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("threads update-from-chapter requires --chapter <n>");
+      }
+      const result = await updateThreadsFromChapter({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatThreadUpdateRunResult(result));
+      if (result.conflictCount > 0) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "threads:economy": {
+      const result = await computeThreadEconomy({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatThreadEconomyRunResult(result));
+      if (!result.report.passed) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "threads:eval": {
+      const result = await runThreadEval({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatThreadEvalRunResult(result));
+      if (!result.passed) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "threads:suggest-next": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("threads suggest-next requires --chapter <n>");
+      }
+      const result = await suggestNextThreadMoves({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatThreadSuggestNextRunResult(result));
+      return;
+    }
+
+    case "episode:revise-packet": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("episode revise-packet requires --chapter <n>");
+      }
+      const result = await reviseEpisodePacket({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatEpisodeRevisePacketRunResult(result));
+      if (!result.report.passed) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "offscreen:schedule": {
+      const result = await scheduleOffscreenMoves({
+        projectId: parsed.projectId,
+        startChapter: parsed.chapterNumber,
+      });
+      console.log(formatOffscreenScheduleRunResult(result));
+      return;
+    }
+
+    case "offscreen:inspect": {
+      const result = await inspectOffscreenMoves({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatOffscreenInspectRunResult(result));
+      if (!result.evalReport.passed) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "offscreen:apply": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("offscreen apply requires --chapter <n>");
+      }
+      const result = await applyOffscreenMovesForChapter({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatOffscreenApplyRunResult(result));
+      return;
+    }
+
+    case "runtime:eval": {
+      const result = await runRuntimeEval({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+        strict: parsed.strictEval,
+      });
+      console.log(formatRuntimeEvalRunResult(result));
+      if (result.blocked) {
+        process.exitCode = 3;
+      } else if (!result.report.passed) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "episode:plan": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("episode plan requires --chapter <n>");
+      }
+      const result = await planEpisodePacket({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatEpisodePlanRunResult(result));
+      return;
+    }
+
+    case "episode:inspect": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("episode inspect requires --chapter <n>");
+      }
+      const result = await inspectEpisodePacket({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatEpisodeInspectRunResult(result));
+      return;
+    }
+
+    case "episode:eval": {
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("episode eval requires --chapter <n>");
+      }
+      const result = await evalEpisodePacket({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(formatEpisodeEvalRunResult(result));
+      if (!result.report.passed) {
+        process.exitCode = 2;
+      }
       return;
     }
 
@@ -511,6 +896,21 @@ async function main(): Promise<void> {
         fromChapter: parsed.fromChapter,
       });
       console.log(formatOutlinePatchSuggestionRunResult(result));
+      return;
+    }
+
+    case "outline:apply-patches": {
+      if (!parsed.fromChapter || parsed.fromChapter < 1) {
+        throw new Error("outline apply-patches requires --from-chapter <n>");
+      }
+      const result = await applyOutlinePatches({
+        projectId: parsed.projectId,
+        fromChapter: parsed.fromChapter,
+        approver: parsed.approver,
+        note: parsed.note,
+        filters: patchApplyFilters(parsed),
+      });
+      console.log(formatOutlinePatchApplyRunResult(result));
       return;
     }
 

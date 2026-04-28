@@ -3,6 +3,7 @@ import type {
   ChapterArtifact,
   ChapterPlan,
   CharacterState,
+  EpisodePacket,
   RoleDrivenReviewerResult,
 } from "./domain/index.js";
 
@@ -65,6 +66,15 @@ export interface ConsequenceEdgeArtifact {
   }>;
 }
 
+export interface DelayedConsequenceStatus {
+  sourceChapterNumber: number;
+  sourceBeatId: string | null;
+  consequence: string;
+  status: "active" | "resolved" | "indeterminate";
+  evidenceChapterNumber: number | null;
+  evidence: string[];
+}
+
 export interface OutlinePatchSuggestion {
   beatId: string;
   arcId: string;
@@ -86,6 +96,32 @@ export interface OutlinePatchSuggestion {
     relationshipShift?: string;
     appendConstraint?: string;
   };
+}
+
+export interface AppliedOutlinePatchChange {
+  beatId: string;
+  suggestionType: OutlinePatchSuggestion["suggestionType"];
+  changedFields: string[];
+  appendedConstraint: string | null;
+}
+
+export interface SkippedOutlinePatchSuggestion {
+  beatId: string;
+  suggestionType: OutlinePatchSuggestion["suggestionType"];
+  reason: string;
+}
+
+export interface ApplyOutlinePatchSuggestionsResult {
+  beatOutlines: BeatOutline[];
+  applied: AppliedOutlinePatchChange[];
+  skipped: SkippedOutlinePatchSuggestion[];
+}
+
+export interface OutlinePatchApplyFilters {
+  onlyBeatIds?: string[];
+  skipBeatIds?: string[];
+  onlySuggestionTypes?: Array<OutlinePatchSuggestion["suggestionType"]>;
+  skipSuggestionTypes?: Array<OutlinePatchSuggestion["suggestionType"]>;
 }
 
 function uniqueStrings(items: string[], limit: number): string[] {
@@ -116,13 +152,41 @@ function normalizeForMatching(text: string): string {
 }
 
 function extractMatchTokens(text: string): string[] {
+  const normalized = normalizeForMatching(text);
+  const baseTokens = normalized
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length >= 4);
+  const cjkTokens = Array.from(text.matchAll(/[\p{Script=Han}]{4,}/gu)).flatMap((match) => {
+    const chunk = match[0];
+    const grams: string[] = [];
+    for (let index = 0; index < chunk.length - 1; index += 2) {
+      grams.push(chunk.slice(index, index + 2));
+    }
+    return grams;
+  });
+
   return uniqueStrings(
-    normalizeForMatching(text)
-      .split(/\s+/)
-      .map((item) => item.trim())
-      .filter((item) => item.length >= 4),
-    8,
+    [...baseTokens, ...cjkTokens],
+    16,
   );
+}
+
+function countTokenMatches(source: string, target: string): number {
+  const tokens = extractMatchTokens(source);
+  if (tokens.length === 0) {
+    return 0;
+  }
+  const normalizedTarget = normalizeForMatching(target);
+  return tokens.filter((token) => normalizedTarget.includes(token)).length;
+}
+
+function hasMeaningfulMatch(source: string, target: string): boolean {
+  const tokens = extractMatchTokens(source);
+  if (tokens.length === 0) {
+    return false;
+  }
+  return countTokenMatches(source, target) >= Math.min(2, tokens.length);
 }
 
 export function findDecisionEvidenceSnippets(args: {
@@ -156,6 +220,56 @@ export function findDecisionEvidenceSnippets(args: {
   return uniqueStrings(scored, 3);
 }
 
+function combineFromBeatAndPacket(
+  beatValue: string | null | undefined,
+  packetValue: string | null | undefined,
+  carryover?: string,
+): string | null {
+  const beatTrim = beatValue?.trim();
+  const packetTrim = packetValue?.trim();
+  const carryoverTrim = carryover?.trim();
+  const segments: string[] = [];
+  if (packetTrim) {
+    segments.push(packetTrim);
+  } else if (beatTrim) {
+    segments.push(beatTrim);
+  }
+  if (carryoverTrim && !segments.some((segment) => segment.includes(carryoverTrim))) {
+    segments.push(`承接：${carryoverTrim}`);
+  }
+  if (segments.length === 0 && beatTrim) {
+    segments.push(beatTrim);
+  }
+  return segments.length > 0 ? segments.join(" ｜ ") : null;
+}
+
+function deriveRelationshipShift(args: {
+  beatOutline?: BeatOutline;
+  episodePacket?: EpisodePacket;
+}): string | null {
+  const beatShift = args.beatOutline?.relationshipShift?.trim();
+  if (!args.episodePacket) {
+    return beatShift ?? null;
+  }
+  if (args.episodePacket.payoffType === "relationship_shift") {
+    const supportingRelationship = args.episodePacket.activeThreadsUsed.find(
+      (item) => item.threadId.includes("relationship"),
+    );
+    if (supportingRelationship) {
+      const detail = `${args.episodePacket.payoffType} 推动关系状态变化（线程 ${supportingRelationship.threadId}）`;
+      return beatShift ? `${beatShift} ｜ ${detail}` : detail;
+    }
+  }
+  const relationshipDelta = args.episodePacket.stateDeltasExpected.find(
+    (delta) => delta.targetType === "relationship",
+  );
+  if (relationshipDelta) {
+    const detail = relationshipDelta.description;
+    return beatShift ? `${beatShift} ｜ ${detail}` : detail;
+  }
+  return beatShift ?? null;
+}
+
 export function buildDecisionLogArtifact(args: {
   chapterNumber: number;
   chapterPlan: ChapterPlan;
@@ -163,8 +277,54 @@ export function buildDecisionLogArtifact(args: {
   draft: string;
   characterStates: CharacterState[];
   roleDrivenReview?: RoleDrivenReviewerResult;
+  episodePacket?: EpisodePacket;
+  recentConsequences?: string[];
 }): DecisionLogArtifact {
-  const ownerIds = args.beatOutline?.decisionOwnerIds ?? args.chapterPlan.requiredCharacters.slice(0, 2);
+  const recentConsequence = args.recentConsequences?.[0];
+  const ownerIds = (() => {
+    if (args.episodePacket?.agencyOwnerId) {
+      const ids = [args.episodePacket.agencyOwnerId];
+      if (args.beatOutline?.decisionOwnerIds) {
+        for (const id of args.beatOutline.decisionOwnerIds) {
+          if (!ids.includes(id)) {
+            ids.push(id);
+          }
+        }
+      }
+      return ids.slice(0, 2);
+    }
+    return args.beatOutline?.decisionOwnerIds ?? args.chapterPlan.requiredCharacters.slice(0, 2);
+  })();
+  const decisionPressure = combineFromBeatAndPacket(
+    args.beatOutline?.decisionPressure ?? null,
+    args.episodePacket?.nonTransferableChoice ?? null,
+    recentConsequence,
+  );
+  const likelyChoice = combineFromBeatAndPacket(
+    args.beatOutline?.likelyChoice ?? null,
+    args.episodePacket?.tolerableOptions[0] ?? null,
+  );
+  const immediateConsequence = combineFromBeatAndPacket(
+    args.beatOutline?.immediateConsequence ?? null,
+    args.episodePacket?.protagonistConsequence ?? null,
+  );
+  const availableOptions = (() => {
+    const beatOptions = args.beatOutline?.availableOptions ?? [];
+    const packetOptions = args.episodePacket?.tolerableOptions ?? [];
+    const merged: string[] = [];
+    for (const value of [...beatOptions, ...packetOptions]) {
+      const trimmed = value?.trim();
+      if (trimmed && !merged.includes(trimmed)) {
+        merged.push(trimmed);
+      }
+    }
+    return merged;
+  })();
+  const relationshipShift = deriveRelationshipShift({
+    beatOutline: args.beatOutline,
+    episodePacket: args.episodePacket,
+  });
+
   const owners: DecisionLogOwnerRecord[] = ownerIds
     .map((id) => args.characterStates.find((character) => character.id === id))
     .filter((item): item is CharacterState => Boolean(item))
@@ -174,14 +334,14 @@ export function buildDecisionLogArtifact(args: {
       coreDesire: character.decisionProfile?.coreDesire ?? null,
       coreFear: character.decisionProfile?.coreFear ?? null,
       falseBelief: character.decisionProfile?.falseBelief ?? null,
-      likelyChoice: args.beatOutline?.likelyChoice ?? null,
-      immediateConsequence: args.beatOutline?.immediateConsequence ?? null,
+      likelyChoice,
+      immediateConsequence,
       delayedConsequence: args.beatOutline?.delayedConsequence ?? null,
       evidenceSnippets: findDecisionEvidenceSnippets({
         draft: args.draft,
         characterName: character.name,
-        likelyChoice: args.beatOutline?.likelyChoice,
-        immediateConsequence: args.beatOutline?.immediateConsequence,
+        likelyChoice: likelyChoice ?? args.beatOutline?.likelyChoice,
+        immediateConsequence: immediateConsequence ?? args.beatOutline?.immediateConsequence,
       }),
     }));
 
@@ -189,12 +349,12 @@ export function buildDecisionLogArtifact(args: {
     chapterNumber: args.chapterNumber,
     chapterType: args.chapterPlan.chapterType ?? null,
     beatId: args.beatOutline?.id ?? args.chapterPlan.beatId ?? null,
-    decisionPressure: args.beatOutline?.decisionPressure ?? null,
-    availableOptions: args.beatOutline?.availableOptions ?? [],
-    likelyChoice: args.beatOutline?.likelyChoice ?? null,
-    immediateConsequence: args.beatOutline?.immediateConsequence ?? null,
+    decisionPressure,
+    availableOptions,
+    likelyChoice,
+    immediateConsequence,
     delayedConsequence: args.beatOutline?.delayedConsequence ?? null,
-    relationshipShift: args.beatOutline?.relationshipShift ?? null,
+    relationshipShift,
     themeShift: args.beatOutline?.themeShift ?? null,
     owners,
     reviewerAssessment: args.roleDrivenReview
@@ -309,22 +469,23 @@ export function buildUnresolvedDelayedConsequenceList(args: {
   fromChapterNumber: number;
   limit?: number;
 }): string[] {
-  const laterTexts = new Set(
-    args.decisionLogs
-      .filter((item) => item.chapterNumber > args.fromChapterNumber)
-      .flatMap((item) => {
-        const decisionLog = item.decisionLog;
-        return [
-          decisionLog?.decisionPressure ?? "",
-          decisionLog?.immediateConsequence ?? "",
-          decisionLog?.delayedConsequence ?? "",
-          decisionLog?.relationshipShift ?? "",
-        ].map((value) => normalizeForMatching(value));
-      })
-      .filter(Boolean),
+  return buildDelayedConsequenceStatuses(args)
+    .filter((item) => item.status !== "resolved")
+    .map((item) => item.consequence)
+    .slice(0, args.limit ?? 6);
+}
+
+export function buildDelayedConsequenceStatuses(args: {
+  decisionLogs: Array<{ chapterNumber: number; decisionLog: DecisionLogArtifact | null }>;
+  fromChapterNumber: number;
+  limit?: number;
+}): DelayedConsequenceStatus[] {
+  const statuses: DelayedConsequenceStatus[] = [];
+  const sortedLogs = [...args.decisionLogs].sort(
+    (left, right) => left.chapterNumber - right.chapterNumber,
   );
 
-  const unresolved: string[] = [];
+  const consequenceSeen = new Set<string>();
   for (const item of args.decisionLogs) {
     if (item.chapterNumber > args.fromChapterNumber) {
       continue;
@@ -337,15 +498,76 @@ export function buildUnresolvedDelayedConsequenceList(args: {
     if (!normalized) {
       continue;
     }
-    const resolvedLater = [...laterTexts].some(
-      (text) => text.includes(normalized) || normalized.includes(text),
-    );
-    if (!resolvedLater) {
-      unresolved.push(consequence);
+    if (consequenceSeen.has(normalized)) {
+      continue;
     }
+    consequenceSeen.add(normalized);
+
+    const laterLogs = sortedLogs.filter(
+      (candidate) =>
+        candidate.chapterNumber > item.chapterNumber &&
+        candidate.chapterNumber <= args.fromChapterNumber,
+    );
+    let activeEvidence: DelayedConsequenceStatus | null = null;
+    let resolvedEvidence: DelayedConsequenceStatus | null = null;
+
+    for (const later of laterLogs) {
+      const decisionLog = later.decisionLog;
+      if (!decisionLog) {
+        continue;
+      }
+
+      const activeFields = [
+        decisionLog.decisionPressure,
+        decisionLog.delayedConsequence,
+        ...decisionLog.availableOptions,
+      ].filter((value): value is string => Boolean(value?.trim()));
+      const resolvedFields = [
+        decisionLog.likelyChoice,
+        decisionLog.immediateConsequence,
+        decisionLog.relationshipShift,
+        decisionLog.themeShift,
+      ].filter((value): value is string => Boolean(value?.trim()));
+
+      const activeMatches = activeFields.filter((field) => hasMeaningfulMatch(consequence, field));
+      const resolvedMatches = resolvedFields.filter((field) => hasMeaningfulMatch(consequence, field));
+
+      if (activeMatches.length > 0) {
+        activeEvidence = {
+          sourceChapterNumber: item.chapterNumber,
+          sourceBeatId: item.decisionLog?.beatId ?? null,
+          consequence,
+          status: "active",
+          evidenceChapterNumber: later.chapterNumber,
+          evidence: activeMatches.slice(0, 3),
+        };
+      }
+      if (resolvedMatches.length > 0) {
+        resolvedEvidence = {
+          sourceChapterNumber: item.chapterNumber,
+          sourceBeatId: item.decisionLog?.beatId ?? null,
+          consequence,
+          status: "resolved",
+          evidenceChapterNumber: later.chapterNumber,
+          evidence: resolvedMatches.slice(0, 3),
+        };
+      }
+    }
+
+    statuses.push(
+      resolvedEvidence ??
+        activeEvidence ?? {
+          sourceChapterNumber: item.chapterNumber,
+          sourceBeatId: item.decisionLog?.beatId ?? null,
+          consequence,
+          status: "indeterminate",
+          evidenceChapterNumber: null,
+          evidence: [],
+        },
+    );
   }
 
-  return uniqueStrings(unresolved, args.limit ?? 6);
+  return statuses.slice(0, args.limit ?? 6);
 }
 
 function scoreBeatPatchMatch(args: {
@@ -393,13 +615,17 @@ export function buildOutlinePatchSuggestions(args: {
   fromChapter: number;
   beatOutlines: BeatOutline[];
   sourceDecisionLog: DecisionLogArtifact | null;
+  sourceDelayedConsequenceStatus?: DelayedConsequenceStatus | null;
 }): OutlinePatchSuggestion[] {
   if (!args.sourceDecisionLog) {
     return [];
   }
 
   const ownerIds = args.sourceDecisionLog.owners.map((owner) => owner.id);
-  const delayedConsequence = args.sourceDecisionLog.delayedConsequence;
+  const delayedConsequence =
+    args.sourceDelayedConsequenceStatus?.status === "resolved"
+      ? null
+      : args.sourceDecisionLog.delayedConsequence;
   const relationshipShift = args.sourceDecisionLog.relationshipShift;
   const decisionPressure = args.sourceDecisionLog.decisionPressure;
 
@@ -498,4 +724,136 @@ export function buildOutlinePatchSuggestions(args: {
   }
 
   return suggestions.slice(0, 10);
+}
+
+function appendUniqueConstraint(constraints: string[], constraint: string): {
+  constraints: string[];
+  appended: boolean;
+} {
+  const normalized = constraint.trim();
+  if (!normalized) {
+    return { constraints, appended: false };
+  }
+  if (constraints.some((item) => normalizeForMatching(item) === normalizeForMatching(normalized))) {
+    return { constraints, appended: false };
+  }
+  return {
+    constraints: [...constraints, normalized],
+    appended: true,
+  };
+}
+
+export function applyOutlinePatchSuggestions(args: {
+  beatOutlines: BeatOutline[];
+  suggestions: OutlinePatchSuggestion[];
+  filters?: OutlinePatchApplyFilters;
+}): ApplyOutlinePatchSuggestionsResult {
+  const applied: AppliedOutlinePatchChange[] = [];
+  const skipped: SkippedOutlinePatchSuggestion[] = [];
+  const beatMap = new Map(args.beatOutlines.map((beat) => [beat.id, beat]));
+  const onlyBeatIds = new Set(args.filters?.onlyBeatIds ?? []);
+  const skipBeatIds = new Set(args.filters?.skipBeatIds ?? []);
+  const onlySuggestionTypes = new Set(args.filters?.onlySuggestionTypes ?? []);
+  const skipSuggestionTypes = new Set(args.filters?.skipSuggestionTypes ?? []);
+
+  for (const suggestion of args.suggestions) {
+    if (onlyBeatIds.size > 0 && !onlyBeatIds.has(suggestion.beatId)) {
+      skipped.push({
+        beatId: suggestion.beatId,
+        suggestionType: suggestion.suggestionType,
+        reason: "Filtered out by onlyBeatIds.",
+      });
+      continue;
+    }
+    if (skipBeatIds.has(suggestion.beatId)) {
+      skipped.push({
+        beatId: suggestion.beatId,
+        suggestionType: suggestion.suggestionType,
+        reason: "Filtered out by skipBeatIds.",
+      });
+      continue;
+    }
+    if (onlySuggestionTypes.size > 0 && !onlySuggestionTypes.has(suggestion.suggestionType)) {
+      skipped.push({
+        beatId: suggestion.beatId,
+        suggestionType: suggestion.suggestionType,
+        reason: "Filtered out by onlySuggestionTypes.",
+      });
+      continue;
+    }
+    if (skipSuggestionTypes.has(suggestion.suggestionType)) {
+      skipped.push({
+        beatId: suggestion.beatId,
+        suggestionType: suggestion.suggestionType,
+        reason: "Filtered out by skipSuggestionTypes.",
+      });
+      continue;
+    }
+
+    const currentBeat = beatMap.get(suggestion.beatId);
+    if (!currentBeat) {
+      skipped.push({
+        beatId: suggestion.beatId,
+        suggestionType: suggestion.suggestionType,
+        reason: "Beat not found in current beat outlines.",
+      });
+      continue;
+    }
+
+    const changedFields: string[] = [];
+    let nextBeat: BeatOutline = { ...currentBeat };
+
+    const patch = suggestion.suggestedPatch;
+    if (
+      patch.decisionPressure &&
+      normalizeForMatching(nextBeat.decisionPressure ?? "") !== normalizeForMatching(patch.decisionPressure)
+    ) {
+      nextBeat = { ...nextBeat, decisionPressure: patch.decisionPressure };
+      changedFields.push("decisionPressure");
+    }
+    if (
+      patch.delayedConsequence &&
+      normalizeForMatching(nextBeat.delayedConsequence ?? "") !== normalizeForMatching(patch.delayedConsequence)
+    ) {
+      nextBeat = { ...nextBeat, delayedConsequence: patch.delayedConsequence };
+      changedFields.push("delayedConsequence");
+    }
+    if (
+      patch.relationshipShift &&
+      normalizeForMatching(nextBeat.relationshipShift ?? "") !== normalizeForMatching(patch.relationshipShift)
+    ) {
+      nextBeat = { ...nextBeat, relationshipShift: patch.relationshipShift };
+      changedFields.push("relationshipShift");
+    }
+
+    const constraintResult = patch.appendConstraint
+      ? appendUniqueConstraint(nextBeat.constraints ?? [], patch.appendConstraint)
+      : { constraints: nextBeat.constraints ?? [], appended: false };
+    if (constraintResult.appended) {
+      nextBeat = { ...nextBeat, constraints: constraintResult.constraints };
+    }
+
+    if (changedFields.length === 0 && !constraintResult.appended) {
+      skipped.push({
+        beatId: suggestion.beatId,
+        suggestionType: suggestion.suggestionType,
+        reason: "Patch is already present.",
+      });
+      continue;
+    }
+
+    beatMap.set(suggestion.beatId, nextBeat);
+    applied.push({
+      beatId: suggestion.beatId,
+      suggestionType: suggestion.suggestionType,
+      changedFields,
+      appendedConstraint: constraintResult.appended ? patch.appendConstraint ?? null : null,
+    });
+  }
+
+  return {
+    beatOutlines: args.beatOutlines.map((beat) => beatMap.get(beat.id) ?? beat),
+    applied,
+    skipped,
+  };
 }

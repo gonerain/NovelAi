@@ -3,6 +3,22 @@ import http from "node:http";
 import path from "node:path";
 import { URL } from "node:url";
 
+import {
+  applyOutlinePatches,
+  inspectConsequences,
+  runRoleDrivenEval,
+  suggestOutlinePatches,
+} from "./v1-impact.js";
+import type { OutlinePatchApplyFilters, OutlinePatchSuggestion } from "./v1-role-drive.js";
+import {
+  computeThreadEconomy,
+  inspectNarrativeRuntime,
+  rankNarrativeRuntime,
+  runThreadEval,
+  suggestNextThreadMoves,
+} from "./v1-threads.js";
+import { inspectOffscreenMoves } from "./v1-offscreen.js";
+
 const PORT = Number(process.env.NOVELAI_UI_PORT ?? 3710);
 const HOST = process.env.NOVELAI_UI_HOST ?? "127.0.0.1";
 
@@ -33,9 +49,33 @@ const STATIC_RESOURCES: ResourceMeta[] = [
   { key: "character-states-json", label: "角色状态 JSON", type: "json", relativePath: "character-states.json" },
   { key: "world-facts-json", label: "世界规则 JSON", type: "json", relativePath: "world-facts.json" },
   { key: "story-memories-json", label: "记忆条目 JSON", type: "json", relativePath: "story-memories.json" },
+  { key: "story-contracts-json", label: "故事契约 JSON", type: "json", relativePath: "story-contracts.json" },
+  { key: "narrative-threads-json", label: "线程 JSON", type: "json", relativePath: "narrative-threads.json" },
+  { key: "offscreen-moves-json", label: "幕后行动 JSON", type: "json", relativePath: "offscreen-moves.json" },
+  { key: "thread-economy-report-json", label: "线程经济报告 JSON", type: "json", relativePath: "thread-economy-report.json" },
   { key: "story-outline-md", label: "故事大纲 Markdown", type: "text", relativePath: "story-outline.md" },
   { key: "detailed-outline-md", label: "细纲 Markdown", type: "text", relativePath: "detailed-outline.md" },
 ];
+
+const CHAPTER_RUNTIME_SIDECARS: Array<{
+  suffix: string;
+  fileName: string;
+  label: string;
+}> = [
+  { suffix: "decision-log", fileName: "decision_log.json", label: "决策日志" },
+  { suffix: "relationship-shift", fileName: "relationship_shift.json", label: "关系位移" },
+  { suffix: "consequence-edges", fileName: "consequence_edges.json", label: "后果边" },
+  { suffix: "episode-packet", fileName: "episode_packet.json", label: "Episode Packet" },
+  { suffix: "episode-eval", fileName: "episode_eval.json", label: "Episode Eval" },
+  { suffix: "state-deltas", fileName: "state_deltas.json", label: "State Deltas" },
+  { suffix: "state-deltas-eval", fileName: "state_deltas_eval.json", label: "State Delta Eval" },
+  { suffix: "thread-update-report", fileName: "thread_update_report.json", label: "Thread Update Report" },
+  { suffix: "threads-suggest-next", fileName: "threads_suggest_next.json", label: "下一步线程建议" },
+];
+
+const CHAPTER_SIDECAR_FILE_BY_KEY: Record<string, string> = Object.fromEntries(
+  CHAPTER_RUNTIME_SIDECARS.map((item) => [item.suffix, item.fileName]),
+);
 
 function jsonResponse(res: http.ServerResponse, code: number, payload: unknown): void {
   res.statusCode = code;
@@ -72,6 +112,44 @@ async function listChapterNumbers(projectId: string): Promise<number[]> {
   }
 }
 
+async function listImpactReportNames(projectId: string): Promise<string[]> {
+  const impactDir = path.join(projectRoot(projectId), "impact");
+  try {
+    const entries = await readdir(impactDir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b));
+  } catch {
+    return [];
+  }
+}
+
+async function listChapterReviewResources(projectId: string, chapters: number[]): Promise<Array<{
+  key: string;
+  label: string;
+}>> {
+  const candidates = chapters.flatMap((chapterNumber) =>
+    CHAPTER_RUNTIME_SIDECARS.map((sidecar) => ({
+      chapterNumber,
+      ...sidecar,
+      filePath: chapterSidecarPath(projectId, chapterNumber, sidecar.fileName),
+    })),
+  );
+  const existing = await Promise.all(
+    candidates.map(async (item) => ({
+      item,
+      exists: await pathExists(item.filePath),
+    })),
+  );
+  return existing
+    .filter((entry) => entry.exists)
+    .map(({ item }) => ({
+      key: `chapter-${String(item.chapterNumber).padStart(3, "0")}-${item.suffix}`,
+      label: `章节 ${item.chapterNumber} ${item.label} JSON`,
+    }));
+}
+
 function chapterDraftPath(projectId: string, chapterNumber: number): string {
   return path.join(
     projectRoot(projectId),
@@ -88,6 +166,19 @@ function chapterResultPath(projectId: string, chapterNumber: number): string {
     `chapter-${String(chapterNumber).padStart(3, "0")}`,
     "result.json",
   );
+}
+
+function chapterSidecarPath(projectId: string, chapterNumber: number, fileName: string): string {
+  return path.join(
+    projectRoot(projectId),
+    "chapters",
+    `chapter-${String(chapterNumber).padStart(3, "0")}`,
+    fileName,
+  );
+}
+
+function roleDrivenEvalUiPath(projectId: string): string {
+  return path.join(projectRoot(projectId), "memory", "eval", "role-driven-eval-report.json");
 }
 
 function resourcePath(projectId: string, key: string): { type: ResourceType; filePath: string } | null {
@@ -112,6 +203,37 @@ function resourcePath(projectId: string, key: string): { type: ResourceType; fil
     return {
       type: "json",
       filePath: chapterResultPath(projectId, Number(resultMatch[1])),
+    };
+  }
+
+  const sidecarMatch = /^chapter-(\d+)-([a-z-]+)$/.exec(key);
+  if (sidecarMatch) {
+    const sidecarKey = sidecarMatch[2];
+    const fileName = sidecarKey ? CHAPTER_SIDECAR_FILE_BY_KEY[sidecarKey] : undefined;
+    if (fileName) {
+      return {
+        type: "json",
+        filePath: chapterSidecarPath(projectId, Number(sidecarMatch[1]), fileName),
+      };
+    }
+  }
+
+  const impactMatch = /^impact-(.+\.json)$/.exec(key);
+  if (impactMatch) {
+    const fileName = impactMatch[1];
+    if (!/^[a-zA-Z0-9_.-]+$/.test(fileName)) {
+      throw new Error("Invalid impact report key");
+    }
+    return {
+      type: "json",
+      filePath: path.join(projectRoot(projectId), "impact", fileName),
+    };
+  }
+
+  if (key === "role-driven-eval-report") {
+    return {
+      type: "json",
+      filePath: roleDrivenEvalUiPath(projectId),
     };
   }
 
@@ -167,6 +289,37 @@ async function approveDetailedOutline(projectId: string, approver: string, note:
   };
   await writeFile(file, `${JSON.stringify(payload, null, 2)}\n`, "utf-8");
   return file;
+}
+
+function normalizePatchFilters(input: unknown): OutlinePatchApplyFilters {
+  if (!input || typeof input !== "object") {
+    return {};
+  }
+  const record = input as Record<string, unknown>;
+  const stringArray = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value.map((item) => String(item).trim()).filter(Boolean)
+      : [];
+  const suggestionTypeArray = (value: unknown): Array<OutlinePatchSuggestion["suggestionType"]> => {
+    const allowed = new Set<OutlinePatchSuggestion["suggestionType"]>([
+      "decision_pressure_alignment",
+      "relationship_shift_alignment",
+      "delayed_consequence_alignment",
+    ]);
+    return stringArray(value).map((item) => {
+      if (!allowed.has(item as OutlinePatchSuggestion["suggestionType"])) {
+        throw new Error(`Unsupported patch suggestion type: ${item}`);
+      }
+      return item as OutlinePatchSuggestion["suggestionType"];
+    });
+  };
+
+  return {
+    onlyBeatIds: stringArray(record.onlyBeatIds),
+    skipBeatIds: stringArray(record.skipBeatIds),
+    onlySuggestionTypes: suggestionTypeArray(record.onlySuggestionTypes),
+    skipSuggestionTypes: suggestionTypeArray(record.skipSuggestionTypes),
+  };
 }
 
 async function isDetailApproved(projectId: string): Promise<boolean> {
@@ -291,6 +444,9 @@ const server = http.createServer(async (req, res) => {
         return jsonResponse(res, 400, { error: "projectId required" });
       }
       const chapters = await listChapterNumbers(projectId);
+      const impactReports = await listImpactReportNames(projectId);
+      const chapterReviewResources = await listChapterReviewResources(projectId, chapters);
+      const roleEvalExists = await pathExists(roleDrivenEvalUiPath(projectId));
       const resources = [
         ...STATIC_RESOURCES.filter((item) => item.type === "text").map((item) => ({
           key: item.key,
@@ -310,6 +466,19 @@ const server = http.createServer(async (req, res) => {
             label: `章节 ${chapterNumber} 结果 JSON`,
           },
         ]),
+        ...chapterReviewResources,
+        ...impactReports.map((fileName) => ({
+          key: `impact-${fileName}`,
+          label: `影响/补丁报告 ${fileName}`,
+        })),
+        ...(roleEvalExists
+          ? [
+              {
+                key: "role-driven-eval-report",
+                label: "角色驱动 Eval 报告 JSON",
+              },
+            ]
+          : []),
       ];
       return jsonResponse(res, 200, {
         projectId,
@@ -386,6 +555,156 @@ const server = http.createServer(async (req, res) => {
         body.note ?? "",
       );
       return jsonResponse(res, 200, { ok: true, file });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/role/inspect-consequences") {
+      const body = (await parseBody(req)) as {
+        projectId?: string;
+        chapterNumber?: number;
+      };
+      if (!body.projectId || !body.chapterNumber || body.chapterNumber < 1) {
+        return jsonResponse(res, 400, { error: "projectId and chapterNumber required" });
+      }
+      const result = await inspectConsequences({
+        projectId: body.projectId,
+        chapterNumber: body.chapterNumber,
+      });
+      return jsonResponse(res, 200, {
+        ok: true,
+        reportPath: result.reportPath,
+        resourceKey: `impact-chapter-${String(body.chapterNumber).padStart(3, "0")}.consequences.json`,
+        consequenceEdges: result.report.consequenceEdges?.edges.length ?? 0,
+        unresolvedDelayedConsequences: result.report.unresolvedDelayedConsequences.length,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/role/suggest-patches") {
+      const body = (await parseBody(req)) as {
+        projectId?: string;
+        fromChapter?: number;
+      };
+      if (!body.projectId || !body.fromChapter || body.fromChapter < 1) {
+        return jsonResponse(res, 400, { error: "projectId and fromChapter required" });
+      }
+      const result = await suggestOutlinePatches({
+        projectId: body.projectId,
+        fromChapter: body.fromChapter,
+      });
+      return jsonResponse(res, 200, {
+        ok: true,
+        reportPath: result.reportPath,
+        resourceKey: `impact-chapter-${String(body.fromChapter).padStart(3, "0")}.outline-patches.json`,
+        suggestions: result.report.suggestions.length,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/role/apply-patches") {
+      const body = (await parseBody(req)) as {
+        projectId?: string;
+        fromChapter?: number;
+        approver?: string;
+        note?: string;
+        filters?: unknown;
+      };
+      if (!body.projectId || !body.fromChapter || body.fromChapter < 1) {
+        return jsonResponse(res, 400, { error: "projectId and fromChapter required" });
+      }
+      const result = await applyOutlinePatches({
+        projectId: body.projectId,
+        fromChapter: body.fromChapter,
+        approver: body.approver,
+        note: body.note,
+        filters: normalizePatchFilters(body.filters),
+      });
+      return jsonResponse(res, 200, {
+        ok: true,
+        reportPath: result.applyReportPath,
+        resourceKey: `impact-chapter-${String(body.fromChapter).padStart(3, "0")}.outline-patches.applied.json`,
+        applied: result.report.applied.length,
+        skipped: result.report.skipped.length,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/role/eval") {
+      const body = (await parseBody(req)) as {
+        projectId?: string;
+      };
+      if (!body.projectId) {
+        return jsonResponse(res, 400, { error: "projectId required" });
+      }
+      const result = await runRoleDrivenEval({
+        projectId: body.projectId,
+      });
+      return jsonResponse(res, 200, {
+        ok: true,
+        reportPath: result.reportPath,
+        resourceKey: "role-driven-eval-report",
+        passedCases: result.report.passedCases,
+        totalCases: result.report.totalCases,
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/thread-board") {
+      const projectId = url.searchParams.get("projectId")?.trim() ?? "";
+      const chapterParam = url.searchParams.get("chapterNumber")?.trim() ?? "";
+      if (!projectId) {
+        return jsonResponse(res, 400, { error: "projectId required" });
+      }
+      const chapterNumber = chapterParam ? Number(chapterParam) : 1;
+      if (!Number.isFinite(chapterNumber) || chapterNumber < 1) {
+        return jsonResponse(res, 400, { error: "chapterNumber must be >= 1" });
+      }
+
+      const inspect = await inspectNarrativeRuntime({ projectId });
+      let board: Record<string, unknown> = {
+        projectId,
+        chapterNumber,
+        contracts: inspect.contracts,
+        threads: inspect.threads,
+      };
+      try {
+        const ranking = await rankNarrativeRuntime({ projectId, chapterNumber });
+        board.ranking = ranking.rankedThreads.map((item) => ({
+          threadId: item.thread.id,
+          threadType: item.thread.threadType,
+          status: item.thread.currentStatus,
+          score: item.score,
+          reasons: item.reasons,
+          warnings: item.warnings,
+          breakdown: item.breakdown,
+        }));
+      } catch (error) {
+        board.rankingError = error instanceof Error ? error.message : String(error);
+      }
+      try {
+        const economy = await computeThreadEconomy({ projectId, chapterNumber });
+        board.economy = economy.report;
+      } catch (error) {
+        board.economyError = error instanceof Error ? error.message : String(error);
+      }
+      try {
+        const evalReport = await runThreadEval({ projectId, chapterNumber });
+        board.eval = {
+          passed: evalReport.passed,
+          schedulerWarnings: evalReport.schedulerWarnings,
+          economyWarnings: evalReport.economy.warnings,
+        };
+      } catch (error) {
+        board.evalError = error instanceof Error ? error.message : String(error);
+      }
+      try {
+        const suggest = await suggestNextThreadMoves({ projectId, chapterNumber });
+        board.suggestNext = suggest;
+      } catch (error) {
+        board.suggestNextError = error instanceof Error ? error.message : String(error);
+      }
+      try {
+        const offscreen = await inspectOffscreenMoves({ projectId, chapterNumber });
+        board.offscreen = offscreen;
+      } catch (error) {
+        board.offscreenError = error instanceof Error ? error.message : String(error);
+      }
+      return jsonResponse(res, 200, board);
     }
 
     return jsonResponse(res, 404, { error: "Not found" });

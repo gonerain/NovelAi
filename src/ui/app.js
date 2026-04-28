@@ -39,6 +39,11 @@ function setBusy(disabled) {
     "formatBtn",
     "saveCharacters",
     "approveBtn",
+    "inspectConsequencesBtn",
+    "suggestPatchesBtn",
+    "applyPatchesBtn",
+    "roleEvalBtn",
+    "loadThreadBoardBtn",
   ];
   ids.forEach((id) => {
     const button = document.getElementById(id);
@@ -87,6 +92,7 @@ function splitPipe(value) {
 
 function resourceTypeFromKey(key) {
   const k = String(key || "").toLowerCase();
+  if (k === "role-driven-eval-report") return "JSON";
   if (k.endsWith("-json") || k.endsWith("-result")) return "JSON";
   if (k.includes("draft") || k.endsWith("-md")) return "MARKDOWN";
   return "TEXT";
@@ -125,6 +131,39 @@ function textToList(value) {
     .split("|")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function csvToList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function rolePatchPayload() {
+  const fromChapter = Number(document.getElementById("roleFromChapter").value);
+  return {
+    projectId: currentProject,
+    fromChapter,
+    chapterNumber: fromChapter,
+    approver: document.getElementById("approver").value.trim() || "manual",
+    note: document.getElementById("approveNote").value.trim(),
+    filters: {
+      onlyBeatIds: csvToList(document.getElementById("roleOnlyBeat").value),
+      skipBeatIds: csvToList(document.getElementById("roleSkipBeat").value),
+      onlySuggestionTypes: csvToList(document.getElementById("roleOnlyType").value),
+      skipSuggestionTypes: csvToList(document.getElementById("roleSkipType").value),
+    },
+  };
+}
+
+async function refreshAndOpenResource(resourceKey) {
+  await refreshProject();
+  if (resourceKey && resources.some((item) => item.key === resourceKey)) {
+    currentKey = resourceKey;
+    renderResources();
+    await loadCurrentResource();
+  }
 }
 
 function createFriendlyField({ label, value, onInput, multiline = false, placeholder = "" }) {
@@ -446,6 +485,192 @@ function tryRenderStructuredEditor(root, content) {
   return false;
 }
 
+function addKv(card, key, value) {
+  const row = document.createElement("div");
+  row.className = "friendly-kv";
+  row.innerHTML = `<span class="friendly-k">${escapeHtml(key)}</span><span>${escapeHtml(primitiveValueToText(value))}</span>`;
+  card.appendChild(row);
+}
+
+function addFriendlyCard(root, title, entries) {
+  const card = document.createElement("div");
+  card.className = "friendly-card";
+  card.innerHTML = `<div class="small" style="margin-bottom:6px;"><strong>${escapeHtml(title)}</strong></div>`;
+  entries.forEach(([key, value]) => addKv(card, key, value));
+  root.appendChild(card);
+  return card;
+}
+
+function renderRoleDrivenDecisionLog(root, data) {
+  root.innerHTML = "";
+  addFriendlyCard(root, `Chapter ${data.chapterNumber ?? "?"} Decision`, [
+    ["beat", data.beatId ?? "-"],
+    ["pressure", data.decisionPressure ?? "-"],
+    ["choice", data.likelyChoice ?? "-"],
+    ["immediate", data.immediateConsequence ?? "-"],
+    ["delayed", data.delayedConsequence ?? "-"],
+    ["relationship", data.relationshipShift ?? "-"],
+    ["theme", data.themeShift ?? "-"],
+  ]);
+  (data.owners || []).forEach((owner) => {
+    addFriendlyCard(root, `Owner: ${owner.name || owner.id}`, [
+      ["desire", owner.coreDesire ?? "-"],
+      ["fear", owner.coreFear ?? "-"],
+      ["false belief", owner.falseBelief ?? "-"],
+      ["evidence", (owner.evidenceSnippets || []).join(" | ") || "-"],
+    ]);
+  });
+  if (data.reviewerAssessment) {
+    addFriendlyCard(root, "Role Review", [
+      ["findings", data.reviewerAssessment.findingCount ?? 0],
+      ["notes", (data.reviewerAssessment.notes || []).join(" | ") || "-"],
+    ]);
+  }
+}
+
+function renderRoleDrivenConsequenceEdges(root, data) {
+  root.innerHTML = "";
+  addFriendlyCard(root, `Chapter ${data.chapterNumber ?? "?"} Consequence Graph`, [
+    ["beat", data.beatId ?? "-"],
+    ["edges", (data.edges || []).length],
+  ]);
+  (data.edges || []).forEach((edge, idx) => {
+    addFriendlyCard(root, `Edge #${idx + 1}: ${edge.label || "edge"}`, [
+      ["source", `${edge.sourceType || "?"}:${edge.sourceId || "?"}`],
+      ["target", `${edge.targetType || "?"}:${edge.targetId || "?"}`],
+      ["detail", edge.detail ?? "-"],
+    ]);
+  });
+}
+
+function renderRelationshipShift(root, data) {
+  root.innerHTML = "";
+  addFriendlyCard(root, `Chapter ${data.chapterNumber ?? "?"} Relationship Shift`, [
+    ["beat", data.beatId ?? "-"],
+    ["shift", data.shift ?? "-"],
+    ["characters", (data.involvedCharacters || []).map((item) => item.name || item.id).join(" | ") || "-"],
+    ["evidence", (data.evidenceSnippets || []).join(" | ") || "-"],
+    ["risks", (data.reviewerRiskNotes || []).join(" | ") || "-"],
+  ]);
+}
+
+function renderConsequenceInspection(root, data) {
+  root.innerHTML = "";
+  addFriendlyCard(root, `Chapter ${data.chapterNumber ?? "?"} Consequence Inspection`, [
+    ["decision beat", data.decisionLog?.beatId ?? "-"],
+    ["pressure", data.decisionLog?.decisionPressure ?? "-"],
+    ["choice", data.decisionLog?.likelyChoice ?? "-"],
+    ["unresolved", (data.unresolvedDelayedConsequences || []).join(" | ") || "-"],
+  ]);
+  (data.delayedConsequenceStatuses || []).forEach((item) => {
+    addFriendlyCard(root, `Delayed Consequence: ${item.status}`, [
+      ["source chapter", item.sourceChapterNumber],
+      ["beat", item.sourceBeatId ?? "-"],
+      ["consequence", item.consequence],
+      ["evidence chapter", item.evidenceChapterNumber ?? "-"],
+      ["evidence", (item.evidence || []).join(" | ") || "-"],
+    ]);
+  });
+}
+
+function renderOutlinePatchReport(root, data) {
+  root.innerHTML = "";
+  addFriendlyCard(root, `Outline Patch Suggestions from Chapter ${data.fromChapter ?? "?"}`, [
+    ["generated", data.generatedAt ?? "-"],
+    ["source status", data.sourceDelayedConsequenceStatus?.status ?? "-"],
+    ["suggestions", (data.suggestions || []).length],
+  ]);
+  (data.suggestions || []).forEach((suggestion, idx) => {
+    addFriendlyCard(root, `Suggestion #${idx + 1}: ${suggestion.beatId}`, [
+      ["type", suggestion.suggestionType],
+      ["reason", suggestion.reason],
+      ["pressure", suggestion.suggestedPatch?.decisionPressure ?? "-"],
+      ["delayed", suggestion.suggestedPatch?.delayedConsequence ?? "-"],
+      ["relationship", suggestion.suggestedPatch?.relationshipShift ?? "-"],
+      ["constraint", suggestion.suggestedPatch?.appendConstraint ?? "-"],
+    ]);
+  });
+}
+
+function renderPatchApplyReport(root, data) {
+  root.innerHTML = "";
+  addFriendlyCard(root, `Applied Outline Patches from Chapter ${data.fromChapter ?? "?"}`, [
+    ["generated", data.generatedAt ?? "-"],
+    ["approver", data.approver ?? "-"],
+    ["note", data.note ?? "-"],
+    ["applied", (data.applied || []).length],
+    ["skipped", (data.skipped || []).length],
+  ]);
+  (data.applied || []).forEach((item, idx) => {
+    addFriendlyCard(root, `Applied #${idx + 1}: ${item.beatId}`, [
+      ["type", item.suggestionType],
+      ["fields", (item.changedFields || []).join(" | ") || "-"],
+      ["constraint", item.appendedConstraint ?? "-"],
+    ]);
+  });
+  (data.skipped || []).forEach((item, idx) => {
+    addFriendlyCard(root, `Skipped #${idx + 1}: ${item.beatId}`, [
+      ["type", item.suggestionType],
+      ["reason", item.reason],
+    ]);
+  });
+}
+
+function renderRoleDrivenEvalReport(root, data) {
+  root.innerHTML = "";
+  addFriendlyCard(root, "Role-Driven Eval", [
+    ["generated", data.generatedAt ?? "-"],
+    ["passed", `${data.passedCases ?? 0}/${data.totalCases ?? 0}`],
+  ]);
+  (data.caseTypeSummaries || []).forEach((summary) => {
+    addFriendlyCard(root, `Case Type: ${summary.caseType}`, [
+      ["passed", `${summary.passedCases}/${summary.totalCases}`],
+      ["failed", summary.failedCases],
+    ]);
+  });
+  (data.caseResults || [])
+    .filter((item) => !item.passed)
+    .slice(0, 12)
+    .forEach((item) => {
+      addFriendlyCard(root, `Failed: ch${item.chapterNumber} ${item.caseType}`, [
+        ["label", item.label],
+        ["evidence", (item.evidence || []).join(" | ") || "-"],
+      ]);
+    });
+}
+
+function tryRenderRoleDrivenView(root, data) {
+  if (/decision-log$/.test(currentKey)) {
+    renderRoleDrivenDecisionLog(root, data);
+    return true;
+  }
+  if (/relationship-shift$/.test(currentKey)) {
+    renderRelationshipShift(root, data);
+    return true;
+  }
+  if (/consequence-edges$/.test(currentKey)) {
+    renderRoleDrivenConsequenceEdges(root, data);
+    return true;
+  }
+  if (/consequences\.json$/.test(currentKey)) {
+    renderConsequenceInspection(root, data);
+    return true;
+  }
+  if (/outline-patches\.json$/.test(currentKey)) {
+    renderOutlinePatchReport(root, data);
+    return true;
+  }
+  if (/outline-patches\.applied\.json$/.test(currentKey)) {
+    renderPatchApplyReport(root, data);
+    return true;
+  }
+  if (/role-driven-eval-report(?:\.json)?$/.test(currentKey)) {
+    renderRoleDrivenEvalReport(root, data);
+    return true;
+  }
+  return false;
+}
+
 function renderFriendlyJsonView(content) {
   const root = document.getElementById("friendlyView");
   if (tryRenderStructuredEditor(root, content)) {
@@ -458,6 +683,10 @@ function renderFriendlyJsonView(content) {
   }
 
   const data = parsed.data;
+  if (tryRenderRoleDrivenView(root, data)) {
+    return;
+  }
+
   if (Array.isArray(data)) {
     const total = data.length;
     const sample = data.slice(0, 12);
@@ -816,6 +1045,220 @@ document.getElementById("approveBtn").addEventListener("click", async () => {
         note: document.getElementById("approveNote").value || "",
       });
       await refreshProject();
+    },
+  );
+});
+
+document.getElementById("inspectConsequencesBtn").addEventListener("click", async () => {
+  runAction(
+    {
+      loadingText: "正在检查角色驱动后果...",
+      errorText: "检查失败",
+    },
+    async () => {
+      const payload = rolePatchPayload();
+      const result = await api("/api/role/inspect-consequences", "POST", payload);
+      await refreshAndOpenResource(result.resourceKey);
+      setMsg(`后果检查完成：unresolved=${result.unresolvedDelayedConsequences}`, "ok");
+    },
+  );
+});
+
+document.getElementById("suggestPatchesBtn").addEventListener("click", async () => {
+  runAction(
+    {
+      loadingText: "正在生成补丁建议...",
+      errorText: "生成补丁建议失败",
+    },
+    async () => {
+      const result = await api("/api/role/suggest-patches", "POST", rolePatchPayload());
+      await refreshAndOpenResource(result.resourceKey);
+      setMsg(`补丁建议已生成：${result.suggestions} 条`, "ok");
+    },
+  );
+});
+
+document.getElementById("applyPatchesBtn").addEventListener("click", async () => {
+  runAction(
+    {
+      loadingText: "正在应用补丁...",
+      errorText: "应用补丁失败",
+    },
+    async () => {
+      const result = await api("/api/role/apply-patches", "POST", rolePatchPayload());
+      await refreshAndOpenResource(result.resourceKey);
+      setMsg(`补丁应用完成：applied=${result.applied}, skipped=${result.skipped}`, "ok");
+    },
+  );
+});
+
+document.getElementById("roleEvalBtn").addEventListener("click", async () => {
+  runAction(
+    {
+      loadingText: "正在运行 Role Eval...",
+      errorText: "Role Eval 失败",
+    },
+    async () => {
+      const result = await api("/api/role/eval", "POST", { projectId: currentProject });
+      await refreshAndOpenResource(result.resourceKey);
+      setMsg(`Role Eval 完成：${result.passedCases}/${result.totalCases} passed`, "ok");
+    },
+  );
+});
+
+function renderThreadBoardWarning(label, items) {
+  if (!items || items.length === 0) {
+    return "";
+  }
+  const lis = items
+    .map(
+      (item) =>
+        `<li><span class="tag">${escapeHtml(item.code)}</span> <strong>${escapeHtml(item.threadId ?? "(global)")}</strong> — ${escapeHtml(item.message ?? "")}</li>`,
+    )
+    .join("");
+  return `<div class="thread-board-block"><h4>${escapeHtml(label)}</h4><ul>${lis}</ul></div>`;
+}
+
+function renderThreadBoardRanking(ranking) {
+  if (!Array.isArray(ranking) || ranking.length === 0) {
+    return "";
+  }
+  const rows = ranking
+    .map(
+      (item) =>
+        `<tr><td>${escapeHtml(item.threadId)}</td><td>${escapeHtml(item.threadType)}</td><td>${escapeHtml(item.status)}</td><td>${escapeHtml(String(item.score))}</td><td>${escapeHtml((item.warnings ?? []).join(" / "))}</td></tr>`,
+    )
+    .join("");
+  return `<div class="thread-board-block"><h4>线程排名</h4><table class="thread-board-table"><thead><tr><th>id</th><th>type</th><th>status</th><th>score</th><th>warnings</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderThreadBoardEconomy(economy) {
+  if (!economy || !Array.isArray(economy.entries)) {
+    return "";
+  }
+  const rows = economy.entries
+    .map(
+      (entry) =>
+        `<tr><td>${escapeHtml(entry.threadId)}</td><td>${escapeHtml(entry.status)}</td><td>${entry.currentAgeChapters}/${entry.expectedSpanChapters}</td><td>${entry.dormantChapters}/${entry.maxDormantChapters}</td><td>${entry.payoffWindowStart}-${entry.payoffWindowEnd}</td><td>${entry.payoffReadiness}</td><td>${entry.readerDebt}</td><td>${escapeHtml((entry.warnings ?? []).join(" / "))}</td></tr>`,
+    )
+    .join("");
+  return `<div class="thread-board-block"><h4>线程经济报告（chapter ${economy.chapterNumber}）</h4><table class="thread-board-table"><thead><tr><th>id</th><th>status</th><th>age</th><th>dormant</th><th>payoff window</th><th>payoffReadiness</th><th>readerDebt</th><th>warnings</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderThreadBoardSuggestion(suggest) {
+  if (!suggest) {
+    return "";
+  }
+  const primary = suggest.primarySuggestion;
+  const blockedItems = (suggest.blockedSuggestions ?? []).map(
+    (item) =>
+      `<li>${escapeHtml(item.threadId)} [${escapeHtml(item.status)}] — ${escapeHtml((item.warnings ?? []).join(" / "))}</li>`,
+  );
+  const supportingItems = (suggest.supportingSuggestions ?? []).map(
+    (item) =>
+      `<li>${escapeHtml(item.threadId)} → ${escapeHtml(item.suggestedMode)} / ${escapeHtml(item.suggestedPayoffType)}: ${escapeHtml(item.suggestedMove)}</li>`,
+  );
+  return `<div class="thread-board-block"><h4>下一步建议</h4>${
+    primary
+      ? `<p><strong>主线建议：</strong>${escapeHtml(primary.threadId)} → 模式 <em>${escapeHtml(primary.suggestedMode)}</em>，回报 <em>${escapeHtml(primary.suggestedPayoffType)}</em>；动作：${escapeHtml(primary.suggestedMove)}${primary.agencyRepairNeeded ? `<br/><span class="tag">agency repair</span> ${escapeHtml(primary.agencyRepairNote ?? "")}` : ""}</p>`
+      : "<p>没有可用的主线建议（所有可选线程都被锁定）。</p>"
+  }${supportingItems.length ? `<p><strong>支线建议：</strong></p><ul>${supportingItems.join("")}</ul>` : ""}${blockedItems.length ? `<p><strong>锁定线程：</strong></p><ul>${blockedItems.join("")}</ul>` : ""}${(suggest.notes ?? []).length ? `<p><strong>备注：</strong></p><ul>${suggest.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join("")}</ul>` : ""}</div>`;
+}
+
+function renderThreadBoardOffscreen(offscreen) {
+  if (!offscreen) {
+    return "";
+  }
+  const findings = offscreen.evalReport?.findings ?? [];
+  const moves = offscreen.moves ?? [];
+  const findingsBlock = findings.length
+    ? `<ul>${findings
+        .map(
+          (finding) =>
+            `<li><span class="tag">${escapeHtml(finding.code)}</span> <strong>${escapeHtml(finding.moveId)}</strong> — ${escapeHtml(finding.message)}</li>`,
+        )
+        .join("")}</ul>`
+    : "<p>没有 findings。</p>";
+  const movesBlock = moves.length
+    ? `<table class="thread-board-table"><thead><tr><th>id</th><th>actor</th><th>type</th><th>visibility</th><th>scheduled</th><th>status</th></tr></thead><tbody>${moves
+        .map(
+          (move) =>
+            `<tr><td>${escapeHtml(move.id)}</td><td>${escapeHtml(move.actorName)} (${escapeHtml(move.actorType)})</td><td>${escapeHtml(move.moveType)}</td><td>${escapeHtml(move.visibility)}</td><td>${move.scheduledChapter}</td><td>${escapeHtml(move.status)}</td></tr>`,
+        )
+        .join("")}</tbody></table>`
+    : "";
+  return `<div class="thread-board-block"><h4>幕后行动（offscreen）</h4>${findingsBlock}${movesBlock}</div>`;
+}
+
+function renderThreadBoardContracts(contracts) {
+  if (!Array.isArray(contracts) || contracts.length === 0) {
+    return "";
+  }
+  const rows = contracts
+    .map(
+      (contract) =>
+        `<tr><td>${escapeHtml(contract.id)}</td><td>${escapeHtml(contract.contractType)}</td><td>${escapeHtml(contract.priority)}</td><td>${escapeHtml(contract.status)}</td><td>${escapeHtml(contract.statement ?? "")}</td></tr>`,
+    )
+    .join("");
+  return `<div class="thread-board-block"><h4>故事契约</h4><table class="thread-board-table"><thead><tr><th>id</th><th>type</th><th>priority</th><th>status</th><th>statement</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function renderThreadBoard(board) {
+  const target = document.getElementById("threadBoardView");
+  if (!board) {
+    target.innerHTML = "";
+    return;
+  }
+  const errorBanners = [];
+  if (board.rankingError) {
+    errorBanners.push(`<p class="status warn">排名失败：${escapeHtml(board.rankingError)}</p>`);
+  }
+  if (board.economyError) {
+    errorBanners.push(`<p class="status warn">经济报告失败：${escapeHtml(board.economyError)}</p>`);
+  }
+  if (board.evalError) {
+    errorBanners.push(`<p class="status warn">线程 Eval 失败：${escapeHtml(board.evalError)}</p>`);
+  }
+  if (board.suggestNextError) {
+    errorBanners.push(`<p class="status warn">下一步建议失败：${escapeHtml(board.suggestNextError)}</p>`);
+  }
+  if (board.offscreenError) {
+    errorBanners.push(`<p class="status warn">幕后行动失败：${escapeHtml(board.offscreenError)}</p>`);
+  }
+  const evalBlock = board.eval
+    ? `<div class="thread-board-block"><h4>Thread Eval</h4><p>passed: <strong>${board.eval.passed ? "yes" : "no"}</strong></p>${renderThreadBoardWarning("Scheduler 警告", (board.eval.schedulerWarnings ?? []).map((entry) => ({ code: entry.warnings.join(" | "), threadId: entry.threadId, message: entry.reasons.join(" | ") })))}${renderThreadBoardWarning("Economy 警告", board.eval.economyWarnings ?? [])}</div>`
+    : "";
+  target.innerHTML = `
+    <div class="thread-board-summary">
+      <p>项目：<strong>${escapeHtml(board.projectId)}</strong> · 章节：<strong>${board.chapterNumber}</strong> · 线程总数：<strong>${(board.threads ?? []).length}</strong> · 契约总数：<strong>${(board.contracts ?? []).length}</strong></p>
+    </div>
+    ${errorBanners.join("")}
+    ${renderThreadBoardRanking(board.ranking)}
+    ${renderThreadBoardEconomy(board.economy)}
+    ${evalBlock}
+    ${renderThreadBoardSuggestion(board.suggestNext)}
+    ${renderThreadBoardOffscreen(board.offscreen)}
+    ${renderThreadBoardContracts(board.contracts)}
+  `;
+}
+
+document.getElementById("loadThreadBoardBtn").addEventListener("click", () => {
+  const chapter = Number(document.getElementById("threadBoardChapter").value);
+  if (!Number.isFinite(chapter) || chapter < 1) {
+    setMsg("Thread Board 需要 chapter >= 1", "warn");
+    return;
+  }
+  runAction(
+    {
+      loadingText: "正在加载线程看板...",
+      successText: "线程看板已加载",
+      errorText: "加载线程看板失败",
+    },
+    async () => {
+      const board = await api(
+        `/api/thread-board?projectId=${encodeURIComponent(currentProject)}&chapterNumber=${chapter}`,
+      );
+      renderThreadBoard(board);
     },
   );
 });

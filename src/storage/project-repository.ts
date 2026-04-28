@@ -10,9 +10,12 @@ import type {
   StoryOutline,
   StoryProject,
   StorySetup,
+  StoryContract,
   StoryMemory,
   StyleBible,
   ThemeBible,
+  NarrativeThread,
+  OffscreenMove,
   WorldFact,
 } from "../domain/index.js";
 import type { ProjectMetadata } from "./types.js";
@@ -57,6 +60,15 @@ export interface ProjectRepository {
   loadStoryMemories(projectId: string): Promise<StoryMemory[]>;
   saveSeedStoryMemories(projectId: string, memories: StoryMemory[]): Promise<void>;
   loadSeedStoryMemories(projectId: string): Promise<StoryMemory[]>;
+
+  saveStoryContracts(projectId: string, contracts: StoryContract[]): Promise<void>;
+  loadStoryContracts(projectId: string): Promise<StoryContract[]>;
+
+  saveNarrativeThreads(projectId: string, threads: NarrativeThread[]): Promise<void>;
+  loadNarrativeThreads(projectId: string): Promise<NarrativeThread[]>;
+
+  saveOffscreenMoves(projectId: string, moves: OffscreenMove[]): Promise<void>;
+  loadOffscreenMoves(projectId: string): Promise<OffscreenMove[]>;
 
   saveChapterPlans(projectId: string, chapterPlans: ChapterPlan[]): Promise<void>;
   loadChapterPlans(projectId: string): Promise<ChapterPlan[]>;

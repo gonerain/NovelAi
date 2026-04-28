@@ -11,6 +11,7 @@ import type {
   BeatOutline,
   ChapterPlan,
   CharacterState,
+  EpisodePacket,
   EntityId,
   GenrePayoffPack,
   StoryMemory,
@@ -31,6 +32,7 @@ export interface ContextBuilderInput {
   chapterArtifacts?: MemoryChapterArtifactSnapshot[];
   semanticOverrideHits?: SemanticRetrievalHit[];
   unresolvedDelayedConsequences?: string[];
+  episodePacket?: EpisodePacket;
   characterStates: CharacterState[];
   storyMemories: StoryMemory[];
   worldFacts: WorldFact[];
@@ -129,6 +131,19 @@ export interface ContextPack {
   chapterSignals: string[];
   retrievalSignals: string[];
   unresolvedDelayedConsequences: string[];
+  episodePacket?: {
+    chapterMode: EpisodePacket["chapterMode"];
+    payoffType: EpisodePacket["payoffType"];
+    primaryThreadId: string;
+    agencyOwnerId: string;
+    nonTransferableChoice: string;
+    tolerableOptions: string[];
+    choiceCost: string;
+    protagonistConsequence: string;
+    readerPayoff: string;
+    endHook: string;
+    doNotResolve: string[];
+  };
 }
 
 function uniqueTrimmed(items: string[], limit: number): string[] {
@@ -400,6 +415,10 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       ...(input.unresolvedDelayedConsequences ?? []).map(
         (item) => `Unresolved delayed consequence: ${item}`,
       ),
+      input.episodePacket ? `Episode mode: ${input.episodePacket.chapterMode}` : "",
+      input.episodePacket ? `Episode payoff type: ${input.episodePacket.payoffType}` : "",
+      input.episodePacket ? `Primary thread: ${input.episodePacket.primaryThreadId}` : "",
+      input.episodePacket ? `Agency requirement: ${input.episodePacket.nonTransferableChoice}` : "",
     ],
     10,
   );
@@ -425,7 +444,17 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       12,
     ),
     chapterExecutionReminders: uniqueTrimmed(
-      [...input.chapterPlan.styleReminders],
+      [
+        ...(input.episodePacket
+          ? [
+              `Episode mode=${input.episodePacket.chapterMode}; payoffType=${input.episodePacket.payoffType}`,
+              `Agency owner=${input.episodePacket.agencyOwnerId}; choice=${input.episodePacket.nonTransferableChoice}`,
+              `Choice cost=${input.episodePacket.choiceCost}`,
+              `Protagonist consequence=${input.episodePacket.protagonistConsequence}`,
+            ]
+          : []),
+        ...input.chapterPlan.styleReminders,
+      ],
       8,
     ),
     themePressure: uniqueTrimmed(
@@ -511,5 +540,20 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       input.unresolvedDelayedConsequences ?? [],
       6,
     ),
+    episodePacket: input.episodePacket
+      ? {
+          chapterMode: input.episodePacket.chapterMode,
+          payoffType: input.episodePacket.payoffType,
+          primaryThreadId: input.episodePacket.primaryThreadId,
+          agencyOwnerId: input.episodePacket.agencyOwnerId,
+          nonTransferableChoice: input.episodePacket.nonTransferableChoice,
+          tolerableOptions: input.episodePacket.tolerableOptions.slice(0, 3),
+          choiceCost: input.episodePacket.choiceCost,
+          protagonistConsequence: input.episodePacket.protagonistConsequence,
+          readerPayoff: input.episodePacket.readerPayoff,
+          endHook: input.episodePacket.endHook,
+          doNotResolve: input.episodePacket.doNotResolve.slice(0, 8),
+        }
+      : undefined,
   };
 }

@@ -27,6 +27,7 @@ Novel AI 是一个 CLI-first 的长篇网文生成引擎原型。
 - 支持 impact / rewrite-plan / invalidate / regenerate
 - 支持章节草稿 sidecar 重写、版本化保存、指定版本 promote
 - 支持 retrieval eval 回归检查
+- 新的长篇叙事引擎路线见 `docs/longform-narrative-engine-roadmap.md`
 
 它已经不是“只会写一章”的 demo，但也还不是完整产品。当前更接近一个 CLI-first 的小说 agent 基座。
 
@@ -159,6 +160,10 @@ data/projects/<project-id>/
 3. 人工审阅
 4. approve detail
 5. 再开始生成章节
+
+注意：`beat-outlines.json` 是粗脚手架，不是章节剧本。
+
+运行时规划应优先服从当前状态、已发生后果、读者承诺和不可逆义务。`arcId`、硬约束、禁写项和终局义务属于硬边界；`beatGoal`、`conflict`、`expectedChange`、`chapterRangeHint` 只提供软方向。当软方向与 active consequence carryover 冲突时，当前因果链优先。
 
 ### 3. Canonical vs Sidecar
 

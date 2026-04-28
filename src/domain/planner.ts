@@ -4,6 +4,7 @@ import type {
   BeatOutline,
   ChapterPlan,
   CharacterState,
+  EpisodePacket,
   EntityId,
   GenrePayoffPack,
   StoryOutline,
@@ -31,6 +32,7 @@ export interface PlannerInput {
   recentConsequences: string[];
   unresolvedDelayedConsequences?: string[];
   recentCommercialHistory?: string[];
+  episodePacket?: EpisodePacket;
 }
 
 export interface PlannerResult {

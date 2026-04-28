@@ -80,17 +80,26 @@ import {
   uniqueStrings,
   upsertChapterPlan,
 } from "./v1-shared.js";
-import { runRewritePlan } from "./v1-impact.js";
+import {
+  applyOutlinePatches,
+  runRewritePlan,
+  suggestOutlinePatches,
+} from "./v1-impact.js";
 import type {
   ChangeImpactRunResult,
   ConsequenceInspectionReport,
   ConsequenceInspectionRunResult,
+  OutlinePatchApplyRunResult,
   OutlinePatchSuggestionRunResult,
+  RoleDrivenEvalRunResult,
   RewritePlanReport,
   RewritePlanRunResult,
 } from "./v1-impact.js";
+import type { OutlinePatchApplyFilters } from "./v1-role-drive.js";
 export {
+  applyOutlinePatches,
   inspectConsequences,
+  runRoleDrivenEval,
   runChangeImpact,
   runRewritePlan,
   suggestOutlinePatches,
@@ -100,6 +109,30 @@ export {
   inspectDraftRewrite,
   listDraftRewriteVersions,
 } from "./v1-draft-rewrites.js";
+export {
+  computeThreadEconomy,
+  inspectNarrativeRuntime,
+  rankNarrativeRuntime,
+  runThreadEval,
+  seedNarrativeRuntime,
+  suggestNextThreadMoves,
+  updateThreadsFromChapter,
+} from "./v1-threads.js";
+export {
+  evalEpisodePacket,
+  inspectEpisodePacket,
+  planEpisodePacket,
+  reviseEpisodePacket,
+} from "./v1-episode.js";
+export {
+  inspectStateDeltas,
+} from "./v1-deltas.js";
+export {
+  applyOffscreenMovesForChapter,
+  inspectOffscreenMoves,
+  scheduleOffscreenMoves,
+} from "./v1-offscreen.js";
+export { runRuntimeEval } from "./v1-runtime-eval.js";
 import {
   chapterConsequenceEdgesPath,
   chapterDecisionLogPath,
@@ -285,6 +318,18 @@ export interface RegenerateFromTargetRunResult {
   plan: RewritePlanReport;
   invalidation?: InvalidateResult;
   generation?: V1RunResult;
+}
+
+export interface RegenerateWithPatchesRunResult {
+  projectId: string;
+  targetId: string;
+  requestedCount: number;
+  patchSourceChapter: number | null;
+  rewritePlan: RewritePlanRunResult;
+  patchSuggestions: OutlinePatchSuggestionRunResult | null;
+  patchApply: OutlinePatchApplyRunResult | null;
+  regeneration: RegenerateFromTargetRunResult | null;
+  skippedReason: string | null;
 }
 
 export interface RewriteChapterRunResult {
@@ -535,6 +580,72 @@ export async function regenerateFromTarget(args: {
     invalidateFromTarget,
     runV1: (input) => runV1(input),
   });
+}
+
+export async function regenerateWithPatches(args: {
+  projectId: string;
+  targetId: string;
+  count?: number;
+  approver?: string;
+  note?: string;
+  filters?: OutlinePatchApplyFilters;
+  withEval?: boolean;
+  strictEval?: boolean;
+}): Promise<RegenerateWithPatchesRunResult> {
+  const count = args.count ?? 1;
+  if (count < 1) {
+    throw new Error("count must be >= 1");
+  }
+
+  const rewritePlan = await runRewritePlan({
+    projectId: args.projectId,
+    targetId: args.targetId,
+  });
+  const patchSourceChapter = rewritePlan.plan.suggestedInvalidationChapter;
+  if (patchSourceChapter === null) {
+    return {
+      projectId: args.projectId,
+      targetId: args.targetId,
+      requestedCount: count,
+      patchSourceChapter,
+      rewritePlan,
+      patchSuggestions: null,
+      patchApply: null,
+      regeneration: null,
+      skippedReason: "No impacted chapter could be mapped to a patch/regeneration source.",
+    };
+  }
+
+  const patchSuggestions = await suggestOutlinePatches({
+    projectId: args.projectId,
+    fromChapter: patchSourceChapter,
+  });
+  const patchApply = await applyOutlinePatches({
+    projectId: args.projectId,
+    fromChapter: patchSourceChapter,
+    approver: args.approver,
+    note: args.note,
+    filters: args.filters,
+  });
+  const regeneration = await regenerateFromTarget({
+    projectId: args.projectId,
+    targetId: args.targetId,
+    count,
+    withEval: args.withEval,
+    strictEval: args.strictEval,
+  });
+
+  return {
+    projectId: args.projectId,
+    targetId: args.targetId,
+    requestedCount: count,
+    patchSourceChapter,
+    rewritePlan,
+    patchSuggestions,
+    patchApply,
+    regeneration,
+    skippedReason: null,
+  };
 }
 
 export async function rewriteChapter(args: {

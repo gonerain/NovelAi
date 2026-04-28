@@ -93,6 +93,50 @@
             <button class="btn-primary" id="approveBtn">通过细纲（Unlock章节生成）</button>
           </div>
 
+          <div class="section">
+            <h3>角色驱动补丁</h3>
+            <p class="small">显式生成、审阅、应用补丁；过滤条件支持逗号分隔。</p>
+            <div class="field">
+              <label for="roleFromChapter">From Chapter</label>
+              <input id="roleFromChapter" type="number" min="1" value="1" />
+            </div>
+            <div class="field">
+              <label for="roleOnlyBeat">只应用 Beat ID</label>
+              <input id="roleOnlyBeat" placeholder="beat-1,beat-2" />
+            </div>
+            <div class="field">
+              <label for="roleSkipBeat">跳过 Beat ID</label>
+              <input id="roleSkipBeat" placeholder="beat-3" />
+            </div>
+            <div class="field">
+              <label for="roleOnlyType">只应用类型</label>
+              <input id="roleOnlyType" placeholder="decision_pressure_alignment" />
+            </div>
+            <div class="field">
+              <label for="roleSkipType">跳过类型</label>
+              <input id="roleSkipType" placeholder="delayed_consequence_alignment" />
+            </div>
+            <div class="btn-row">
+              <button id="inspectConsequencesBtn">检查后果</button>
+              <button id="suggestPatchesBtn">生成补丁建议</button>
+              <button id="applyPatchesBtn" class="btn-primary">应用补丁</button>
+              <button id="roleEvalBtn">运行 Role Eval</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <h3>线程看板（Thread Board）</h3>
+            <p class="small">综合呈现契约、线程、排名、经济报告、幕后行动与下一步建议。</p>
+            <div class="field">
+              <label for="threadBoardChapter">Chapter</label>
+              <input id="threadBoardChapter" type="number" min="1" value="1" />
+            </div>
+            <div class="btn-row">
+              <button id="loadThreadBoardBtn" class="btn-primary">加载线程看板</button>
+            </div>
+            <div id="threadBoardView" class="thread-board"></div>
+          </div>
+
           <div id="msg" class="status" aria-live="polite"></div>
         </div>
       </div>

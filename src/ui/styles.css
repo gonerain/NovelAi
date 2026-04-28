@@ -476,3 +476,11 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+.thread-board { margin-top: 12px; }
+.thread-board-summary { margin: 8px 0 12px; }
+.thread-board-block { margin-bottom: 16px; padding: 10px; border: 1px solid #2a2f37; border-radius: 6px; background: rgba(255, 255, 255, 0.02); }
+.thread-board-block h4 { margin: 0 0 8px; font-size: 13px; color: #b8c0cc; }
+.thread-board-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.thread-board-table th, .thread-board-table td { border-bottom: 1px solid #232831; padding: 4px 6px; text-align: left; vertical-align: top; }
+.thread-board-table th { color: #8a93a3; font-weight: 600; }
