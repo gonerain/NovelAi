@@ -44,6 +44,7 @@ function setBusy(disabled) {
     "applyPatchesBtn",
     "roleEvalBtn",
     "loadThreadBoardBtn",
+    "loadOutlineBtn",
   ];
   ids.forEach((id) => {
     const button = document.getElementById(id);
@@ -1259,6 +1260,340 @@ document.getElementById("loadThreadBoardBtn").addEventListener("click", () => {
         `/api/thread-board?projectId=${encodeURIComponent(currentProject)}&chapterNumber=${chapter}`,
       );
       renderThreadBoard(board);
+    },
+  );
+});
+
+// ============================================================
+// Outline Workbench
+// ============================================================
+
+let outlineState = null;
+let outlineArcFilter = "";
+
+function setOutlineStatus(text) {
+  const el = document.getElementById("outlineStatus");
+  if (el) {
+    el.textContent = text;
+  }
+}
+
+function renderOutlineArcFilter(arcs) {
+  const select = document.getElementById("outlineArcFilter");
+  if (!select) return;
+  select.innerHTML = "";
+  const allOption = document.createElement("option");
+  allOption.value = "";
+  allOption.textContent = `全部分卷（${arcs.length}）`;
+  select.appendChild(allOption);
+  for (const arc of arcs) {
+    const option = document.createElement("option");
+    option.value = arc.id;
+    const range = arc.chapterRangeHint
+      ? `ch${arc.chapterRangeHint.start}-${arc.chapterRangeHint.end}`
+      : "";
+    option.textContent = `${arc.name || arc.id}${range ? " · " + range : ""}`;
+    select.appendChild(option);
+  }
+  select.value = outlineArcFilter;
+  document.getElementById("outlineFilterRow").style.display = "";
+}
+
+function statusChip(beat) {
+  if (beat.allGenerated) return `<span class="chip ok">已生成 ${beat.generatedChapters.join(",")}</span>`;
+  if (beat.partiallyGenerated) {
+    return `<span class="chip warn">部分生成 ${beat.generatedChapters.join(",")}/${beat.expectedChapters.join(",")}</span>`;
+  }
+  if (beat.expectedChapters.length > 0) {
+    return `<span class="chip info">未生成 ch${beat.expectedChapters.join(",")}</span>`;
+  }
+  return `<span class="chip">无章节范围</span>`;
+}
+
+function shapeOptionsHtml(currentShape, allShapes) {
+  const shapes = ["", ...allShapes];
+  return shapes
+    .map((shape) => {
+      const label = shape || "(未设置)";
+      const selected = (currentShape ?? "") === shape ? " selected" : "";
+      return `<option value="${escapeHtml(shape)}"${selected}>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+}
+
+function renderBeatCard(beat, allShapes) {
+  const ann = beat.annotations || {};
+  const annTextureMust = (ann.textureMust || []).join("\n");
+  const annForbidden = (ann.forbiddenInBeat || []).join("\n");
+  const annVoiceCues = (ann.voiceCues || [])
+    .map((vc) => `${vc.characterId}: ${vc.cue}`)
+    .join("\n");
+  const range = beat.chapterRangeHint
+    ? `ch${beat.chapterRangeHint.start}-${beat.chapterRangeHint.end}`
+    : "无范围";
+  const ungenChapters = beat.expectedChapters.filter(
+    (n) => !beat.generatedChapters.includes(n),
+  );
+  const generateButtons = ungenChapters.length
+    ? ungenChapters
+        .map(
+          (n) =>
+            `<button class="generate-chapter-btn" data-chapter="${n}">生成 ch${n}</button>`,
+        )
+        .join("")
+    : `<span class="small">所有章节已生成</span>`;
+  return `
+    <div class="beat-card" data-beat-id="${escapeHtml(beat.beatId)}" data-arc-id="${escapeHtml(beat.arcId)}">
+      <div class="beat-card-head">
+        <div>
+          <strong>#${beat.order} · ${escapeHtml(beat.beatId)}</strong>
+          <span class="small">${escapeHtml(range)}</span>
+        </div>
+        <div class="beat-card-status">${statusChip(beat)}</div>
+      </div>
+      <details>
+        <summary>${escapeHtml((beat.beatGoal || "(no goal)").slice(0, 100))}</summary>
+        <div class="beat-card-body">
+          <div class="field">
+            <label>Beat goal</label>
+            <textarea class="bf bf-beatGoal" rows="2">${escapeHtml(beat.beatGoal || "")}</textarea>
+          </div>
+          <div class="field">
+            <label>Conflict</label>
+            <textarea class="bf bf-conflict" rows="2">${escapeHtml(beat.conflict || "")}</textarea>
+          </div>
+          <div class="field">
+            <label>Expected change</label>
+            <textarea class="bf bf-expectedChange" rows="2">${escapeHtml(beat.expectedChange || "")}</textarea>
+          </div>
+          <div class="field">
+            <label>Decision pressure</label>
+            <textarea class="bf bf-decisionPressure" rows="2">${escapeHtml(beat.decisionPressure || "")}</textarea>
+          </div>
+          <div class="field">
+            <label>Relationship shift</label>
+            <textarea class="bf bf-relationshipShift" rows="2">${escapeHtml(beat.relationshipShift || "")}</textarea>
+          </div>
+          <hr/>
+          <p class="small"><strong>Humanistic 注解</strong>（写作时会被优先注入到 writer prompt）</p>
+          <div class="field">
+            <label>Shape</label>
+            <select class="bf bf-shape">
+              ${shapeOptionsHtml(ann.shape, allShapes)}
+            </select>
+          </div>
+          <div class="field">
+            <label>Subtext（POV 角色在这一段隐藏的东西）</label>
+            <textarea class="bf bf-subtext" rows="2">${escapeHtml(ann.subtext || "")}</textarea>
+          </div>
+          <div class="field">
+            <label>Texture must include（一行一项；具体感官/动作锚点）</label>
+            <textarea class="bf bf-textureMust" rows="3" placeholder="例: 雨夜地铁广播&#10;她注意到他换了衣领">${escapeHtml(annTextureMust)}</textarea>
+          </div>
+          <div class="field">
+            <label>Forbidden in beat（一行一项）</label>
+            <textarea class="bf bf-forbiddenInBeat" rows="2">${escapeHtml(annForbidden)}</textarea>
+          </div>
+          <div class="field">
+            <label>Voice cues（每行：characterId: cue）</label>
+            <textarea class="bf bf-voiceCues" rows="2" placeholder="yejin: 回答关于自己的问题前总停两秒">${escapeHtml(annVoiceCues)}</textarea>
+          </div>
+          <div class="field">
+            <label>Relationship moment（这一 beat 应留下的具体记忆）</label>
+            <textarea class="bf bf-relationshipMoment" rows="2">${escapeHtml(ann.relationshipMoment || "")}</textarea>
+          </div>
+          <div class="field">
+            <label>Continuation hook（带读者进下一章的钩子；可以很安静）</label>
+            <textarea class="bf bf-continuationHook" rows="2">${escapeHtml(ann.continuationHook || "")}</textarea>
+          </div>
+          <div class="field">
+            <label>Texture target chars（章节中文字符目标，可空）</label>
+            <input type="number" min="0" class="bf bf-textureTargetChars" value="${ann.textureTargetChars ?? ""}" />
+          </div>
+          <div class="btn-row">
+            <button class="save-beat-btn btn-primary">保存 beat</button>
+            ${generateButtons}
+          </div>
+          <div class="beat-generation-output small" style="margin-top: 6px;"></div>
+        </div>
+      </details>
+    </div>
+  `;
+}
+
+function renderOutline() {
+  const target = document.getElementById("outlineWorkbench");
+  if (!target) return;
+  if (!outlineState) {
+    target.innerHTML = "";
+    return;
+  }
+  const { arcs, beats, allChapterShapes, detailApproved } = outlineState;
+  const filteredBeats = outlineArcFilter
+    ? beats.filter((b) => b.arcId === outlineArcFilter)
+    : beats;
+  filteredBeats.sort((a, b) => a.order - b.order);
+  const grouped = new Map();
+  for (const beat of filteredBeats) {
+    if (!grouped.has(beat.arcId)) grouped.set(beat.arcId, []);
+    grouped.get(beat.arcId).push(beat);
+  }
+  const arcById = new Map(arcs.map((a) => [a.id, a]));
+  const totalGenerated = beats.filter((b) => b.allGenerated).length;
+  const partial = beats.filter((b) => b.partiallyGenerated).length;
+  const ungen = beats.filter((b) => b.ungenerated).length;
+  const summary = `<div class="outline-summary small">细纲审批: <strong>${detailApproved ? "已通过" : "未通过"}</strong> · 共 ${beats.length} beats（已生成 ${totalGenerated} · 部分 ${partial} · 未生成 ${ungen}）</div>`;
+  const blocks = [];
+  for (const [arcId, beatList] of grouped) {
+    const arc = arcById.get(arcId);
+    const arcLabel = arc ? `${arc.name || arc.id}（${arc.arcGoal || ""}）` : arcId;
+    blocks.push(
+      `<div class="arc-block"><h4>${escapeHtml(arcLabel)}</h4>${beatList.map((b) => renderBeatCard(b, allChapterShapes)).join("")}</div>`,
+    );
+  }
+  target.innerHTML = summary + blocks.join("");
+}
+
+function readBeatCardFields(card) {
+  const get = (cls) => {
+    const el = card.querySelector("." + cls);
+    if (!el) return undefined;
+    return el.value;
+  };
+  const lines = (cls) =>
+    String(get(cls) || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+  const voiceCueLines = lines("bf-voiceCues").map((line) => {
+    const [cid, ...rest] = line.split(":");
+    return { characterId: (cid || "").trim(), cue: rest.join(":").trim() };
+  }).filter((vc) => vc.characterId && vc.cue);
+  const targetCharsRaw = get("bf-textureTargetChars");
+  const targetChars = targetCharsRaw && Number(targetCharsRaw) > 0 ? Number(targetCharsRaw) : undefined;
+  const annotations = {};
+  const shape = get("bf-shape");
+  if (shape) annotations.shape = shape;
+  const subtext = (get("bf-subtext") || "").trim();
+  if (subtext) annotations.subtext = subtext;
+  const textureMust = lines("bf-textureMust");
+  if (textureMust.length) annotations.textureMust = textureMust;
+  const forbiddenInBeat = lines("bf-forbiddenInBeat");
+  if (forbiddenInBeat.length) annotations.forbiddenInBeat = forbiddenInBeat;
+  if (voiceCueLines.length) annotations.voiceCues = voiceCueLines;
+  const relationshipMoment = (get("bf-relationshipMoment") || "").trim();
+  if (relationshipMoment) annotations.relationshipMoment = relationshipMoment;
+  const continuationHook = (get("bf-continuationHook") || "").trim();
+  if (continuationHook) annotations.continuationHook = continuationHook;
+  if (targetChars !== undefined) annotations.textureTargetChars = targetChars;
+  const updates = {
+    beatGoal: (get("bf-beatGoal") || "").trim(),
+    conflict: (get("bf-conflict") || "").trim(),
+    expectedChange: (get("bf-expectedChange") || "").trim(),
+  };
+  const decisionPressure = (get("bf-decisionPressure") || "").trim();
+  if (decisionPressure) updates.decisionPressure = decisionPressure;
+  const relationshipShift = (get("bf-relationshipShift") || "").trim();
+  if (relationshipShift) updates.relationshipShift = relationshipShift;
+  if (Object.keys(annotations).length > 0) {
+    updates.annotations = annotations;
+  }
+  return updates;
+}
+
+async function saveBeat(beatId, card) {
+  const updates = readBeatCardFields(card);
+  await api("/api/outline/beats", "POST", {
+    projectId: currentProject,
+    beatId,
+    updates,
+  });
+}
+
+async function generateChapterFromBeat(card, chapterNumber) {
+  const out = card.querySelector(".beat-generation-output");
+  if (out) out.textContent = `正在生成 ch${chapterNumber}（可能需要 2-5 分钟）...`;
+  const result = await api("/api/outline/generate-chapter", "POST", {
+    projectId: currentProject,
+    chapterNumber,
+  });
+  if (out) {
+    const lines = [];
+    lines.push(`✓ ch${chapterNumber} 生成完成 — ${result.title || "(无标题)"}`);
+    if (result.chapterSummary) lines.push(`摘要: ${result.chapterSummary.slice(0, 200)}`);
+    if (result.nextSituation) lines.push(`下一章准备: ${result.nextSituation.slice(0, 200)}`);
+    out.textContent = lines.join("\n");
+  }
+}
+
+document.addEventListener("click", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+  if (target.classList.contains("save-beat-btn")) {
+    const card = target.closest(".beat-card");
+    if (!card) return;
+    const beatId = card.getAttribute("data-beat-id") || "";
+    runAction(
+      {
+        loadingText: `正在保存 beat ${beatId}...`,
+        successText: `Beat ${beatId} 已保存`,
+        errorText: "保存 beat 失败",
+      },
+      async () => {
+        await saveBeat(beatId, card);
+        await loadOutline();
+      },
+    );
+    return;
+  }
+  if (target.classList.contains("generate-chapter-btn")) {
+    const card = target.closest(".beat-card");
+    if (!card) return;
+    const chapter = Number(target.getAttribute("data-chapter") || "0");
+    if (!chapter) return;
+    runAction(
+      {
+        loadingText: `正在生成章节 ${chapter}（这可能需要几分钟，请保持页面打开）...`,
+        successText: `章节 ${chapter} 已生成`,
+        errorText: "章节生成失败",
+      },
+      async () => {
+        await generateChapterFromBeat(card, chapter);
+        await loadOutline();
+        await refreshProject();
+      },
+    );
+    return;
+  }
+});
+
+document.addEventListener("change", (event) => {
+  const target = event.target;
+  if (target instanceof HTMLSelectElement && target.id === "outlineArcFilter") {
+    outlineArcFilter = target.value;
+    renderOutline();
+  }
+});
+
+async function loadOutline() {
+  const data = await api(
+    `/api/outline/beats?projectId=${encodeURIComponent(currentProject)}`,
+  );
+  outlineState = data;
+  setOutlineStatus(`${data.beats.length} beats · ${data.detailApproved ? "已审批" : "未审批"}`);
+  renderOutlineArcFilter(data.arcs);
+  renderOutline();
+}
+
+document.getElementById("loadOutlineBtn").addEventListener("click", () => {
+  runAction(
+    {
+      loadingText: "正在加载细纲...",
+      successText: "细纲已加载",
+      errorText: "加载细纲失败",
+    },
+    async () => {
+      await loadOutline();
     },
   );
 });

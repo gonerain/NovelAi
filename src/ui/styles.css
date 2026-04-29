@@ -484,3 +484,106 @@ button:disabled {
 .thread-board-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .thread-board-table th, .thread-board-table td { border-bottom: 1px solid #232831; padding: 4px 6px; text-align: left; vertical-align: top; }
 .thread-board-table th { color: #8a93a3; font-weight: 600; }
+
+/* Outline Workbench */
+.outline-workbench {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.outline-summary {
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  border-left: 2px solid #5fc59f;
+}
+.arc-block {
+  border: 1px solid #2a2f37;
+  border-radius: 6px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.arc-block h4 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #b8c0cc;
+}
+.beat-card {
+  border: 1px solid #2a2f37;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.01);
+}
+.beat-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+}
+.beat-card-head .small {
+  margin-left: 8px;
+  color: #8a93a3;
+}
+.beat-card-status {
+  font-size: 11px;
+}
+.beat-card details > summary {
+  padding: 4px 10px 8px;
+  cursor: pointer;
+  color: #b8c0cc;
+  font-size: 12px;
+  outline: none;
+}
+.beat-card details[open] > summary {
+  border-bottom: 1px solid #232831;
+  margin-bottom: 6px;
+}
+.beat-card-body {
+  padding: 6px 10px 10px;
+}
+.beat-card-body .field {
+  margin-bottom: 6px;
+}
+.beat-card-body label {
+  display: block;
+  font-size: 11px;
+  color: #8a93a3;
+  margin-bottom: 2px;
+}
+.beat-card-body textarea,
+.beat-card-body select,
+.beat-card-body input[type="number"] {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.2);
+  color: #eaeaea;
+  border: 1px solid #2a2f37;
+  border-radius: 3px;
+  padding: 4px 6px;
+  font-family: inherit;
+  font-size: 12px;
+}
+.beat-card-body hr {
+  border: none;
+  border-top: 1px solid #232831;
+  margin: 10px 0;
+}
+.beat-generation-output {
+  white-space: pre-wrap;
+  font-family: monospace;
+  font-size: 11px;
+  background: rgba(0, 0, 0, 0.15);
+  padding: 6px 8px;
+  border-radius: 3px;
+  color: #b8c0cc;
+}
+.chip.ok { background: rgba(95, 197, 159, 0.2); color: #5fc59f; }
+.chip.warn { background: rgba(232, 178, 70, 0.2); color: #e8b246; }
+.chip.info { background: rgba(91, 141, 239, 0.2); color: #5b8def; }
+.generate-chapter-btn {
+  background: rgba(91, 141, 239, 0.15);
+  color: #b8c8e8;
+}
+.generate-chapter-btn:hover:not(:disabled) {
+  background: rgba(91, 141, 239, 0.3);
+}

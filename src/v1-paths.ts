@@ -48,6 +48,18 @@ export function offscreenMovesPath(projectId: string): string {
   return path.resolve(process.cwd(), "data", "projects", projectId, "offscreen-moves.json");
 }
 
+export function tasksDirPath(projectId: string): string {
+  return path.resolve(process.cwd(), "data", "projects", projectId, "tasks");
+}
+
+export function taskBriefPath(projectId: string, taskId: string): string {
+  return path.join(tasksDirPath(projectId), `${taskId}.json`);
+}
+
+export function taskDecompositionPath(projectId: string, taskId: string): string {
+  return path.join(tasksDirPath(projectId), `${taskId}.decomposition.json`);
+}
+
 export function threadEconomyReportPath(projectId: string): string {
   return path.resolve(process.cwd(), "data", "projects", projectId, "thread-economy-report.json");
 }

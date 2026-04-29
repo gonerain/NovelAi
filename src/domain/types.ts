@@ -549,6 +549,13 @@ export interface BeatOutline {
     worldAnchor: string[];
     hook: string;
   };
+  /**
+   * Optional task-driven annotations layered on top of the existing beat
+   * shape. Lives in src/domain/beat-annotations.ts. Existing data without
+   * this field stays valid; the writer prompt only elevates these signals
+   * when present.
+   */
+  annotations?: import("./beat-annotations.js").BeatAnnotations;
 }
 
 export interface CastCharacterOutline {

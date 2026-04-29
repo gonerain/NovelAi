@@ -81,6 +81,20 @@
           </div>
 
           <div class="section">
+            <h3>大纲工作台（Outline Workbench）</h3>
+            <p class="small">用细纲驱动写作：浏览每个 beat、添加 humanistic 注解、按 beat 触发章节生成。</p>
+            <div class="btn-row">
+              <button id="loadOutlineBtn" class="btn-primary">加载细纲</button>
+              <span id="outlineStatus" class="chip" style="margin-left: 8px;">未加载</span>
+            </div>
+            <div id="outlineFilterRow" class="field" style="display: none;">
+              <label for="outlineArcFilter">按分卷过滤</label>
+              <select id="outlineArcFilter"></select>
+            </div>
+            <div id="outlineWorkbench" class="outline-workbench"></div>
+          </div>
+
+          <div class="section">
             <h3>细纲审批</h3>
             <div class="field">
               <label for="approver">审批人</label>

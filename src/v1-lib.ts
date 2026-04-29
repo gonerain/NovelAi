@@ -133,6 +133,11 @@ export {
   scheduleOffscreenMoves,
 } from "./v1-offscreen.js";
 export { runRuntimeEval } from "./v1-runtime-eval.js";
+export {
+  inspectTask,
+  listTasks,
+  submitTaskFromFile,
+} from "./v1-task.js";
 import {
   chapterConsequenceEdgesPath,
   chapterDecisionLogPath,

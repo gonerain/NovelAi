@@ -44,6 +44,11 @@ import type {
   OffscreenScheduleRunResult,
 } from "./v1-offscreen.js";
 import type { RuntimeEvalRunResult } from "./v1-runtime-eval.js";
+import type {
+  TaskInspectRunResult,
+  TaskListRunResult,
+  TaskSubmitRunResult,
+} from "./v1-task.js";
 
 function formatSignedNumber(value: number): string {
   if (value > 0) {
@@ -1218,3 +1223,121 @@ export function formatInspectDraftRewriteRunResult(
     `Objective: ${result.objective ?? ""}`,
   ].join("\n");
 }
+
+
+export function formatTaskSubmitRunResult(result: TaskSubmitRunResult): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Task id: ${result.taskId}`);
+  lines.push(`Brief path: ${result.briefPath}`);
+  lines.push(`Title: ${result.brief.title}`);
+  lines.push(`Status: ${result.brief.status}`);
+  lines.push(`Characters: ${result.brief.characters.map((c) => `${c.id}${c.pov ? " (POV)" : ""}`).join(", ")}`);
+  lines.push(`Chapter budget: ${formatChapterBudget(result.brief.chapterBudget)}`);
+  if (result.brief.preferredShapes.length > 0) {
+    lines.push(`Preferred shapes: ${result.brief.preferredShapes.join(", ")}`);
+  }
+  if (result.brief.forbiddenShapes.length > 0) {
+    lines.push(`Forbidden shapes: ${result.brief.forbiddenShapes.join(", ")}`);
+  }
+  lines.push("");
+  lines.push("Intent:");
+  lines.push(`  ${result.brief.intent}`);
+  if (result.warnings.length > 0) {
+    lines.push("");
+    lines.push("Warnings:");
+    for (const w of result.warnings) {
+      lines.push(`- ${w}`);
+    }
+  }
+  return lines.join("\n");
+}
+
+export function formatTaskListRunResult(result: TaskListRunResult): string {
+  const lines: string[] = [];
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Tasks dir: ${result.tasksDir}`);
+  lines.push(`Total tasks: ${result.briefs.length}`);
+  if (result.briefs.length === 0) {
+    lines.push("");
+    lines.push("(no tasks submitted yet)");
+    return lines.join("\n");
+  }
+  lines.push("");
+  for (const brief of result.briefs) {
+    const decomp = result.decompositionByTaskId[brief.id];
+    const decomposed = decomp ? `decomposed (${decomp.chapterCount} chapters)` : "pending";
+    lines.push(`- ${brief.id} [${brief.status}] ${decomposed}`);
+    lines.push(`    title: ${brief.title}`);
+    lines.push(`    submitted: ${brief.submittedAt}`);
+    lines.push(`    characters: ${brief.characters.map((c) => c.id).join(", ")}`);
+  }
+  return lines.join("\n");
+}
+
+export function formatTaskInspectRunResult(result: TaskInspectRunResult): string {
+  const lines: string[] = [];
+  const b = result.brief;
+  lines.push(`Project: ${result.projectId}`);
+  lines.push(`Task id: ${result.taskId}`);
+  lines.push(`Brief path: ${result.briefPath}`);
+  lines.push(`Decomposition path: ${result.decompositionPath}`);
+  lines.push(`Title: ${b.title}`);
+  lines.push(`Status: ${b.status}`);
+  lines.push(`Submitted at: ${b.submittedAt}`);
+  lines.push(`Characters: ${b.characters.map((c) => `${c.id}${c.pov ? " (POV)" : ""}${c.role ? ` - ${c.role}` : ""}`).join(", ")}`);
+  lines.push(`Chapter budget: ${formatChapterBudget(b.chapterBudget)}`);
+  lines.push("");
+  lines.push("Intent:");
+  lines.push(`  ${b.intent}`);
+  if (b.emotionalTarget) {
+    lines.push("");
+    lines.push("Emotional target:");
+    lines.push(`  ${b.emotionalTarget}`);
+  }
+  if (b.constraints.length > 0) {
+    lines.push("");
+    lines.push("Constraints:");
+    for (const c of b.constraints) lines.push(`- ${c}`);
+  }
+  if (b.textureMust.length > 0) {
+    lines.push("");
+    lines.push("Texture must include:");
+    for (const t of b.textureMust) lines.push(`- ${t}`);
+  }
+  if (b.preferredShapes.length > 0) {
+    lines.push("");
+    lines.push(`Preferred shapes: ${b.preferredShapes.join(", ")}`);
+  }
+  if (b.forbiddenShapes.length > 0) {
+    lines.push(`Forbidden shapes: ${b.forbiddenShapes.join(", ")}`);
+  }
+  if (b.pacingHint) {
+    lines.push("");
+    lines.push(`Pacing hint: ${b.pacingHint}`);
+  }
+  if (result.decomposition) {
+    const d = result.decomposition;
+    lines.push("");
+    lines.push("Decomposition:");
+    lines.push(`  Generated at: ${d.generatedAt}`);
+    lines.push(`  Chapter count: ${d.chapterCount}`);
+    lines.push(`  Beats: ${d.beats.length}`);
+    lines.push(`  Reasoning: ${d.reasoning}`);
+  } else {
+    lines.push("");
+    lines.push("Decomposition: (not yet generated)");
+  }
+  return lines.join("\n");
+}
+
+function formatChapterBudget(budget: TaskSubmitRunResult["brief"]["chapterBudget"]): string {
+  if (budget.kind === "exact") {
+    return `${budget.value} chapter${budget.value === 1 ? "" : "s"}`;
+  }
+  if (budget.min !== undefined || budget.max !== undefined) {
+    return `auto (${budget.min ?? "?"}-${budget.max ?? "?"})`;
+  }
+  return "auto";
+}
+

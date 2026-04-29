@@ -16,6 +16,8 @@ import type {
   StoryContract,
   StoryMemory,
   StyleBible,
+  TaskBrief,
+  TaskDecomposition,
   ThemeBible,
   NarrativeThread,
   OffscreenMove,
@@ -186,6 +188,64 @@ export class FileProjectRepository implements ProjectRepository {
 
   async loadOffscreenMoves(projectId: string): Promise<OffscreenMove[]> {
     return (await this.readProjectFile<OffscreenMove[]>(projectId, "offscreen-moves.json")) ?? [];
+  }
+
+  async saveTaskBrief(projectId: string, brief: TaskBrief): Promise<void> {
+    await this.writeProjectFile(projectId, path.join("tasks", `${brief.id}.json`), brief);
+  }
+
+  async loadTaskBrief(projectId: string, taskId: string): Promise<TaskBrief | null> {
+    return this.readProjectFile<TaskBrief>(projectId, path.join("tasks", `${taskId}.json`));
+  }
+
+  async loadAllTaskBriefs(projectId: string): Promise<TaskBrief[]> {
+    const dir = path.join(this.projectDir(projectId), "tasks");
+    let entries: import("node:fs").Dirent[];
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return [];
+      }
+      throw error;
+    }
+    const briefs: TaskBrief[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !entry.name.endsWith(".json")) {
+        continue;
+      }
+      if (entry.name.endsWith(".decomposition.json")) {
+        continue;
+      }
+      const taskId = entry.name.replace(/\.json$/, "");
+      const brief = await this.loadTaskBrief(projectId, taskId);
+      if (brief) {
+        briefs.push(brief);
+      }
+    }
+    briefs.sort((left, right) => left.submittedAt.localeCompare(right.submittedAt));
+    return briefs;
+  }
+
+  async saveTaskDecomposition(
+    projectId: string,
+    decomposition: TaskDecomposition,
+  ): Promise<void> {
+    await this.writeProjectFile(
+      projectId,
+      path.join("tasks", `${decomposition.taskId}.decomposition.json`),
+      decomposition,
+    );
+  }
+
+  async loadTaskDecomposition(
+    projectId: string,
+    taskId: string,
+  ): Promise<TaskDecomposition | null> {
+    return this.readProjectFile<TaskDecomposition>(
+      projectId,
+      path.join("tasks", `${taskId}.decomposition.json`),
+    );
   }
 
   async saveChapterPlans(projectId: string, chapterPlans: ChapterPlan[]): Promise<void> {

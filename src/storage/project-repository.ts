@@ -13,6 +13,8 @@ import type {
   StoryContract,
   StoryMemory,
   StyleBible,
+  TaskBrief,
+  TaskDecomposition,
   ThemeBible,
   NarrativeThread,
   OffscreenMove,
@@ -69,6 +71,12 @@ export interface ProjectRepository {
 
   saveOffscreenMoves(projectId: string, moves: OffscreenMove[]): Promise<void>;
   loadOffscreenMoves(projectId: string): Promise<OffscreenMove[]>;
+
+  saveTaskBrief(projectId: string, brief: TaskBrief): Promise<void>;
+  loadTaskBrief(projectId: string, taskId: string): Promise<TaskBrief | null>;
+  loadAllTaskBriefs(projectId: string): Promise<TaskBrief[]>;
+  saveTaskDecomposition(projectId: string, decomposition: TaskDecomposition): Promise<void>;
+  loadTaskDecomposition(projectId: string, taskId: string): Promise<TaskDecomposition | null>;
 
   saveChapterPlans(projectId: string, chapterPlans: ChapterPlan[]): Promise<void>;
   loadChapterPlans(projectId: string): Promise<ChapterPlan[]>;

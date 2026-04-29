@@ -37,6 +37,9 @@ import {
   formatOffscreenInspectRunResult,
   formatOffscreenApplyRunResult,
   formatRuntimeEvalRunResult,
+  formatTaskSubmitRunResult,
+  formatTaskListRunResult,
+  formatTaskInspectRunResult,
   formatV1RunResult,
 } from "./v1-formatters.js";
 import {
@@ -88,6 +91,9 @@ import {
   inspectOffscreenMoves,
   scheduleOffscreenMoves,
   runRuntimeEval,
+  inspectTask,
+  listTasks,
+  submitTaskFromFile,
 } from "./v1-lib.js";
 
 type CommandName =
@@ -118,6 +124,9 @@ type CommandName =
   | "offscreen:inspect"
   | "offscreen:apply"
   | "runtime:eval"
+  | "task:submit"
+  | "task:list"
+  | "task:inspect"
   | "episode:plan"
   | "episode:inspect"
   | "episode:eval"
@@ -158,6 +167,8 @@ interface ParsedArgs {
   skipSuggestionTypes?: Array<OutlinePatchSuggestion["suggestionType"]>;
   withEval?: boolean;
   strictEval?: boolean;
+  fromFile?: string;
+  taskId?: string;
 }
 
 function readOption(args: Map<string, string>, key: string): string | undefined {
@@ -240,6 +251,8 @@ function parseCommand(argv: string[]): ParsedArgs {
   const strictEvalOption = readOption(flags, "--strict-eval");
   const strictEval = strictEvalOption === "true";
   const withEval = withEvalOption === "true" || strictEval;
+  const fromFileOption = readOption(flags, "--from-file");
+  const taskIdOption = readOption(flags, "--task-id") ?? readOption(flags, "--task");
 
   const command = `${group}:${action}` as CommandName;
   const allowed = new Set<CommandName>([
@@ -270,6 +283,9 @@ function parseCommand(argv: string[]): ParsedArgs {
     "offscreen:inspect",
     "offscreen:apply",
     "runtime:eval",
+    "task:submit",
+    "task:list",
+    "task:inspect",
     "episode:plan",
     "episode:inspect",
     "episode:eval",
@@ -315,6 +331,8 @@ function parseCommand(argv: string[]): ParsedArgs {
     skipSuggestionTypes: parsePatchSuggestionTypes(skipTypeOption),
     withEval,
     strictEval,
+    fromFile: fromFileOption,
+    taskId: taskIdOption,
   };
 }
 
@@ -491,6 +509,9 @@ function usage(): string {
     "  offscreen inspect --project <id> [--chapter <n>]",
     "  offscreen apply --project <id> --chapter <n>",
     "  runtime eval --project <id> [--chapter <n>] [--strict-eval]",
+    "  task submit --project <id> --from-file <path> [--task-id <id>]",
+    "  task list --project <id>",
+    "  task inspect --project <id> --task-id <id>",
     "  episode plan --project <id> --chapter <n>",
     "  episode inspect --project <id> --chapter <n>",
     "  episode eval --project <id> --chapter <n>",
@@ -836,6 +857,37 @@ async function main(): Promise<void> {
       } else if (!result.report.passed) {
         process.exitCode = 2;
       }
+      return;
+    }
+
+    case "task:submit": {
+      if (!parsed.fromFile) {
+        throw new Error("task submit requires --from-file <path>");
+      }
+      const result = await submitTaskFromFile({
+        projectId: parsed.projectId,
+        filePath: parsed.fromFile,
+        taskId: parsed.taskId,
+      });
+      console.log(formatTaskSubmitRunResult(result));
+      return;
+    }
+
+    case "task:list": {
+      const result = await listTasks({ projectId: parsed.projectId });
+      console.log(formatTaskListRunResult(result));
+      return;
+    }
+
+    case "task:inspect": {
+      if (!parsed.taskId) {
+        throw new Error("task inspect requires --task-id <id>");
+      }
+      const result = await inspectTask({
+        projectId: parsed.projectId,
+        taskId: parsed.taskId,
+      });
+      console.log(formatTaskInspectRunResult(result));
       return;
     }
 

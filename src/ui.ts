@@ -18,6 +18,10 @@ import {
   suggestNextThreadMoves,
 } from "./v1-threads.js";
 import { inspectOffscreenMoves } from "./v1-offscreen.js";
+import { FileProjectRepository } from "./storage/index.js";
+import { runV1 } from "./v1-lib.js";
+import type { ArcOutline, BeatOutline } from "./domain/index.js";
+import { ALL_CHAPTER_SHAPES, isChapterShape } from "./domain/index.js";
 
 const PORT = Number(process.env.NOVELAI_UI_PORT ?? 3710);
 const HOST = process.env.NOVELAI_UI_HOST ?? "127.0.0.1";
@@ -705,6 +709,127 @@ const server = http.createServer(async (req, res) => {
         board.offscreenError = error instanceof Error ? error.message : String(error);
       }
       return jsonResponse(res, 200, board);
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/outline/beats") {
+      const projectId = url.searchParams.get("projectId")?.trim() ?? "";
+      if (!projectId) {
+        return jsonResponse(res, 400, { error: "projectId required" });
+      }
+      const repository = new FileProjectRepository();
+      const [arcs, beats] = await Promise.all([
+        repository.loadArcOutlines(projectId),
+        repository.loadBeatOutlines(projectId),
+      ]);
+      const generatedChapters = await listChapterNumbers(projectId);
+      const generatedSet = new Set(generatedChapters);
+      const beatStatus = beats.map((beat) => {
+        const range = beat.chapterRangeHint;
+        const expected = range
+          ? Array.from(
+              { length: Math.max(0, range.end - range.start + 1) },
+              (_, i) => range.start + i,
+            )
+          : [];
+        const generated = expected.filter((n) => generatedSet.has(n));
+        return {
+          beatId: beat.id,
+          arcId: beat.arcId,
+          order: beat.order,
+          chapterRangeHint: range ?? null,
+          expectedChapters: expected,
+          generatedChapters: generated,
+          allGenerated: expected.length > 0 && generated.length === expected.length,
+          partiallyGenerated: generated.length > 0 && generated.length < expected.length,
+          ungenerated: generated.length === 0,
+          beatGoal: beat.beatGoal,
+          conflict: beat.conflict,
+          expectedChange: beat.expectedChange,
+          decisionPressure: beat.decisionPressure ?? null,
+          relationshipShift: beat.relationshipShift ?? null,
+          requiredCharacters: beat.requiredCharacters,
+          annotations: beat.annotations ?? null,
+        };
+      });
+      return jsonResponse(res, 200, {
+        ok: true,
+        projectId,
+        detailApproved: await isDetailApproved(projectId),
+        arcs: arcs.map((arc: ArcOutline) => ({
+          id: arc.id,
+          name: arc.name,
+          arcGoal: arc.arcGoal,
+          beatIds: arc.beatIds,
+          chapterRangeHint: arc.chapterRangeHint ?? null,
+        })),
+        beats: beatStatus,
+        generatedChapters,
+        allChapterShapes: ALL_CHAPTER_SHAPES,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/outline/beats") {
+      const body = (await parseBody(req)) as {
+        projectId?: string;
+        beatId?: string;
+        updates?: Partial<BeatOutline>;
+      };
+      if (!body.projectId || !body.beatId || !body.updates) {
+        return jsonResponse(res, 400, { error: "projectId, beatId, updates required" });
+      }
+      const repository = new FileProjectRepository();
+      const beats = await repository.loadBeatOutlines(body.projectId);
+      const idx = beats.findIndex((b) => b.id === body.beatId);
+      if (idx < 0) {
+        return jsonResponse(res, 404, { error: `beat not found: ${body.beatId}` });
+      }
+      // Validate annotation shape if present.
+      if (body.updates.annotations?.shape && !isChapterShape(body.updates.annotations.shape)) {
+        return jsonResponse(res, 400, {
+          error: `Invalid annotations.shape "${body.updates.annotations.shape}". Allowed: ${ALL_CHAPTER_SHAPES.join(", ")}.`,
+        });
+      }
+      const updated: BeatOutline = {
+        ...beats[idx]!,
+        ...body.updates,
+        // preserve identity and arc binding regardless of payload
+        id: beats[idx]!.id,
+        arcId: beats[idx]!.arcId,
+      };
+      const next = beats.slice();
+      next[idx] = updated;
+      await repository.saveBeatOutlines(body.projectId, next);
+      return jsonResponse(res, 200, { ok: true, beat: updated });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/outline/generate-chapter") {
+      const body = (await parseBody(req)) as {
+        projectId?: string;
+        chapterNumber?: number;
+      };
+      if (!body.projectId || !body.chapterNumber || body.chapterNumber < 1) {
+        return jsonResponse(res, 400, {
+          error: "projectId and chapterNumber (>= 1) required",
+        });
+      }
+      // Synchronous; the browser must keep the connection open.
+      // Chapter generation typically takes 2-5 minutes per chapter.
+      const result = await runV1({
+        projectId: body.projectId,
+        mode: "chapter",
+        chapterNumber: body.chapterNumber,
+      });
+      const artifact = result.artifacts.find((a) => a.chapterNumber === body.chapterNumber);
+      return jsonResponse(res, 200, {
+        ok: true,
+        projectId: body.projectId,
+        chapterNumber: body.chapterNumber,
+        generated: result.generatedChapterNumbers,
+        title: artifact?.writerResult.title ?? null,
+        chapterSummary: artifact?.memoryUpdate.chapterSummary ?? null,
+        nextSituation: artifact?.memoryUpdate.nextSituation ?? null,
+        validationIssues: result.validationIssues,
+      });
     }
 
     return jsonResponse(res, 404, { error: "Not found" });
