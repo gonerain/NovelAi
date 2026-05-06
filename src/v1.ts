@@ -1137,15 +1137,23 @@ async function main(): Promise<void> {
           `Arc: ${result.arcId}`,
           `Beats produced: ${result.beatsProduced}`,
           result.warnings.length > 0 ? `Warnings: ${result.warnings.join("; ")}` : undefined,
-          "",
-          "Next steps:",
-          `  1. Review beats:                node dist/v1.js project inspect --project ${result.projectId}`,
-          `  2. Soft pacing audit (optional): node dist/v1.js beat audit-pacing --project ${result.projectId} --arc ${result.arcId}`,
-          `  3. Regenerate scene plans:       node dist/v1.js outline decompose-chapters --project ${result.projectId} --beat <beatId> --force`,
-          `  4. Invalidate stale chapter plans: node dist/v1.js chapter invalidate-from --project ${result.projectId} --chapter <n>`,
         ]
           .filter((l) => l !== undefined)
           .join("\n"),
+      );
+      // Auto-print reveal schedule so out-of-date dueChapters are visible immediately.
+      const revealsResult = await inspectRevealsForProject({
+        projectId: parsed.projectId,
+      });
+      console.log("\n--- Reveal schedule after regen ---");
+      console.log(formatInspectRevealsResult(revealsResult));
+      console.log(
+        [
+          "Next steps:",
+          `  1. Soft pacing audit (optional): node dist/v1.js beat audit-pacing --project ${result.projectId} --arc ${result.arcId}`,
+          `  2. Regenerate scene plans:       node dist/v1.js outline decompose-chapters --project ${result.projectId} --beat <beatId> --force`,
+          `  3. Invalidate stale chapter plans: node dist/v1.js chapter invalidate-from --project ${result.projectId} --chapter <n>`,
+        ].join("\n"),
       );
       return;
     }

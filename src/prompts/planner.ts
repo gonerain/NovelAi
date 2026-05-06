@@ -52,8 +52,22 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
           const range = shift.expectedChapterRange
             ? ` chapters=${shift.expectedChapterRange.start}-${shift.expectedChapterRange.end}`
             : "";
+          const beforeRange =
+            shift.expectedChapterRange &&
+            typeof chapterNumber === "number" &&
+            chapterNumber < shift.expectedChapterRange.start;
+          const afterRange =
+            shift.expectedChapterRange &&
+            typeof chapterNumber === "number" &&
+            chapterNumber > shift.expectedChapterRange.end;
+          const status = beforeRange
+            ? `  ⛔ FREEZE: chapter ${chapterNumber} is before this shift's range. Protagonist must show oldDefault ONLY. newChoice/costPaid are FORBIDDEN this chapter.`
+            : afterRange
+              ? `  ✔ PAST: this shift already resolved. Do not re-enact it.`
+              : `  ✅ ACTIVE: this is the shift to execute this chapter. Enact pressureTrigger → newChoice → costPaid on-page.`;
           return [
             `Protagonist shift ${index + 1} (${shift.id})${range}:`,
+            status,
             `  oldDefault=${shift.oldDefault}`,
             `  pressureTrigger=${shift.pressureTrigger}`,
             `  newChoice=${shift.newChoice}`,
@@ -213,6 +227,7 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "- Role-driven rule: every major turn should be caused by a character choosing under pressure, not by author convenience alone.",
         "- Arc-shift rule: when this chapter falls inside the expectedChapterRange of an ArcShift, the chapter must enact that shift's pressureTrigger -> newChoice -> costPaid on-page. Do not paraphrase it as theme.",
         "- Arc-shift rule: chapterGoal/plannedOutcome/mustHitConflicts must reference the active ArcShift when one is in range. Do not let the chapter drift back into the protagonist's oldDefault behaviour without an explicit reason.",
+        "- Protagonist arc freeze rule: for any protagonist shift marked ⛔ FREEZE, the protagonist MUST stay in oldDefault behaviour. newChoice, costPaid, and any hint of the upcoming shift are FORBIDDEN. For any shift marked ✅ ACTIVE, chapterGoal/plannedOutcome/mustHitConflicts MUST enact that exact shift. For ✔ PAST shifts, do not re-enact them.",
         "- Supporting-character arc freeze rule: for any supporting character whose shift is marked ⛔ FREEZE in the arc block, that character MUST behave according to their oldDefault ONLY. Writing them as emotionally cracking, expressing doubt, showing vulnerability, or hinting at their future newChoice is FORBIDDEN before their shift range starts. They are a pressure source in their current arc phase, not a sympathetic figure.",
         "- Scene plan rule: when a 'Scene plan for chapter N' block is present, it is authoritative for this chapter's pov, climax owner, climax decision, and end hook. chapterGoal and plannedOutcome must align with the scene plan; mustHitConflicts must include the scene plan's climax as a literal beat. Do not invent a different scene.",
         "- If beat decision fields are present, treat them as proposed causal scaffolding. Preserve hard constraints and irreversible obligations, but adapt stale local wording to current pressure.",
