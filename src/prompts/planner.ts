@@ -60,11 +60,17 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
             shift.expectedChapterRange &&
             typeof chapterNumber === "number" &&
             chapterNumber > shift.expectedChapterRange.end;
+          const rangeLen = shift.expectedChapterRange
+            ? shift.expectedChapterRange.end - shift.expectedChapterRange.start + 1
+            : 0;
+          const remaining = shift.expectedChapterRange
+            ? shift.expectedChapterRange.end - chapterNumber + 1
+            : 0;
           const status = beforeRange
             ? `  ⛔ FREEZE: chapter ${chapterNumber} is before this shift's range. Protagonist must show oldDefault ONLY. newChoice/costPaid are FORBIDDEN this chapter.`
             : afterRange
               ? `  ✔ PAST: this shift already resolved. Do not re-enact it.`
-              : `  ✅ ACTIVE: this is the shift to execute this chapter. Enact pressureTrigger → newChoice → costPaid on-page.`;
+              : `  ✅ IN RANGE: this shift unfolds over ${rangeLen} chapters (${remaining} remaining). Plan this chapter's degree of progress toward the shift. Do NOT complete the full transition unless this is the final chapter of the range.`;
           return [
             `Protagonist shift ${index + 1} (${shift.id})${range}:`,
             status,
@@ -107,6 +113,20 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         input.scenePlan.dueRevealIds?.length
           ? `  dueRevealIds=${input.scenePlan.dueRevealIds.join(" | ")}`
           : "",
+        input.scenePlan.advancingTaskIds?.length
+          ? `  advancingTaskIds=${input.scenePlan.advancingTaskIds.join(" | ")}`
+          : "",
+        input.scenePlan.characterDecisionArc
+          ? [
+              "  characterDecisionArc:",
+              `    desire=${input.scenePlan.characterDecisionArc.desire}`,
+              `    misjudgment=${input.scenePlan.characterDecisionArc.misjudgment}`,
+              `    activeCounter=${input.scenePlan.characterDecisionArc.activeCounter}`,
+              `    forcedChoice=${input.scenePlan.characterDecisionArc.forcedChoice}`,
+              `    costPaid=${input.scenePlan.characterDecisionArc.costPaid}`,
+              `    downstreamImpact=${input.scenePlan.characterDecisionArc.downstreamImpact}`,
+            ].join("\n")
+          : "",
       ]
         .filter(Boolean)
         .join("\n")
@@ -126,9 +146,15 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
               shift.expectedChapterRange &&
               typeof chapterNumber === "number" &&
               chapterNumber < shift.expectedChapterRange.start;
+            const scLen = shift.expectedChapterRange
+              ? shift.expectedChapterRange.end - shift.expectedChapterRange.start + 1
+              : 0;
+            const scRemaining = shift.expectedChapterRange
+              ? shift.expectedChapterRange.end - chapterNumber + 1
+              : 0;
             const freeze = beforeRange
               ? `    ⛔ FREEZE: chapter ${chapterNumber} is before this shift's range. Character MUST show oldDefault ONLY. newChoice/costPaid/any emotional crack from this shift is FORBIDDEN this chapter.`
-              : `    ✅ ACTIVE: enact pressureTrigger → newChoice → costPaid on-page if this is the trigger chapter.`;
+              : `    ✅ IN RANGE: shift unfolds over ${scLen} chapters (${scRemaining} remaining). Advance it proportionally — do NOT complete the full transition unless this is the final chapter of the range.`;
             return [
               `  shift ${index + 1} (${shift.id})${range}:`,
               freeze,
@@ -191,6 +217,17 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         .filter(Boolean)
         .join("; ")
     : undefined;
+  const activeShiftsBlock =
+    input.activeShifts && input.activeShifts.length > 0
+      ? [
+          "## Arc shifts IN RANGE for this chapter (advance proportionally — do not complete early):",
+          ...input.activeShifts.map(
+            (shift) =>
+              `  ${shift.id}: oldDefault=${shift.oldDefault} | pressureTrigger=${shift.pressureTrigger} | newChoice=${shift.newChoice} | costPaid=${shift.costPaid}`,
+          ),
+        ].join("\n")
+      : undefined;
+
   const episodePacketLine = input.episodePacket
     ? [
         `Episode packet: mode=${input.episodePacket.chapterMode}`,
@@ -225,10 +262,11 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
         "- Treat currentSituation and recentConsequences as already happened facts. Do not rewind, replay, or replace them.",
         "- Each new chapter must advance from the current situation, not restage the same cancellation attempt or obstacle in the same form unless the escalation is materially different.",
         "- Role-driven rule: every major turn should be caused by a character choosing under pressure, not by author convenience alone.",
-        "- Arc-shift rule: when this chapter falls inside the expectedChapterRange of an ArcShift, the chapter must enact that shift's pressureTrigger -> newChoice -> costPaid on-page. Do not paraphrase it as theme.",
-        "- Arc-shift rule: chapterGoal/plannedOutcome/mustHitConflicts must reference the active ArcShift when one is in range. Do not let the chapter drift back into the protagonist's oldDefault behaviour without an explicit reason.",
-        "- Protagonist arc freeze rule: for any protagonist shift marked ⛔ FREEZE, the protagonist MUST stay in oldDefault behaviour. newChoice, costPaid, and any hint of the upcoming shift are FORBIDDEN. For any shift marked ✅ ACTIVE, chapterGoal/plannedOutcome/mustHitConflicts MUST enact that exact shift. For ✔ PAST shifts, do not re-enact them.",
+        "- Arc-shift rule: when this chapter falls inside the expectedChapterRange of an ArcShift (✅ IN RANGE), the chapter must advance that shift's pressureTrigger → newChoice direction. The shift unfolds gradually — this chapter moves it forward, it does not complete it in a single step unless this is the final chapter of the range.",
+        "- Arc-shift rule: chapterGoal/plannedOutcome/mustHitConflicts must reference the arc shift that is IN RANGE. Do not let the chapter drift back to the protagonist's oldDefault without an explicit reason.",
+        "- Protagonist arc freeze rule: for any protagonist shift marked ⛔ FREEZE, the protagonist MUST stay in oldDefault behaviour. newChoice, costPaid, and any hint of the upcoming shift are FORBIDDEN. For any shift marked ✅ IN RANGE, advance it proportionally. For ✔ PAST shifts, do not re-enact them.",
         "- Supporting-character arc freeze rule: for any supporting character whose shift is marked ⛔ FREEZE in the arc block, that character MUST behave according to their oldDefault ONLY. Writing them as emotionally cracking, expressing doubt, showing vulnerability, or hinting at their future newChoice is FORBIDDEN before their shift range starts. They are a pressure source in their current arc phase, not a sympathetic figure.",
+        "- Reader contract: when writing commercial.readerContract, copy the exact endHook text from the previous chapter's scene plan into priorEndHook (do not paraphrase). Choose responseMode based on what serves tension best — answer_partially is usually stronger than answer_fully since it advances while keeping a question open. redirect_urgent means this chapter redirects to something more pressing than the prior hook. newContract must be a concrete question the new endHook plants, not a mood or theme statement.",
         "- Scene plan rule: when a 'Scene plan for chapter N' block is present, it is authoritative for this chapter's pov, climax owner, climax decision, and end hook. chapterGoal and plannedOutcome must align with the scene plan; mustHitConflicts must include the scene plan's climax as a literal beat. Do not invent a different scene.",
         "- If beat decision fields are present, treat them as proposed causal scaffolding. Preserve hard constraints and irreversible obligations, but adapt stale local wording to current pressure.",
         "- If unresolved delayed consequences conflict with stale beat wording, the active consequence chain wins. Adapt the local execution while preserving story truth, reader promises, hard arc obligations, and ending obligations.",
@@ -389,6 +427,7 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
           ? "Early-chapter directive: explicitly surface concrete nouns from the premise/outline in this chapter, such as institutions, locations, objects, public procedures, and relationship labels."
           : "Continuation directive: keep world-setting active in scene consequences, do not let it fade into background mood only.",
         arcLine,
+        activeShiftsBlock,
         protagonistArcBlock,
         supportingArcsBlock,
         scenePlanBlock,
@@ -433,6 +472,12 @@ export const plannerResultSchema: PlannerResult = {
       endHook: "string",
       readerPromise: "string",
       paragraphRhythm: "tight",
+      readerContract: {
+        priorEndHook: "string (exact endHook text from prior chapter scene plan)",
+        responseMode: "answer_partially",
+        responseReason: "string",
+        newContract: "string (concrete question the new endHook plants)",
+      },
     },
     mustHitConflicts: ["string"],
     disallowedMoves: ["string"],

@@ -470,6 +470,16 @@ export interface ChapterCommercialPlan {
     | "status_shift";
   rewardTiming?: "early" | "mid" | "late";
   rewardTarget?: string;
+  /**
+   * Auditable chain from prior chapter's endHook to this chapter's response.
+   * priorEndHook is copied verbatim from the previous chapter's scene plan.
+   */
+  readerContract?: {
+    priorEndHook: string;
+    responseMode: "answer_fully" | "answer_partially" | "redirect_urgent" | "withhold";
+    responseReason: string;
+    newContract: string;
+  };
 }
 
 export interface ChapterPlan {
@@ -636,6 +646,29 @@ export interface ChapterScenePlan {
    * ch5-6) must have at least one non-null entry.
    */
   protagonistGain?: string | null;
+  /**
+   * Task IDs from the beat's narrativeTasks pool that this chapter
+   * advances significantly (1-2 max).
+   */
+  advancingTaskIds?: string[];
+  /**
+   * Task IDs from the beat's narrativeTasks pool that are deliberately
+   * NOT advancing this chapter. The scene decomposer states why each
+   * is held when it is behind budget.
+   */
+  heldTaskIds?: string[];
+  /**
+   * Per-chapter character decision arc. Captures the psychological shape
+   * of the chapter's central decision. Grounded in advancingTaskIds.
+   */
+  characterDecisionArc?: {
+    desire: string;          // Concrete thing POV wants (info/leverage/proof/exit)
+    misjudgment: string;     // What POV got wrong about the situation
+    activeCounter: string;   // Who/what actively blocks (named opponent or mechanism)
+    forcedChoice: string;    // The binary imposed by that counter
+    costPaid: string;        // Observable price paid
+    downstreamImpact: string; // How this cost shapes next chapter
+  };
   /** Optional source: where this scene plan came from (LLM / human / fallback). */
   source?: "llm" | "human" | "fallback";
   generatedAt?: string;
@@ -717,6 +750,22 @@ export type RevealMode =
   | "suspected_as_pattern"
   | "named_explicitly";
 
+export type NarrativeTaskDimension =
+  | "main_plot"       // 主线任务
+  | "emotional"       // 情感任务
+  | "relationship"    // 关系任务
+  | "worldbuilding"   // 世界观任务
+  | "foreshadowing";  // 伏笔任务
+
+export interface NarrativeTask {
+  id: string;
+  dimension: NarrativeTaskDimension;
+  description: string;
+  targetChapterBudget: number;
+  chaptersUsed: number;
+  completedInChapter?: number;
+}
+
 export interface RevealItem {
   id: EntityId;
   kind: "world_fact" | "memory" | "character_truth" | "thread_setup" | "relationship_truth";
@@ -791,6 +840,13 @@ export interface BeatOutline {
    * when present.
    */
   annotations?: import("./beat-annotations.js").BeatAnnotations;
+  /**
+   * Multi-dimensional narrative task pool for this beat. Each task has a
+   * chapter budget; the scene decomposer distributes tasks across the beat's
+   * chapter range (1-2 tasks advancing per chapter max). Optional — beats
+   * without tasks fall back to the beatGoal-only decomposition.
+   */
+  narrativeTasks?: NarrativeTask[];
 }
 
 export interface CastCharacterOutline {

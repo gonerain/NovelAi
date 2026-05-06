@@ -309,6 +309,17 @@ export async function generateChapterArtifact(args: {
       `scene plan loaded chapter=${args.chapterNumber} pov=${scenePlanForChapter.pov} location=${scenePlanForChapter.location}`,
     );
   }
+  const allArcShifts = [
+    ...(currentArc?.protagonistArc?.shifts ?? []),
+    ...(currentArc?.supportingCharacterArcs?.flatMap((a) => a.shifts) ?? []),
+  ];
+  const activeShifts = allArcShifts.filter(
+    (shift) =>
+      shift.expectedChapterRange &&
+      args.chapterNumber >= shift.expectedChapterRange.start &&
+      args.chapterNumber <= shift.expectedChapterRange.end,
+  );
+
   const plannerMessages = buildPlannerMessages({
     authorPack: args.base.authorPacks.planner,
     themeBible: args.base.themeBible,
@@ -346,6 +357,7 @@ export async function generateChapterArtifact(args: {
     ),
     episodePacket,
     scenePlan: scenePlanForChapter,
+    activeShifts: activeShifts.length > 0 ? activeShifts : undefined,
   });
 
   args.logStage("chapter", `llm: planner chapter=${args.chapterNumber}`);

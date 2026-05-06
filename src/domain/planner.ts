@@ -1,6 +1,7 @@
 import type { TaskAuthorPack } from "./author-profile-packs.js";
 import type {
   ArcOutline,
+  ArcShift,
   BeatOutline,
   ChapterPlan,
   ChapterScenePlan,
@@ -40,6 +41,13 @@ export interface PlannerInput {
    * scene plan's pov, climax, and end hook.
    */
   scenePlan?: ChapterScenePlan;
+  /**
+   * Arc shifts whose expectedChapterRange includes the current chapter.
+   * Pre-filtered at call site so the planner doesn't need to infer which
+   * shifts are relevant. When present, rendered as a dedicated section
+   * above the full arc shift list.
+   */
+  activeShifts?: ArcShift[];
 }
 
 export interface PlannerResult {

@@ -172,6 +172,15 @@ import {
   chapterRelationshipShiftPath,
 } from "./v1-paths.js";
 import {
+  pickArcForChapterDeterministic,
+  pickBeatForChapterDeterministic,
+} from "./domain/chapter-mapping.js";
+import {
+  buildPlannerMessages,
+  plannerResultSchema,
+} from "./prompts/index.js";
+import { planEpisodePacket as _planEpisodePacket } from "./v1-episode.js";
+import {
   type ConsequenceEdgeArtifact,
   type DecisionLogArtifact,
   type RelationshipShiftArtifact,
@@ -783,6 +792,160 @@ export async function runV1(options: V1RunOptions): Promise<V1RunResult> {
     buildRecentConsequences,
     logStage,
   });
+}
+
+export interface PlanChapterOnlyResult {
+  projectId: string;
+  chapterNumber: number;
+  chapterPlan: ChapterPlan;
+  plannerNotes: string[];
+}
+
+export async function planChapterOnly(args: {
+  projectId: string;
+  chapterNumber: number;
+}): Promise<PlanChapterOnlyResult> {
+  const service = new LlmService();
+  const repository = new FileProjectRepository();
+  const base = await ensureBootstrappedProject(service, repository, args.projectId);
+
+  const allArtifacts = await loadAllChapterArtifacts(repository, args.projectId);
+  const previousArtifact = allArtifacts
+    .filter((a) => a.chapterNumber < args.chapterNumber)
+    .sort((a, b) => b.chapterNumber - a.chapterNumber)[0];
+
+  const currentSituation =
+    previousArtifact?.memoryUpdate.nextSituation ?? base.storySetup.openingSituation;
+
+  const recentConsequences = buildRecentConsequences(
+    previousArtifact ?? null,
+    base.storySetup.currentArcGoal,
+  );
+
+  const unresolvedDelayedConsequences = buildUnresolvedDelayedConsequences({
+    chapterArtifacts: allArtifacts,
+    beatOutlines: base.beatOutlines,
+    currentChapterNumber: args.chapterNumber,
+  });
+
+  const currentArc = pickArcForChapterDeterministic(base.arcOutlines, args.chapterNumber);
+  const currentBeat = pickBeatForChapterDeterministic(
+    base.beatOutlines,
+    currentArc,
+    args.chapterNumber,
+  );
+
+  const episodePlan = await _planEpisodePacket({
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+  });
+
+  const allScenePlans = await repository.loadChapterScenePlans(args.projectId);
+  const scenePlan = allScenePlans.find((p) => p.chapterNumber === args.chapterNumber);
+
+  const allArcShifts = [
+    ...(currentArc?.protagonistArc?.shifts ?? []),
+    ...(currentArc?.supportingCharacterArcs?.flatMap((a) => a.shifts) ?? []),
+  ];
+  const activeShifts = allArcShifts.filter(
+    (shift) =>
+      shift.expectedChapterRange &&
+      args.chapterNumber >= shift.expectedChapterRange.start &&
+      args.chapterNumber <= shift.expectedChapterRange.end,
+  );
+
+  const activeCharacterIds = currentBeat?.requiredCharacters.length
+    ? currentBeat.requiredCharacters
+    : base.storySetup.defaultActiveCharacterIds;
+
+  const plannerMessages = buildPlannerMessages({
+    authorPack: base.authorPacks.planner,
+    themeBible: base.themeBible,
+    styleBible: base.styleBible,
+    genrePayoffPack: base.genrePayoffPack,
+    storyOutline: base.storyOutline,
+    arcOutline: currentArc,
+    beatOutline: currentBeat,
+    arcId: currentArc?.id,
+    chapterNumber: args.chapterNumber,
+    mode: args.chapterNumber === 1 ? "opening" : "continuation",
+    premise: base.storySetup.premise,
+    currentArcGoal: currentArc?.arcGoal ?? base.storySetup.currentArcGoal,
+    currentSituation,
+    activeCharacterIds,
+    activeCharacters: base.characterStates.filter((c) => activeCharacterIds.includes(c.id)),
+    candidateMemoryIds: base.storyMemories
+      .filter((m) => m.status === "active" || m.status === "triggered")
+      .map((m) => m.id)
+      .slice(0, 12),
+    recentConsequences,
+    unresolvedDelayedConsequences,
+    recentCommercialHistory: buildRecentCommercialHistory(base.chapterPlans, args.chapterNumber),
+    episodePacket: episodePlan.packet,
+    scenePlan,
+    activeShifts: activeShifts.length > 0 ? activeShifts : undefined,
+  });
+
+  const plannerResult = await generateStructuredTaskWithRetry({
+    service,
+    task: "planner",
+    messages: plannerMessages,
+    schema: plannerResultSchema,
+    temperature: 0.2,
+    maxTokens: 2800,
+  });
+
+  const planned = plannerResult.object.chapterPlan;
+  const requiredCharacters = uniqueStrings(
+    [...planned.requiredCharacters, ...(currentBeat?.requiredCharacters ?? [])],
+    8,
+  );
+  const requiredMemories = uniqueStrings(
+    [...planned.requiredMemories, ...(currentBeat?.requiredMemories ?? [])],
+    12,
+  );
+  const chapterPlan: ChapterPlan = {
+    ...planned,
+    chapterNumber: args.chapterNumber,
+    arcId: currentArc?.id ?? planned.arcId ?? "arc-1",
+    beatId: currentBeat?.id ?? planned.beatId,
+    requiredCharacters,
+    requiredMemories,
+    searchIntent: normalizeSearchIntent({
+      planned: planned.searchIntent,
+      requiredCharacterIds: requiredCharacters,
+      requiredMemoryIds: requiredMemories,
+      characterStates: base.characterStates,
+      storyMemories: base.storyMemories,
+    }),
+    commercial: normalizeCommercialPlan({
+      planned: planned.commercial,
+      genrePayoffPack: base.genrePayoffPack,
+      chapterNumber: args.chapterNumber,
+      chapterType: planned.chapterType,
+      chapterGoal: planned.chapterGoal,
+      plannedOutcome: planned.plannedOutcome,
+      emotionalGoal: planned.emotionalGoal,
+      currentSituation,
+    }),
+    payoffPatternIds: normalizePayoffPatternIds({
+      plannerIds: planned.payoffPatternIds,
+      currentArc,
+      currentBeat,
+    }),
+  };
+
+  const updatedPlans = upsertChapterPlan(base.chapterPlans, chapterPlan);
+  await repository.saveChapterPlans(args.projectId, updatedPlans);
+
+  logStage("plan-only", `saved chapter=${args.chapterNumber} goal=${chapterPlan.chapterGoal.slice(0, 60)}`);
+
+  return {
+    projectId: args.projectId,
+    chapterNumber: args.chapterNumber,
+    chapterPlan,
+    plannerNotes: plannerResult.object.plannerNotes ?? [],
+  };
 }
 
 export const defaultDemoProjectId = "demo-project";

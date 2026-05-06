@@ -153,6 +153,8 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
         "- Skip characters who only observe; only include micro-shifts for characters who actually change in the chapter.",
         "- propsAndAnchors should list 2-4 concrete sensory or material objects/places that anchor the scene.",
         "- Use the protagonistArc.shifts and supportingCharacterArcs.shifts as the source of truth for which shift each chapter advances. Respect their expectedChapterRange.",
+        "- Narrative task assignment: if the beat provides narrativeTasks, before writing scene content, look at the task pool and each task's chaptersUsed / targetChapterBudget ratio. Select 1-2 tasks to advance this chapter (put their ids in advancingTaskIds). List the remaining tasks in heldTaskIds. A chapter that tries to advance all tasks simultaneously will feel diffuse — use task assignment to force structural variety across the beat's chapters.",
+        "- characterDecisionArc: fill this for every chapter. It is the psychological shape of the central decision, grounded in the advancing tasks. desire = the one concrete thing the POV character is trying to get (info/leverage/proof/exit, never an emotion). misjudgment = what they got wrong before the chapter corrected them. activeCounter = the named person or mechanism that actively blocks (not passive circumstance — something that acts against them). forcedChoice = the binary the counter imposes. costPaid = the observable price. downstreamImpact = how this cost constrains the next chapter.",
         "Per-chapter shape:",
         "  chapterNumber, beatId, arcId, pov, location, propsAndAnchors[2-4],",
         "  openingScene { entryHook, situationOnPage },",
@@ -160,6 +162,8 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
         "  climax { decisionOwnerId, decisionUnderPressure, costPaid },",
         "  endHook,",
         "  protagonistGain (string | null),",
+        "  advancingTaskIds[], heldTaskIds[],",
+        "  characterDecisionArc { desire, misjudgment, activeCounter, forcedChoice, costPaid, downstreamImpact },",
         "  dueRevealIds[],",
         "  characterArcMicroShift: SceneMicroShift[],",
         "  expectedDeltas[]",
@@ -242,6 +246,18 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
           }
           return blocks.length > 0 ? blocks.join("\n\n") : undefined;
         })(),
+        input.beat.narrativeTasks?.length
+          ? `Beat narrative task pool (assign 1-2 advancing per chapter; hold the rest):\n${JSON.stringify(
+              input.beat.narrativeTasks.map((task) => ({
+                id: task.id,
+                dimension: task.dimension,
+                description: task.description,
+                budget: `${task.chaptersUsed}/${task.targetChapterBudget} chapters used`,
+              })),
+              null,
+              2,
+            )}`
+          : undefined,
         input.existingPlans?.length
           ? `Existing scene plans (refine, do not erase fields you keep):\n${JSON.stringify(input.existingPlans, null, 2)}`
           : undefined,
@@ -286,6 +302,16 @@ export const sceneDecomposerResultSchema: SceneDecomposerResult = {
       },
       endHook: "the answer is a date that predates her refusal letter — the correction happened before she even sent it",
       protagonistGain: "she discovers the mechanism can retroactively rewrite timestamps, giving her the first concrete rule to test",
+      advancingTaskIds: ["task_example_main"],
+      heldTaskIds: ["task_example_emotional", "task_example_relationship"],
+      characterDecisionArc: {
+        desire: "she wants the hotel booking record as proof the system altered it after her refusal",
+        misjudgment: "she assumed arguing loudly would force the front desk to acknowledge the discrepancy",
+        activeCounter: "the front desk manager closes the terminal and says 'the system shows no changes, Ms. Lin'",
+        forcedChoice: "stop arguing and pivot to observation (lose the confrontation, gain data) vs keep pushing (maintain stance, leave with nothing)",
+        costPaid: "she gives up the confrontation posture; the manager now reads her silence as acquiescence",
+        downstreamImpact: "next chapter she cannot replay the same confrontation — she must use the anomaly she observed instead of demanding acknowledgment",
+      },
       dueRevealIds: ["reveal_example_01"],
       characterArcMicroShift: [
         {
@@ -321,6 +347,16 @@ export const sceneDecomposerResultSchema: SceneDecomposerResult = {
       },
       endHook: "the encoded message arrives intact — she has found one channel the mechanism cannot yet read",
       protagonistGain: null,
+      advancingTaskIds: ["task_example_emotional"],
+      heldTaskIds: ["task_example_main", "task_example_relationship"],
+      characterDecisionArc: {
+        desire: "she wants to send a message her friend will definitely receive in her own words",
+        misjudgment: "she assumed even minimal context would slip through the mechanism unaltered",
+        activeCounter: "the mechanism reroutes meaning as soon as there is enough relational context to work with",
+        forcedChoice: "encode in an alien format (buy time, miss the window) vs send plaintext again (fast, definitely rerouted)",
+        costPaid: "she encodes too slowly and misses the critical window; her friend does not respond in time",
+        downstreamImpact: "next chapter the encoded channel is her only remaining tool; she cannot fall back on standard communication",
+      },
       dueRevealIds: [],
       characterArcMicroShift: [
         {

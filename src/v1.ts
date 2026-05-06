@@ -92,6 +92,7 @@ import {
   rankNarrativeRuntime,
   runRetrievalEval,
   suggestOutlinePatches,
+  planChapterOnly,
   runV1,
   seedNarrativeRuntime,
   seedRetrievalEvalSet,
@@ -169,7 +170,8 @@ type CommandName =
   | "chapter:inspect-draft-rewrite"
   | "chapter:invalidate-from"
   | "chapter:invalidate-target"
-  | "chapter:reset-all";
+  | "chapter:reset-all"
+  | "chapter:plan-only";
 
 interface ParsedArgs {
   command: CommandName;
@@ -346,6 +348,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     "chapter:invalidate-from",
     "chapter:invalidate-target",
     "chapter:reset-all",
+    "chapter:plan-only",
   ]);
 
   if (!allowed.has(command)) {
@@ -1356,6 +1359,33 @@ async function main(): Promise<void> {
         chapterNumber: 1,
       });
       console.log(formatInvalidateResult(result));
+      return;
+    }
+
+    case "chapter:plan-only": {
+      await assertDetailedOutlineApproved(parsed.projectId);
+      if (!parsed.chapterNumber || parsed.chapterNumber < 1) {
+        throw new Error("chapter plan-only requires --chapter <n>");
+      }
+      const result = await planChapterOnly({
+        projectId: parsed.projectId,
+        chapterNumber: parsed.chapterNumber,
+      });
+      console.log(
+        JSON.stringify(
+          {
+            chapterNumber: result.chapterNumber,
+            chapterGoal: result.chapterPlan.chapterGoal,
+            emotionalGoal: result.chapterPlan.emotionalGoal,
+            plannedOutcome: result.chapterPlan.plannedOutcome,
+            mustHitConflicts: result.chapterPlan.mustHitConflicts,
+            commercial: result.chapterPlan.commercial,
+            plannerNotes: result.plannerNotes,
+          },
+          null,
+          2,
+        ),
+      );
       return;
     }
   }
