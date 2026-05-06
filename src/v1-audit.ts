@@ -353,5 +353,12 @@ export async function regenerateBeatsForArc(
   );
   await repository.saveBeatOutlines(projectId, merged);
 
+  // Sync arc.beatIds to match new beat IDs so arc-outlines stay consistent.
+  const updatedArcOutlines = arcOutlines.map((a) => {
+    if (a.id !== args.arcId) return a;
+    return { ...a, beatIds: newBeats.map((b) => b.id) };
+  });
+  await repository.saveArcOutlines(projectId, updatedArcOutlines);
+
   return { projectId, arcId: args.arcId, beatsProduced: newBeats.length, warnings };
 }
