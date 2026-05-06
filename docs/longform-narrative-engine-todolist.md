@@ -619,3 +619,356 @@ Sprint exit:
 Why:
 
 - this proves the core claim: the system can schedule narrative pressure deterministically before asking the model to write.
+
+## Phase 13: Outline Backbone Repair
+
+Goal:
+
+- close the gap between the runtime layer (Phases 1–12) and the
+  outline / bible layer that feeds it. Audit on `0417` showed
+  characters without `decisionProfile`, arcs without character弧光,
+  beats without scene structure, reveals as free strings, and 章级细
+  纲 as a markdown copy-paste loop.
+
+Priority (highest first):
+
+- 13.A `decisionProfile` required + bootstrap step
+- 13.B per-arc character arcs
+- 13.C `ChapterScenePlan` layer + LLM decomposer
+- 13.D `RevealItem` with `dueChapter`
+- 13.E bind `worldFactIds` to beats
+
+### 13.A — `decisionProfile` Backbone (P0) — DONE
+
+TODO:
+
+- [x] `domain/types.ts`: drop `?` on `CharacterState.decisionProfile`
+- [x] `src/prompts/decision-profile.ts`: new prompt builder
+- [x] add task type `cast_decision_profile` in `llm/config.ts` and
+  `llm/types.ts`
+- [x] `v1-bootstrap.ts`: after character-states ready, fill missing
+  `decisionProfile` per character via the new prompt; failure falls
+  back to validator warnings in `validationIssues` rather than
+  silently leaving empty
+- [x] `validateCharacterDecisionProfileCoverage` reports gaps to
+  `validationIssues`
+- [x] CLI: `bible fill-decision-profiles --project <id>` for back-fill
+  (idempotent: only fills empty/missing unless `force` future-flag)
+- [x] back-fill `0417` — 7/7 characters populated, idempotency
+  verified
+- [x] unit tests for validator (`src/domain/decision-profile.test.ts`,
+  5 cases pass)
+- [ ] update writer/planner prompts: drop "if decisionProfile exists"
+  conditionals (deferred — the conditionals still exist in
+  `formatActiveCharacters` etc. but they are now dead branches; will
+  prune in 13.B together with arc shift surfacing)
+
+Files likely touched:
+
+- `src/domain/types.ts`
+- `src/prompts/decision-profile.ts` (new)
+- `src/prompts/index.ts`
+- `src/llm/registry.ts`
+- `src/v1-bootstrap.ts`
+- `src/v1.ts`
+- `src/v1-shared.ts`
+
+Acceptance:
+
+- `0417/character-states.json` has populated `decisionProfile` for all
+  6 characters
+- `bible fill-decision-profiles` is idempotent
+- validator surfaces gaps loudly when present
+
+### 13.B — Per-Arc Character Arcs (P0) — DONE
+
+> **Hard rule:** every "shift" is a struct
+> `{ oldDefault, pressureTrigger, newChoice, costPaid }`, never a
+> string. See `feedback_arc_shifts_must_be_concrete.md`.
+
+TODO:
+
+- [x] Add domain type `ArcShift = { id, oldDefault, pressureTrigger,
+  newChoice, costPaid, expectedChapterRange? }`
+- [x] Extend `ArcOutline`:
+  - [x] `protagonistArc { startInternalState, endInternalState,
+    falseBeliefChallenged, costAccepted, shifts: ArcShift[] }`
+  - [x] `supportingCharacterArcs: Array<{ characterId, startState,
+    endState, shifts: ArcShift[] }>`
+- [x] Validator (`src/domain/arc-shift.ts`): rejects
+  `ArcShift` with any of the 4 mandatory fields empty, under
+  4 chars, or matching the generic-phrase blocklist. Tests in
+  `src/domain/arc-shift.test.ts`.
+- [x] Prompt (`src/prompts/arc-shift.ts`) +
+  `bible:derive-arc-shifts` CLI for back-fill.
+- [x] Auto-derive arc shifts in `ensureBootstrappedProject` after
+  decisionProfile fill, surfacing remaining issues to
+  `validationIssues`.
+- [x] Surface in planner prompt: `protagonistArcBlock` +
+  `supportingArcsBlock`, plus 2 hard system rules referring to
+  `expectedChapterRange`.
+- [x] Surface in writer prompt via `ContextPack.arcShiftSignals` —
+  in-range shifts only — emitted as an "Arc shift contract this
+  chapter" block.
+- [x] Surface in role-driven reviewer system prompt + user content;
+  reviewer is told to fail when chapter falls back to oldDefault
+  without enacting any in-range shift.
+- [x] Back-fill `0417` arc-outlines: 5/5 arcs populated, idempotency
+  verified. Spot-check: arc_escape's protagonist shifts are
+  scene-bound (婚礼直播 -> 驱车回现场, 当众否认 -> 系统覆盖, 苏映牵
+  连 -> 主动结盟).
+- [ ] update `src/prompts/arc-outline.ts` to ask for these fields
+- [ ] migrator: derive minimal `protagonistArc` from existing
+  `relationshipChanges` + endingTarget for legacy arc-outlines
+- [ ] surface in planner prompt: `currentArcProtagonistShift`,
+  per-character `arcShift` for active characters
+- [ ] surface in writer prompt: "Character arc target this chapter"
+- [ ] role-driven reviewer: `character_arc_drift` finding
+- [ ] CLI: `bible derive-arcs --project <id>` for back-fill
+- [ ] back-fill `0417` arc-outlines
+
+Files likely touched:
+
+- `src/domain/types.ts`
+- `src/prompts/arc-outline.ts`
+- `src/prompts/planner.ts`
+- `src/prompts/writer.ts`
+- `src/prompts/review-role-driven.ts`
+- `src/v1-bootstrap.ts`
+- `src/v1.ts`
+
+Acceptance:
+
+- 0417 arc-outlines have populated `protagonistArc` per arc
+- writer prompt for chapter N references active characters' arc
+  micro-shift line
+- reviewer catches a deliberately written drift draft
+
+### 13.C — `ChapterScenePlan` Layer + Decomposer (P1) — DONE
+
+> **Hard rule:** `characterArcMicroShift` is `SceneMicroShift[]`
+> with the same 4 fields as `ArcShift` plus `arcShiftRef`. No
+> single-string micro-shifts. See
+> `feedback_arc_shifts_must_be_concrete.md`.
+
+TODO:
+
+- [x] new domain type `SceneMicroShift = { characterId,
+  arcShiftRef?, oldDefault, pressureTrigger, newChoice, costPaid }`
+- [x] new domain type `ChapterScenePlan`
+- [x] storage: `data/projects/<id>/scene-plans.json`
+- [x] file-project-repository: load/save scene plans
+- [x] new prompt `src/prompts/scene-decomposer.ts` (per-chapter
+  mode with peer plans for diversity, used for token-budget reasons)
+- [x] new task type `scene_decomposer` in `llm/types.ts` +
+  `llm/config.ts`
+- [x] CLI: `outline decompose-chapters --project <id> [--beat <id>]
+  [--force]`. Iterates chapter-by-chapter inside each beat with
+  peer-plan context to avoid byte-identical scenes.
+- [ ] gate: `outline approve-detail` warns if scene plans missing
+  (deferred — current `approve-detail` does not yet consult scene
+  plans; should warn when chapters in approved range lack a plan)
+- [x] planner: `PlannerInput.scenePlan` + `scenePlanBlock` in user
+  prompt; new system rule "scene plan is authoritative".
+- [x] writer: `ContextPack.scenePlanSignals` + dedicated "Scene
+  plan contract" block; system rule reinforces the plan as
+  authoritative.
+- [x] replace `outline-lib.ts:602-619` template fill with a real
+  scene-plan render. When scene plans cover a beat the markdown
+  prints per-chapter blocks (pov, location, props, opening, mid,
+  climax with structured cost, end hook, dueRevealIds, micro-shift
+  rows). Falls back to a "待补" notice when scene plans are missing.
+- [x] role-driven reviewer: receives scene plan signals + new
+  system rule "scene plan adherence" — fires `author_pushed_turn`
+  / `choice_pressure_missing` when the chapter swaps pov, drops
+  the climax, or replaces the listed decision with a transferable
+  event.
+- [x] tests: `src/domain/scene-plan.test.ts` (5 cases) covering
+  scaffold validator, micro-shift validator, `findIdentical
+  ConsecutiveScenes` template-fill smell detection.
+- [x] back-fill `0417` beat_arc_escape_1: 6/6 chapters generated,
+  6 distinct POVs (protagonist / 陆承砚 / 苏映 / 闻既白 / 谢临川 /
+  周聆), 6 distinct locations, 6 distinct end hooks, structured
+  micro-shifts referring back to `shift_escape_01` etc.
+- [x] regenerated 0417 detailed-outline.md no longer has byte-
+  identical 6 rows per beat — chapters 1–6 each own their own
+  block.
+
+Files likely touched:
+
+- `src/domain/types.ts`
+- `src/domain/index.ts`
+- `src/prompts/scene-decomposer.ts` (new)
+- `src/prompts/planner.ts`
+- `src/prompts/writer.ts`
+- `src/prompts/review-role-driven.ts`
+- `src/storage/file-project-repository.ts`
+- `src/storage/types.ts`
+- `src/v1-paths.ts`
+- `src/v1.ts`
+- `src/v1-chapter-generation.ts`
+- `src/outline-lib.ts`
+
+Acceptance:
+
+- `data/projects/0417/scene-plans.json` exists and has 24 entries
+  for arc_escape (4 beats × 6 chapters)
+- detailed-outline.md no longer has byte-identical rows
+- writer prompt for chapter 1 vs chapter 2 differs in `pov` /
+  `location` / `props` / `endHook` lines
+- planner output for chapter 2 differs structurally from chapter 1
+
+### 13.D — `RevealItem` with `dueChapter` (P1) — DONE
+
+TODO:
+
+- [x] new domain type `RevealItem` `{ id, kind, refId?, text,
+  dueChapter, severityIfMissed, landedInChapter? }`
+- [x] migrate `BeatOutline` additively: keep `revealTargets:
+  string[]`, add `revealItems?: RevealItem[]`. Normalizer
+  `getEffectiveRevealItems(beat)` synthesizes RevealItem[] from
+  `revealTargets` when `revealItems` is missing — IDs are stable
+  (`reveal_<beatId>_<index>_<short-hash>`), severity is inferred
+  from world-rule keywords (机制 / 规则 / X局 / 共鸣者 / 锚点 /
+  见证 / 命名 / 漏洞 / 代价 / 档案 → hard, else soft), dueChapter
+  is spread across the beat's chapter range weighted to the
+  second half so the writer has setup room.
+- [ ] update `beat-outline.ts` prompt to ask for `RevealItem`
+  directly (deferred — synth from `revealTargets` covers existing
+  projects; new projects can keep using the string list and rely on
+  the normalizer until we re-bootstrap them)
+- [x] `ChapterScenePlan.dueRevealIds` now references RevealItem
+  ids; the scene-decomposer prompt is told the typed reveals and
+  forbidden from inventing ids; the clamp filters
+  `dueRevealIds` against `knownRevealIds`.
+- [x] context-builder: new `ContextPack.dueRevealContracts[]`
+  derived from beat reveals filtered by chapterNumber + scene-
+  plan dueRevealIds (deduped). Empty when no contracts.
+- [x] writer prompt: dedicated "Reveal contracts due THIS chapter"
+  block; new system rule "Reveal contract rule" — HARD reveals
+  must surface on-page through scene action / dialogue /
+  observable consequence; SOFT may be deferred.
+- [x] missing-resource reviewer: extended to two failure modes
+  (existing missing-resource + reveal_missed); receives
+  `dueRevealContracts` JSON in user content; rule fires
+  `reveal_missed: <reveal id>` (severity high) when a HARD reveal
+  doesn't enact on-page.
+- [ ] memory_updater: emit `reveal_landed` deltas (DEFERRED —
+  needs reviewer to output explicit `revealsLanded[]` so we can
+  set `RevealItem.landedInChapter`. Not blocking; until then,
+  inspect-reveals shows pending / due_now / overdue but never
+  landed=N).
+- [x] CLI: `outline inspect-reveals --project <id> [--chapter <n>]`
+  prints reveal id, beatId, kind, severity, dueChapter, status
+  (pending / due_now / landed / overdue) with text snippet.
+- [x] tests: 8 cases in `src/domain/reveal-item.test.ts`
+  (`deriveRevealItemsFromStrings` spread, stable ids, severity
+  inference, `getEffectiveRevealItems` fallback / preference,
+  `selectRevealsDueAt` / `selectOverdueReveals`,
+  `describeRevealStatus`).
+- [x] back-fill 0417: 57 reveals derived across all beats.
+- [x] re-decompose `beat_arc_escape_1` so `dueRevealIds` carry
+  RevealItem ids instead of free text. Verified ch1
+  `dueRevealIds=['reveal_beat_arc_escape_1_03_yv70km']`.
+- [x] regenerated 0417 ch1 end-to-end with reveal contract: writer
+  enacted "she's not here but they still wait. Procedure marches
+  on, lights stay lit, MC keeps talking, only waiting for the
+  thing labelled 'bride' to appear at 10 sharp" — that's the soft
+  reveal "world auto-interprets leaving as temporary absence"
+  landed on-page. missing-resource finding count 0 (down from 1
+  in the previous test run — exactly the gap P1-D was meant to
+  close).
+
+Files likely touched:
+
+- `src/domain/types.ts`
+- `src/prompts/beat-outline.ts`
+- `src/prompts/scene-decomposer.ts`
+- `src/prompts/review-fact-consistency.ts` or new reviewer
+- `src/v1-deltas.ts`
+- `src/v1-impact.ts`
+- `src/v1.ts`
+
+Acceptance:
+
+- `outline inspect-reveals --project 0417` lists each reveal with
+  status `pending` / `landed-in-chapter-N` / `missed`
+- a deliberate skip surfaces a `reveal_missed` reviewer finding
+
+### 13.E — World Fact Binding (P2) — DONE
+
+TODO:
+
+- [x] add `BeatOutline.worldFactIds?: EntityId[]` (additive,
+  optional — populated by `bind-world-facts`).
+- [x] new domain helper `domain/world-fact-binding.ts` —
+  `bindRevealItemsToWorldFacts`, `getWorldFactsForBeat`,
+  `describeFactCoverage`, two-stage matcher (title-anchored
+  preferred, description fallback) using bigram + trigram overlap
+  with title-bigram threshold 3, full-corpus bigram threshold 5,
+  trigram threshold 2. Title overlap weighted 3x bigram / 5x
+  trigram; description 1x / 2x.
+- [x] `RevealItem.kind` upgrades from `character_truth` to
+  `world_fact` automatically when binder finds a fact match.
+- [x] context-builder: `dueRevealContracts[]` entries now carry
+  `factTitle` + `factDescription` when refId resolves; writer
+  prompt prints "bound world fact" + description below the reveal
+  line so the writer has the full grounding text on hand.
+- [x] CLI: `bible bind-world-facts --project <id> [--force]` —
+  populates `revealItems` refIds and `beat.worldFactIds`,
+  idempotent unless `--force`.
+- [x] CLI: `bible inspect-fact-coverage --project <id>` — prints
+  per-fact coverage with via=explicit/reveal/both, beat membership,
+  and earliestDueChapter; flags uncovered facts with non-zero exit
+  code so CI can surface story gaps.
+- [x] Bootstrap auto-runs `bindWorldFactsForProject` after arc
+  shifts so new projects get bindings for free.
+- [x] tests: `src/domain/world-fact-binding.test.ts` — 7 cases
+  including the title-vs-description preference regression that
+  caught the binder picking the wrong fact when descriptions
+  shared generic vocabulary like "关系锚点".
+- [x] back-fill 0417: 18 reveals bound after `--force`, 19/20
+  beats now carry explicit worldFactIds, 7/8 facts covered.
+- [x] inspect-fact-coverage on 0417 surfaced one real story gap:
+  `fact_mechanism_002` (修正的主要方式是认知平滑/事件缝合/情绪
+  放大) is currently unreferenced by any beat reveal — exactly the
+  kind of "world setting that exists on paper but never surfaces
+  in narrative" that the inspect command was designed to find.
+- [x] regenerated 0417 ch2 end-to-end: writer prompt's "Reveal
+  contracts due THIS chapter" block now includes the full
+  WorldFact title + description for `fact_anchor_007` bound to
+  the in-range reveals; reviewer 0/0 findings.
+- [ ] arc-outline / beat-outline prompts directly ask LLM for
+  `worldFactIds` (DEFERRED — auto-binder covers existing data;
+  greenfield projects can adopt the explicit-LLM path later).
+
+Files likely touched:
+
+- `src/domain/types.ts`
+- `src/prompts/arc-outline.ts`
+- `src/prompts/beat-outline.ts`
+- `src/prompts/writer.ts`
+- `src/v1.ts`
+
+Acceptance:
+
+- `bible inspect-fact-coverage 0417` reports each world fact's
+  expected arc / beat / chapter window
+
+### Phase 13 Sprint Exit
+
+- `0417/character-states.json` has full `decisionProfile`
+- `0417/arc-outlines.json` has `protagonistArc` for each arc
+- `0417/scene-plans.json` exists with at least the first 24 chapters
+- a regenerated chapter 1 vs chapter 2 prompt is structurally
+  different (different scene shape, not just chapterNumber)
+- `npm test` and `npm run check` pass
+
+### Do Not
+
+- regenerate already-shipped chapters until scene plans exist for
+  them
+- delete `revealTargets: string[]` until 13.D ships normalizers
+- block bootstrap when LLM call for decisionProfile fails — fall
+  back to validator warnings, do not silently leave empty
+- couple Phase 13 work to Phase 11 UI changes; UI can lag

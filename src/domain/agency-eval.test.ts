@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { evaluateEpisodeAgency } from "./agency-eval.js";
+import { emptyDecisionProfile } from "./decision-profile.js";
 import type { CharacterState, EpisodePacket } from "./types.js";
 
 const hero: CharacterState = {
@@ -16,6 +17,7 @@ const hero: CharacterState = {
   emotionalState: [],
   knowledgeBoundary: [],
   secretsKept: [],
+  decisionProfile: emptyDecisionProfile(),
   relationships: [],
 };
 

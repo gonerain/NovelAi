@@ -8,6 +8,7 @@ import type {
   CastCharacterOutline,
   ChapterArtifact,
   ChapterPlan,
+  ChapterScenePlan,
   CharacterState,
   DerivedAuthorProfilePacks,
   StoryOutline,
@@ -254,6 +255,20 @@ export class FileProjectRepository implements ProjectRepository {
 
   async loadChapterPlans(projectId: string): Promise<ChapterPlan[]> {
     return (await this.readProjectFile<ChapterPlan[]>(projectId, "chapter-plans.json")) ?? [];
+  }
+
+  async saveChapterScenePlans(
+    projectId: string,
+    plans: ChapterScenePlan[],
+  ): Promise<void> {
+    await this.writeProjectFile(projectId, "scene-plans.json", plans);
+  }
+
+  async loadChapterScenePlans(projectId: string): Promise<ChapterScenePlan[]> {
+    return (
+      (await this.readProjectFile<ChapterScenePlan[]>(projectId, "scene-plans.json")) ??
+      []
+    );
   }
 
   async saveChapterArtifact(projectId: string, artifact: ChapterArtifact): Promise<void> {

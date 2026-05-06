@@ -272,7 +272,7 @@ export interface CharacterState {
   emotionalState: string[];
   knowledgeBoundary: string[];
   secretsKept: string[];
-  decisionProfile?: CharacterDecisionProfile;
+  decisionProfile: CharacterDecisionProfile;
   relationships: RelationshipState[];
 }
 
@@ -285,6 +285,32 @@ export interface WorldFact {
   visibility: "public" | "private" | "hidden";
   relatedCharacterIds: EntityId[];
   relatedLocationIds: EntityId[];
+  /**
+   * Words and short phrases that the world-builder coined for this
+   * fact, e.g. "关系修正机制", "锚点", "失配者". When a reveal that
+   * binds to this fact is in `experienced_as_anomaly` or
+   * `suspected_as_pattern` mode, the writer must NOT put any of
+   * these labels in the POV character's dialogue or interior
+   * monologue. They are reference vocabulary for the writer, not
+   * the character.
+   *
+   * Optional. When omitted, `extractLabelVocabularyFromTitle()`
+   * provides a heuristic default at read time.
+   */
+  labelVocabulary?: string[];
+  /**
+   * The earliest arc id in which this fact's canonical labels may
+   * appear verbatim in beat revealTargets / constraints / beatGoal.
+   * In beats belonging to arcs that start before this arc, the fact's
+   * labelVocabulary is treated as forbidden vocabulary — the beat
+   * generator must describe the experiential effect instead.
+   *
+   * Compared by arc chapterRangeHint.start: an arc whose start chapter
+   * is less than minRevealArc's start chapter is "before" it.
+   *
+   * Optional. When omitted, no restriction is enforced.
+   */
+  minRevealArc?: string;
 }
 
 export interface StoryMemory {
@@ -496,6 +522,125 @@ export interface GenrePayoffPack {
   };
 }
 
+/**
+ * A single concrete shift in a character's behaviour during an arc.
+ *
+ * IMPORTANT: do not let this degrade into a free-form sentence ("she
+ * goes from passive to active"). Each shift must bind to a specific
+ * scene-shaped choice the character makes:
+ *
+ *  - oldDefault: what their decisionProfile would have produced
+ *  - pressureTrigger: the on-page event that forced a different call
+ *  - newChoice: the concrete action they actually take
+ *  - costPaid: the visible price (info leaked, leverage spent,
+ *    relationship damaged, identity exposed)
+ *
+ * Every entry must populate all four fields. Reviewer fails when any
+ * field is empty or generic.
+ */
+export interface ArcShift {
+  id: EntityId;
+  oldDefault: string;
+  pressureTrigger: string;
+  newChoice: string;
+  costPaid: string;
+  expectedChapterRange?: {
+    start: number;
+    end: number;
+  };
+}
+
+export interface ProtagonistArc {
+  startInternalState: string;
+  endInternalState: string;
+  falseBeliefChallenged: string;
+  costAccepted: string;
+  shifts: ArcShift[];
+}
+
+export interface SupportingCharacterArc {
+  characterId: EntityId;
+  startState: string;
+  endState: string;
+  shifts: ArcShift[];
+}
+
+/**
+ * Per-chapter, per-character micro-shift. Same hard rule as
+ * `ArcShift`: the four observable fields are mandatory; this is not
+ * a one-line slogan. `arcShiftRef` (when set) ties the scene-level
+ * change back to its parent `ArcShift.id`.
+ */
+export interface SceneMicroShift {
+  characterId: EntityId;
+  arcShiftRef?: EntityId;
+  oldDefault: string;
+  pressureTrigger: string;
+  newChoice: string;
+  costPaid: string;
+}
+
+export interface SceneOpening {
+  entryHook: string;
+  situationOnPage: string;
+}
+
+export interface SceneMidConflict {
+  trigger: string;
+  escalation: string;
+}
+
+export interface SceneClimax {
+  decisionOwnerId: EntityId;
+  decisionUnderPressure: string;
+  costPaid: string;
+}
+
+/**
+ * Concrete per-chapter scene plan. Sits between BeatOutline (whole
+ * 6-chapter range) and ChapterPlan (LLM-generated planner output).
+ * Replaces the old detailed-outline.md template-fill, which copied
+ * beat fields into 6 byte-identical rows.
+ *
+ * Each chapter in a beat gets its OWN entry. Two consecutive
+ * chapters must differ structurally (different scene, opening,
+ * climax owner, or end hook) — never byte-identical except for
+ * chapterNumber.
+ */
+export interface ChapterScenePlan {
+  chapterNumber: number;
+  beatId: EntityId;
+  arcId?: EntityId;
+  pov: EntityId;
+  location: string;
+  propsAndAnchors: string[];
+  openingScene: SceneOpening;
+  midConflict: SceneMidConflict;
+  climax: SceneClimax;
+  endHook: string;
+  /** Reveal item ids that must land in this chapter. */
+  dueRevealIds: EntityId[];
+  /**
+   * Per-character micro-shifts that actually happen in this
+   * chapter. Skip characters who only observe.
+   */
+  characterArcMicroShift: SceneMicroShift[];
+  /** Optional state delta hints for downstream extraction. */
+  expectedDeltas?: string[];
+  /**
+   * Concrete observable gain for the protagonist in this chapter.
+   * Must be a real on-page acquisition: information learned, leverage
+   * kept, a loophole observed, an ally protected. NOT an emotion.
+   * Set to null when this chapter intentionally serves the "cost/loss"
+   * side of the two-chapter pairing — but every pair (ch1-2, ch3-4,
+   * ch5-6) must have at least one non-null entry.
+   */
+  protagonistGain?: string | null;
+  /** Optional source: where this scene plan came from (LLM / human / fallback). */
+  source?: "llm" | "human" | "fallback";
+  generatedAt?: string;
+}
+
 export interface ArcOutline {
   id: EntityId;
   storyOutlineId?: EntityId;
@@ -517,6 +662,75 @@ export interface ArcOutline {
     start: number;
     end: number;
   };
+  /**
+   * Internal-state arc for the protagonist during this arc. Optional
+   * during the migration window — projects bootstrapped before
+   * Phase 13.B will not have it. New projects must populate it.
+   */
+  protagonistArc?: ProtagonistArc;
+  /**
+   * Per-supporting-character arcs for characters that actually grow
+   * during this arc. Do NOT pad with placeholder entries for
+   * characters who only observe.
+   */
+  supportingCharacterArcs?: SupportingCharacterArc[];
+}
+
+/**
+ * One reveal that the story owes the reader by a specific chapter.
+ *
+ * Existing projects only have `BeatOutline.revealTargets: string[]`,
+ * which is a free-text wishlist that nothing enforces. `RevealItem`
+ * upgrades each entry into a typed promise with a hard due chapter
+ * and a severity. Reviewer fails when a `severityIfMissed === "hard"`
+ * reveal is past its dueChapter without landing.
+ *
+ * `id` should be stable across regenerations so `dueRevealIds` on a
+ * `ChapterScenePlan` can refer back. `text` is the natural-language
+ * payload the writer must enact on-page; `refId` (optional) ties it
+ * to a `WorldFact` / `StoryMemory` / `NarrativeThread` / character
+ * id when the reveal is actually about an existing artifact.
+ */
+/**
+ * How a reveal is meant to land on-page at its dueChapter.
+ *
+ *   experienced_as_anomaly — POV character feels something is wrong
+ *     but cannot name the rule. Reads anomalies through their
+ *     existing frame (gaslighting, family pressure, coincidence,
+ *     own perception failing). Forbidden to articulate the world-
+ *     fact in dialogue or interior monologue.
+ *
+ *   suspected_as_pattern — POV character has noticed enough
+ *     anomalies to suspect a pattern, but still does not have the
+ *     world-builder's terminology. May coin a private placeholder
+ *     name; may NOT use the canonical labelVocabulary.
+ *
+ *   named_explicitly — the rule is openly discussed; canonical
+ *     labelVocabulary is now allowed in dialogue / monologue.
+ *
+ * Default for synthesized RevealItems is `experienced_as_anomaly`.
+ * Use `bible escalate-reveal-modes` (TODO) to lift later-arc
+ * reveals automatically.
+ */
+export type RevealMode =
+  | "experienced_as_anomaly"
+  | "suspected_as_pattern"
+  | "named_explicitly";
+
+export interface RevealItem {
+  id: EntityId;
+  kind: "world_fact" | "memory" | "character_truth" | "thread_setup" | "relationship_truth";
+  refId?: EntityId;
+  text: string;
+  dueChapter: number;
+  severityIfMissed: "soft" | "hard";
+  /**
+   * How the reveal should land at this dueChapter. When omitted,
+   * `experienced_as_anomaly` is assumed for synthesized reveals.
+   */
+  revealMode?: RevealMode;
+  /** Set after the reviewer confirms the reveal landed on-page. */
+  landedInChapter?: number;
 }
 
 export interface BeatOutline {
@@ -534,6 +748,27 @@ export interface BeatOutline {
   requiredMemories: EntityId[];
   payoffPatternIds?: EntityId[];
   revealTargets: string[];
+  /**
+   * Typed reveal contracts. Optional during the migration window:
+   * legacy beats may have only `revealTargets: string[]`. Use
+   * `getEffectiveRevealItems(beat)` from `domain/reveal-item.ts` to
+   * read; that helper synthesizes a soft RevealItem[] from
+   * `revealTargets` when this field is missing.
+   */
+  revealItems?: RevealItem[];
+  /**
+   * WorldFact ids this beat owns — i.e. facts that should surface
+   * (or be set up to surface) somewhere in the beat's chapter
+   * range. Used to drive `bible inspect-fact-coverage` and to give
+   * the writer the full WorldFact description when a `world_fact`
+   * RevealItem points at a known fact.
+   *
+   * Optional during migration. `getWorldFactsForBeat(beat, facts)`
+   * in `domain/world-fact-binding.ts` is the canonical reader; it
+   * unions explicit `worldFactIds` with reveals carrying
+   * `kind === "world_fact"` and a resolvable `refId`.
+   */
+  worldFactIds?: EntityId[];
   constraints: string[];
   decisionOwnerIds?: EntityId[];
   decisionPressure?: string;

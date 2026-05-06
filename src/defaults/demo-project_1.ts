@@ -10,6 +10,7 @@ import type {
   ThemeBible,
   WorldFact,
 } from "../domain/index.js";
+import { emptyDecisionProfile } from "../domain/decision-profile.js";
 
 export const demoProjectId = "demo-project";
 export const demoProjectTitle = "雨幕共鸣";
@@ -278,6 +279,7 @@ export const demoCharacterStates: CharacterState[] = [
     emotionalState: ["平静", "紧绷", "疲惫"],
     knowledgeBoundary: ["知道雨共鸣机制", "知道生死共鸣存在代价"],
     secretsKept: ["生死共鸣能力", "共享生命计划细节"],
+    decisionProfile: emptyDecisionProfile(),
     relationships: [
       {
         targetCharacterId: "qingxin",
@@ -314,6 +316,7 @@ export const demoCharacterStates: CharacterState[] = [
     emotionalState: ["明亮", "不安", "依赖"],
     knowledgeBoundary: ["不知道生死共鸣", "不知道X局调查全貌"],
     secretsKept: ["对雨璃状态异常已有隐约察觉"],
+    decisionProfile: emptyDecisionProfile(),
     relationships: [
       {
         targetCharacterId: "yuli",
@@ -340,6 +343,7 @@ export const demoCharacterStates: CharacterState[] = [
     emotionalState: ["冷淡", "压抑", "动摇"],
     knowledgeBoundary: ["知道组织规则", "不知道雨璃生死共鸣代价细节"],
     secretsKept: ["对命运论的消极依赖", "对雨璃产生非任务性关注"],
+    decisionProfile: emptyDecisionProfile(),
     relationships: [
       {
         targetCharacterId: "ling",
@@ -376,6 +380,7 @@ export const demoCharacterStates: CharacterState[] = [
     emotionalState: ["亢奋", "紧张", "好奇"],
     knowledgeBoundary: ["知道诺兰过去片段", "不知道雨璃家庭真实处境"],
     secretsKept: ["受退休父母嘱托要把诺兰带回组织中心"],
+    decisionProfile: emptyDecisionProfile(),
     relationships: [
       {
         targetCharacterId: "nolan",

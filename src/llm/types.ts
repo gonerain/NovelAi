@@ -58,6 +58,9 @@ export type TaskName =
   | "author_interview"
   | "story_outline"
   | "cast_expansion"
+  | "cast_decision_profile"
+  | "arc_shift_derive"
+  | "scene_decomposer"
   | "arc_outline"
   | "beat_outline"
   | "planner"
@@ -68,4 +71,6 @@ export type TaskName =
   | "review_fact"
   | "review_role_drive"
   | "review_voice"
-  | "memory_updater";
+  | "memory_updater"
+  | "chapter_plan_audit"
+  | "beat_pacing_audit";

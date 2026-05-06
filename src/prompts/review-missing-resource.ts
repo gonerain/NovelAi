@@ -65,11 +65,14 @@ export function buildMissingResourceReviewMessages(
       role: "system",
       content: [
         "You are a missing critical resource reviewer.",
-        "Check only one failure mode: whether the draft ignores a critical resource, promise, suspense hook, or long-arc thread that should have been considered in this scene.",
+        "Check two failure modes:",
+        "  1. The draft ignores a critical resource, promise, suspense hook, or long-arc thread that should have been considered in this scene.",
+        "  2. The draft fails to land a Reveal contract due this chapter.",
         "Do not review prose quality, pacing, or style.",
         "If the draft does not use a resource but clearly explains why it is not used, do not report it.",
         "Only report a finding when the resource should have been considered and the draft neither handles nor explains it.",
-        "Return at most 3 findings. If there are no issues, return an empty findings array.",
+        "Reveal-missed rule: when 'Reveal contracts due THIS chapter' lists an entry of severity=hard and the draft does not enact it on-page, raise a finding with title 'reveal_missed: <reveal id>' and severity high. For severity=soft, only raise a finding if the chapter clearly had room to carry it.",
+        "Return at most 4 findings. If there are no issues, return an empty findings array.",
       ].join("\n"),
     },
     {
@@ -86,8 +89,13 @@ export function buildMissingResourceReviewMessages(
         `Relevant ledger entries:\n${JSON.stringify(input.contextPack.relevantLedgerEntries, null, 2)}`,
         `Recent chapter cards:\n${JSON.stringify(input.contextPack.relevantChapterCards, null, 2)}`,
         `Candidate critical resources:\n${JSON.stringify(candidateResources, null, 2)}`,
+        input.contextPack.dueRevealContracts?.length
+          ? `Reveal contracts due THIS chapter:\n${JSON.stringify(input.contextPack.dueRevealContracts, null, 2)}`
+          : undefined,
         `Draft:\n${input.draft}`,
-      ].join("\n\n"),
+      ]
+        .filter(Boolean)
+        .join("\n\n"),
     },
   ];
 }

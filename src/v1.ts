@@ -50,12 +50,25 @@ import {
   generateOutlineStack,
   validateOutlineStack,
 } from "./outline-lib.js";
+import { auditBeatPacing, auditChapterPlan, regenerateBeatsForArc } from "./v1-audit.js";
 import { loadStoryProject } from "./project/index.js";
 import { FileProjectRepository } from "./storage/index.js";
 import {
+  bindWorldFactsForProject,
   bootstrapProject,
+  decomposeChapterScenesForProject,
   defaultDemoProjectId,
+  deriveArcShiftsForProject,
   evalEpisodePacket,
+  fillDecisionProfilesForProject,
+  formatBindWorldFactsResult,
+  formatDecomposeChapterScenesResult,
+  formatDeriveArcShiftsResult,
+  formatFillDecisionProfilesResult,
+  formatInspectFactCoverageResult,
+  formatInspectRevealsResult,
+  inspectFactCoverageForProject,
+  inspectRevealsForProject,
   formatAuthorPresetCatalog,
   interviewProject,
   invalidateFromChapter,
@@ -103,6 +116,12 @@ type CommandName =
   | "project:inspect"
   | "project:paths"
   | "project:impact"
+  | "bible:fill-decision-profiles"
+  | "bible:derive-arc-shifts"
+  | "outline:decompose-chapters"
+  | "outline:inspect-reveals"
+  | "bible:bind-world-facts"
+  | "bible:inspect-fact-coverage"
   | "project:inspect-consequences"
   | "project:rewrite-plan"
   | "project:regenerate-from-target"
@@ -133,10 +152,13 @@ type CommandName =
   | "outline:inspect"
   | "outline:apply-patches"
   | "outline:suggest-patches"
+  | "beat:regen"
+  | "beat:audit-pacing"
   | "outline:generate-stack"
   | "outline:generate-drafts"
   | "outline:approve-detail"
   | "outline:validate"
+  | "outline:audit"
   | "chapter:generate"
   | "chapter:generate-first"
   | "chapter:inspect"
@@ -163,12 +185,16 @@ interface ParsedArgs {
   targetId?: string;
   onlyBeatIds?: string[];
   skipBeatIds?: string[];
+  beatId?: string;
+  arcId?: string;
   onlySuggestionTypes?: Array<OutlinePatchSuggestion["suggestionType"]>;
   skipSuggestionTypes?: Array<OutlinePatchSuggestion["suggestionType"]>;
   withEval?: boolean;
   strictEval?: boolean;
+  force?: boolean;
   fromFile?: string;
   taskId?: string;
+  noDrafts?: boolean;
 }
 
 function readOption(args: Map<string, string>, key: string): string | undefined {
@@ -253,6 +279,10 @@ function parseCommand(argv: string[]): ParsedArgs {
   const withEval = withEvalOption === "true" || strictEval;
   const fromFileOption = readOption(flags, "--from-file");
   const taskIdOption = readOption(flags, "--task-id") ?? readOption(flags, "--task");
+  const beatIdOption = readOption(flags, "--beat") ?? readOption(flags, "--beat-id");
+  const arcIdOption = readOption(flags, "--arc") ?? readOption(flags, "--arc-id");
+  const forceOption = readOption(flags, "--force");
+  const noDraftsOption = readOption(flags, "--no-drafts");
 
   const command = `${group}:${action}` as CommandName;
   const allowed = new Set<CommandName>([
@@ -267,6 +297,14 @@ function parseCommand(argv: string[]): ParsedArgs {
     "project:regenerate-from-target",
     "project:regenerate-with-patches",
     "project:role-eval",
+    "beat:regen",
+    "beat:audit-pacing",
+    "bible:fill-decision-profiles",
+    "bible:derive-arc-shifts",
+    "outline:decompose-chapters",
+    "outline:inspect-reveals",
+    "bible:bind-world-facts",
+    "bible:inspect-fact-coverage",
     "memory:eval-seed",
     "memory:eval-run",
     "story:inspect-contracts",
@@ -296,6 +334,7 @@ function parseCommand(argv: string[]): ParsedArgs {
     "outline:generate-drafts",
     "outline:approve-detail",
     "outline:validate",
+    "outline:audit",
     "chapter:generate",
     "chapter:generate-first",
     "chapter:inspect",
@@ -331,8 +370,12 @@ function parseCommand(argv: string[]): ParsedArgs {
     skipSuggestionTypes: parsePatchSuggestionTypes(skipTypeOption),
     withEval,
     strictEval,
+    force: forceOption === "true",
+    beatId: beatIdOption,
+    arcId: arcIdOption,
     fromFile: fromFileOption,
     taskId: taskIdOption,
+    noDrafts: noDraftsOption === "true",
   };
 }
 
@@ -522,6 +565,7 @@ function usage(): string {
     "  outline generate-drafts --project <id>",
     "  outline approve-detail --project <id> [--approver <name>] [--note <text>]",
     "  outline validate --project <id>",
+    "  outline audit --project <id> [--from-chapter <n>] [--count <m>] [--no-drafts]",
     "  chapter generate --project <id> --chapter <n> [--with-eval] [--strict-eval]",
     "  chapter generate-first --project <id> --count <n> [--with-eval] [--strict-eval]",
     "  chapter inspect --project <id> --chapter <n>",
@@ -551,6 +595,79 @@ async function main(): Promise<void> {
         for (const issue of result.validationIssues) {
           console.log(`- ${issue}`);
         }
+      }
+      return;
+    }
+
+    case "bible:fill-decision-profiles": {
+      const result = await fillDecisionProfilesForProject({
+        projectId: parsed.projectId,
+        logStage: (stage, detail) => console.log(`[${stage}] ${detail}`),
+      });
+      console.log(formatFillDecisionProfilesResult(result));
+      if (result.missingAfterRunCharacterIds.length > 0) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "bible:derive-arc-shifts": {
+      const result = await deriveArcShiftsForProject({
+        projectId: parsed.projectId,
+        logStage: (stage, detail) => console.log(`[${stage}] ${detail}`),
+        force: parsed.force,
+      });
+      console.log(formatDeriveArcShiftsResult(result));
+      if (result.remainingIssues.length > 0) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "outline:decompose-chapters": {
+      const result = await decomposeChapterScenesForProject({
+        projectId: parsed.projectId,
+        beatId: parsed.beatId,
+        logStage: (stage, detail) => console.log(`[${stage}] ${detail}`),
+        force: parsed.force,
+      });
+      console.log(formatDecomposeChapterScenesResult(result));
+      if (
+        result.scaffoldIssueCount > 0 ||
+        result.microShiftIssueCount > 0 ||
+        result.identicalConsecutivePairs.length > 0
+      ) {
+        process.exitCode = 2;
+      }
+      return;
+    }
+
+    case "outline:inspect-reveals": {
+      const result = await inspectRevealsForProject({
+        projectId: parsed.projectId,
+        currentChapter: parsed.chapterNumber,
+      });
+      console.log(formatInspectRevealsResult(result));
+      return;
+    }
+
+    case "bible:bind-world-facts": {
+      const result = await bindWorldFactsForProject({
+        projectId: parsed.projectId,
+        logStage: (stage, detail) => console.log(`[${stage}] ${detail}`),
+        force: parsed.force,
+      });
+      console.log(formatBindWorldFactsResult(result));
+      return;
+    }
+
+    case "bible:inspect-fact-coverage": {
+      const result = await inspectFactCoverageForProject({
+        projectId: parsed.projectId,
+      });
+      console.log(formatInspectFactCoverageResult(result));
+      if (result.uncoveredFacts.length > 0) {
+        process.exitCode = 2;
       }
       return;
     }
@@ -1004,6 +1121,83 @@ async function main(): Promise<void> {
       if (!result.ok) {
         process.exitCode = 2;
       }
+      return;
+    }
+
+    case "beat:regen": {
+      if (!parsed.arcId) throw new Error("beat regen requires --arc <arcId>");
+      const result = await regenerateBeatsForArc({
+        projectId: parsed.projectId,
+        arcId: parsed.arcId,
+        targetChapterCount: parsed.count,
+      });
+      console.log(
+        [
+          `Project: ${result.projectId}`,
+          `Arc: ${result.arcId}`,
+          `Beats produced: ${result.beatsProduced}`,
+          result.warnings.length > 0 ? `Warnings: ${result.warnings.join("; ")}` : undefined,
+          "",
+          "Next steps:",
+          `  1. Review beats:                node dist/v1.js project inspect --project ${result.projectId}`,
+          `  2. Soft pacing audit (optional): node dist/v1.js beat audit-pacing --project ${result.projectId} --arc ${result.arcId}`,
+          `  3. Regenerate scene plans:       node dist/v1.js outline decompose-chapters --project ${result.projectId} --beat <beatId> --force`,
+          `  4. Invalidate stale chapter plans: node dist/v1.js chapter invalidate-from --project ${result.projectId} --chapter <n>`,
+        ]
+          .filter((l) => l !== undefined)
+          .join("\n"),
+      );
+      return;
+    }
+
+    case "beat:audit-pacing": {
+      const result = await auditBeatPacing({
+        projectId: parsed.projectId,
+        arcId: parsed.arcId,
+        applyFixes: parsed.force,
+      });
+      console.log(
+        [
+          `Project: ${result.projectId}`,
+          `Arcs audited: ${result.arcsAudited.join(", ")}`,
+          result.appliedFixes > 0
+            ? `Fixes applied: ${result.appliedFixes} beats rewritten`
+            : "No fixes applied (run with --force to auto-apply rewrittenBeats).",
+          "",
+          "Reports:",
+          ...result.reportPaths.map((p) => `  ${p}`),
+        ].join("\n"),
+      );
+      return;
+    }
+
+    case "outline:audit": {
+      const fromChapter = parsed.fromChapter ?? 1;
+      const count = parsed.count ?? 6;
+      const toChapter = fromChapter + count - 1;
+      const result = await auditChapterPlan({
+        projectId: parsed.projectId,
+        fromChapter,
+        toChapter,
+        includeDrafts: !parsed.noDrafts,
+      });
+      console.log(
+        [
+          `Project: ${result.projectId}`,
+          `Audit window: chapters ${result.fromChapter}-${result.toChapter}`,
+          `Generated at: ${result.generatedAt}`,
+          `Report length (cn chars): ${result.cnCharCount}`,
+          `Report path: ${result.reportPath}`,
+          "",
+          "Regression workflow (when audit suggests prompt-level changes):",
+          `  1. apply prompt change`,
+          `  2. wipe scene plans for the affected beat: rm data/projects/${result.projectId}/scene-plans.json (or for one beat only, edit the file)`,
+          `  3. regenerate scene plans:    node dist/v1.js outline decompose-chapters --project ${result.projectId} --beat <beatId>`,
+          `  4. wipe stale chapter plans + drafts (preserves scene plans, beats, world facts, character states):`,
+          `       node dist/v1.js chapter invalidate-from --project ${result.projectId} --chapter ${result.fromChapter}`,
+          `  5. re-audit:                   node dist/v1.js outline audit --project ${result.projectId} --from-chapter ${result.fromChapter} --count ${count} --no-drafts`,
+        ].join("\n"),
+      );
       return;
     }
 

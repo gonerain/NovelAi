@@ -86,6 +86,14 @@ export interface BeatOutlineGenerationInput {
   storyOutline: StoryOutline;
   arcOutlines: ArcOutline[];
   targetChapterCount: number;
+  /**
+   * All arc outlines in story order. Used together with worldFacts to derive
+   * which fact labels are forbidden in each arc's beats (minRevealArc guard).
+   * When omitted, no vocabulary restriction is applied.
+   */
+  allArcOutlines?: ArcOutline[];
+  /** World facts carrying minRevealArc constraints. Optional. */
+  worldFacts?: import("./types.js").WorldFact[];
 }
 
 export interface BeatOutlineGenerationResult {

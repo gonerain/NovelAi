@@ -10,6 +10,7 @@ import type {
   ThemeBible,
   WorldFact,
 } from "../domain/index.js";
+import { emptyDecisionProfile } from "../domain/decision-profile.js";
 
 export const demoProjectId = "demo-project";
 export const demoProjectTitle = "我能改判别人的命运";
@@ -501,6 +502,7 @@ export const demoCharacterStates: CharacterState[] = [
     emotionalState: ["兴奋", "戒备", "好奇"],
     knowledgeBoundary: ["知道部分平台数据异常", "不知道天衡会十二席结构"],
     secretsKept: ["私下保存了多起被删求救视频的备份"],
+    decisionProfile: emptyDecisionProfile(),
     relationships: [
       {
         targetCharacterId: "gulinchuan",

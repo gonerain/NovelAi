@@ -116,10 +116,11 @@ export function evaluateEpisodeAgency(args: {
         delta.targetType === "relationship" ||
         delta.targetType === "thread"),
   );
+  const cleanedChoiceText = stripQuotedContext(stripRecentConsequenceContext(choiceText));
   const passive =
     isPassiveText(choiceText) ||
     isPassiveText(consequenceText) ||
-    includesAny(choiceText, ["只是", "仅仅", "only"]);
+    includesAny(cleanedChoiceText, ["只是", "仅仅", "only"]);
 
   const checks: AgencyEvalCheck[] = [
     {

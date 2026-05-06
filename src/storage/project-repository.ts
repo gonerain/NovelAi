@@ -5,6 +5,7 @@ import type {
   CastCharacterOutline,
   ChapterArtifact,
   ChapterPlan,
+  ChapterScenePlan,
   CharacterState,
   DerivedAuthorProfilePacks,
   StoryOutline,
@@ -80,6 +81,9 @@ export interface ProjectRepository {
 
   saveChapterPlans(projectId: string, chapterPlans: ChapterPlan[]): Promise<void>;
   loadChapterPlans(projectId: string): Promise<ChapterPlan[]>;
+
+  saveChapterScenePlans(projectId: string, plans: ChapterScenePlan[]): Promise<void>;
+  loadChapterScenePlans(projectId: string): Promise<ChapterScenePlan[]>;
 
   saveChapterArtifact(projectId: string, artifact: ChapterArtifact): Promise<void>;
   loadChapterArtifact(projectId: string, chapterNumber: number): Promise<ChapterArtifact | null>;

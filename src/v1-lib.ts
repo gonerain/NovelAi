@@ -134,6 +134,34 @@ export {
 } from "./v1-offscreen.js";
 export { runRuntimeEval } from "./v1-runtime-eval.js";
 export {
+  bindWorldFactsForProject,
+  decomposeChapterScenesForProject,
+  deriveArcShiftsForProject,
+  fillDecisionProfilesForProject,
+  formatBindWorldFactsResult,
+  formatDecomposeChapterScenesResult,
+  formatDeriveArcShiftsResult,
+  formatFillDecisionProfilesResult,
+  formatInspectFactCoverageResult,
+  formatInspectRevealsResult,
+  inspectFactCoverageForProject,
+  inspectRevealsForProject,
+} from "./v1-bible.js";
+export type {
+  BindWorldFactsOptions,
+  BindWorldFactsResult,
+  DecomposeChapterScenesOptions,
+  DecomposeChapterScenesResult,
+  DeriveArcShiftsOptions,
+  DeriveArcShiftsResult,
+  FillDecisionProfilesOptions,
+  FillDecisionProfilesResult,
+  InspectFactCoverageOptions,
+  InspectFactCoverageResult,
+  InspectRevealsOptions,
+  InspectRevealsResult,
+} from "./v1-bible.js";
+export {
   inspectTask,
   listTasks,
   submitTaskFromFile,

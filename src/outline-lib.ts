@@ -5,6 +5,7 @@ import type {
   ArcOutline,
   BeatOutline,
   CastCharacterOutline,
+  ChapterScenePlan,
   StoryOutline,
   StoryProject,
 } from "./domain/index.js";
@@ -544,7 +545,14 @@ function formatStoryOutlineMarkdown(project: StoryProject): string {
   ].join("\n");
 }
 
-function formatDetailedOutlineMarkdown(project: StoryProject): string {
+function formatDetailedOutlineMarkdown(
+  project: StoryProject,
+  scenePlans: ChapterScenePlan[] = [],
+): string {
+  const scenePlanByChapter = new Map<number, ChapterScenePlan>();
+  for (const plan of scenePlans) {
+    scenePlanByChapter.set(plan.chapterNumber, plan);
+  }
   const lines: string[] = [];
   lines.push(`# 细纲（${project.title}）`);
   lines.push("");
@@ -599,26 +607,80 @@ function formatDetailedOutlineMarkdown(project: StoryProject): string {
       lines.push("");
     }
 
-    lines.push("### 章级细纲（人工审核与补写）");
-    lines.push("| 章次 | 节奏类型建议 | 章节目标 | 外部事件推进 | 信息增量 | 关系变化 | 章节钩子 |");
-    lines.push("|---|---|---|---|---|---|---|");
-
-    for (const beat of beats) {
+    const sceneCovered = beats.some((beat) => {
       const start = beat.chapterRangeHint?.start;
       const end = beat.chapterRangeHint?.end;
-      if (!start || !end || end < start) {
-        continue;
-      }
+      if (!start || !end) return false;
       for (let chapter = start; chapter <= end; chapter += 1) {
-        const offset = chapter - start;
-        const mod = offset % 4;
-        const chapterType = mod === 0 ? "setup" : mod === 1 ? "progress" : mod === 2 ? "payoff" : "aftermath";
-        lines.push(
-          `| ${chapter} | ${chapterType} | ${beat.beatGoal} | ${beat.conflict} | ${beat.revealTargets.slice(0, 2).join("；") || "待补"} | ${arc.relationshipChanges.slice(0, 2).join("；") || "待补"} | ${beat.constraints[0] ? `围绕“${beat.constraints[0]}”设置章节尾钩` : "待补"} |`,
-        );
+        if (scenePlanByChapter.has(chapter)) return true;
       }
+      return false;
+    });
+
+    if (sceneCovered) {
+      lines.push("### 章级细纲（场景计划）");
+      for (const beat of beats) {
+        const start = beat.chapterRangeHint?.start;
+        const end = beat.chapterRangeHint?.end;
+        if (!start || !end || end < start) {
+          continue;
+        }
+        for (let chapter = start; chapter <= end; chapter += 1) {
+          const plan = scenePlanByChapter.get(chapter);
+          if (!plan) {
+            lines.push(`#### 章 ${chapter} · beat=${beat.id}`);
+            lines.push("- 场景计划：**待补**（运行 \`outline decompose-chapters --beat " + beat.id + "\`）");
+            lines.push("");
+            continue;
+          }
+          lines.push(`#### 章 ${chapter} · beat=${beat.id} · pov=${plan.pov} · @${plan.location}`);
+          if (plan.propsAndAnchors.length > 0) {
+            lines.push(`- 道具/锚点：${plan.propsAndAnchors.join("｜")}`);
+          }
+          if (plan.openingScene.entryHook) {
+            lines.push(`- 开场入点：${plan.openingScene.entryHook}`);
+          }
+          if (plan.openingScene.situationOnPage) {
+            lines.push(`- 初始状态：${plan.openingScene.situationOnPage}`);
+          }
+          if (plan.midConflict.trigger) {
+            lines.push(`- 中段触发：${plan.midConflict.trigger}`);
+          }
+          if (plan.midConflict.escalation) {
+            lines.push(`- 升级：${plan.midConflict.escalation}`);
+          }
+          if (plan.climax.decisionOwnerId) {
+            lines.push(
+              `- 高潮：${plan.climax.decisionOwnerId} 在压力下选择 → ${plan.climax.decisionUnderPressure}`,
+            );
+          }
+          if (plan.climax.costPaid) {
+            lines.push(`  - 代价：${plan.climax.costPaid}`);
+          }
+          if (plan.endHook) {
+            lines.push(`- 章末钩子：${plan.endHook}`);
+          }
+          if (plan.dueRevealIds.length > 0) {
+            lines.push(`- 本章必揭：${plan.dueRevealIds.join("｜")}`);
+          }
+          for (const microShift of plan.characterArcMicroShift) {
+            const ref = microShift.arcShiftRef ? ` (ref ${microShift.arcShiftRef})` : "";
+            lines.push(`- 角色微动 · ${microShift.characterId}${ref}`);
+            lines.push(`  - 旧默认：${microShift.oldDefault}`);
+            lines.push(`  - 触发：${microShift.pressureTrigger}`);
+            lines.push(`  - 新选择：${microShift.newChoice}`);
+            lines.push(`  - 代价：${microShift.costPaid}`);
+          }
+          lines.push("");
+        }
+      }
+    } else {
+      lines.push("### 章级细纲（待补：尚未生成场景计划）");
+      lines.push(
+        "运行 `outline decompose-chapters --project <id>` 生成 ChapterScenePlan 后重新导出。",
+      );
+      lines.push("");
     }
-    lines.push("");
     lines.push("#### 本Arc审稿检查清单");
     lines.push("- [ ] 本Arc每3章至少1章有明确外部事件推进（不是纯内心描写）。");
     lines.push("- [ ] 本Arc没有提前泄露不该揭示的终局信息。");
@@ -643,8 +705,13 @@ export async function exportOutlineDrafts(options: {
   const storyOutlinePath = path.join(root, "story-outline.md");
   const detailedOutlinePath = path.join(root, "detailed-outline.md");
 
+  const scenePlans = await repository.loadChapterScenePlans(options.projectId);
   await writeFile(storyOutlinePath, formatStoryOutlineMarkdown(project), "utf-8");
-  await writeFile(detailedOutlinePath, formatDetailedOutlineMarkdown(project), "utf-8");
+  await writeFile(
+    detailedOutlinePath,
+    formatDetailedOutlineMarkdown(project, scenePlans),
+    "utf-8",
+  );
 
   return {
     projectId: options.projectId,

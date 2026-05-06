@@ -13,6 +13,18 @@ export const defaultTaskRoutes: Record<TaskName, ModelRoute> = {
     provider: "deepseek",
     model: "deepseek-v4-flash",
   },
+  cast_decision_profile: {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+  },
+  arc_shift_derive: {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+  },
+  scene_decomposer: {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+  },
   arc_outline: {
     provider: "deepseek",
     model: "deepseek-v4-flash",
@@ -54,6 +66,14 @@ export const defaultTaskRoutes: Record<TaskName, ModelRoute> = {
     model: "deepseek-v4-flash",
   },
   memory_updater: {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+  },
+  chapter_plan_audit: {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+  },
+  beat_pacing_audit: {
     provider: "deepseek",
     model: "deepseek-v4-flash",
   },

@@ -3,10 +3,17 @@ import {
   mapAuthorInterviewToProfile,
   normalizeAuthorInterviewResult,
   resolveGenrePayoffPack,
+  validateArcShiftsForArcs,
   validateAuthorInterviewResult,
+  validateCharacterDecisionProfileCoverage,
   type AuthorInterviewSessionInput,
   type DerivedAuthorProfilePacks,
 } from "./domain/index.js";
+import {
+  bindWorldFactsForProject,
+  deriveArcShiftsForProject,
+  fillDecisionProfilesForProject,
+} from "./v1-bible.js";
 import { demoPremise, demoProjectTitle, demoStoryMemories, demoStoryOutline, demoArcOutlines, demoBeatOutlines, demoCharacterStates, demoWorldFacts, demoThemeBible, demoStyleBible, demoStorySetup } from "./defaults/demo-project.js";
 import {
   buildInterviewInputFromQuizAnswers,
@@ -205,18 +212,127 @@ export async function ensureBootstrappedProject(args: {
     characterStates,
   );
 
+  let resolvedCharacterStates = characterStates;
+  const initialDecisionGaps = validateCharacterDecisionProfileCoverage(characterStates);
+  if (initialDecisionGaps.length > 0) {
+    args.logStage(
+      "bootstrap",
+      `decision profile gaps detected count=${initialDecisionGaps.length}`,
+    );
+    try {
+      const fillResult = await fillDecisionProfilesForProject({
+        projectId: args.projectId,
+        serviceFactory: () => args.service,
+        repository: args.repository,
+        logStage: args.logStage,
+      });
+      if (fillResult.filledCharacterIds.length > 0) {
+        args.logStage(
+          "bootstrap",
+          `decision profile filled ids=${fillResult.filledCharacterIds.join(",")}`,
+        );
+        resolvedCharacterStates = await args.repository.loadCharacterStates(args.projectId);
+      }
+      for (const warning of fillResult.warnings) {
+        validationIssues.push(`decisionProfile: ${warning}`);
+      }
+      for (const id of fillResult.missingAfterRunCharacterIds) {
+        validationIssues.push(
+          `decisionProfile: character=${id} still missing required fields after fill`,
+        );
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      args.logStage("bootstrap", `WARN decision profile fill skipped: ${message}`);
+      for (const gap of initialDecisionGaps) {
+        validationIssues.push(
+          `decisionProfile: character=${gap.characterId} (${gap.characterName}) missing ${gap.missingFields.join(", ")}`,
+        );
+      }
+    }
+  }
+
+  let resolvedArcOutlines = arcOutlines;
+  const arcShiftCoverage = validateArcShiftsForArcs(arcOutlines);
+  if (arcShiftCoverage.length > 0) {
+    args.logStage(
+      "bootstrap",
+      `arc shift gaps detected count=${arcShiftCoverage.length}`,
+    );
+    try {
+      const deriveResult = await deriveArcShiftsForProject({
+        projectId: args.projectId,
+        serviceFactory: () => args.service,
+        repository: args.repository,
+        logStage: args.logStage,
+      });
+      if (deriveResult.filledArcIds.length > 0) {
+        args.logStage(
+          "bootstrap",
+          `arc shifts filled ids=${deriveResult.filledArcIds.join(",")}`,
+        );
+        resolvedArcOutlines = await args.repository.loadArcOutlines(args.projectId);
+      }
+      for (const warning of deriveResult.warnings) {
+        validationIssues.push(`arcShift: ${warning}`);
+      }
+      for (const issue of deriveResult.remainingIssues) {
+        validationIssues.push(`arcShift: arc=${issue.arcId} ${issue.reason}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      args.logStage("bootstrap", `WARN arc shift derive skipped: ${message}`);
+      for (const coverage of arcShiftCoverage) {
+        if (coverage.protagonistArcMissing) {
+          validationIssues.push(
+            `arcShift: arc=${coverage.arcId} protagonistArc missing`,
+          );
+        }
+        for (const issueGroup of coverage.protagonistShiftIssues) {
+          validationIssues.push(
+            `arcShift: arc=${coverage.arcId} shift=${issueGroup.shiftId} ${issueGroup.issues.length} issue(s)`,
+          );
+        }
+      }
+    }
+  }
+
+  let resolvedBeatOutlines = beatOutlines;
+  if (worldFacts.length > 0 && beatOutlines.length > 0) {
+    try {
+      const bindResult = await bindWorldFactsForProject({
+        projectId: args.projectId,
+        repository: args.repository,
+        logStage: args.logStage,
+      });
+      if (bindResult.beatsTouched.length > 0) {
+        resolvedBeatOutlines = await args.repository.loadBeatOutlines(args.projectId);
+        args.logStage(
+          "bootstrap",
+          `world facts bound beats=${bindResult.beatsTouched.length} reveals=${bindResult.revealsBound}`,
+        );
+      }
+      for (const warning of bindResult.warnings) {
+        validationIssues.push(`worldFactBinding: ${warning}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      args.logStage("bootstrap", `WARN world fact binding skipped: ${message}`);
+    }
+  }
+
   args.logStage("bootstrap", "base files ready");
 
   return {
     storySetup,
     genrePayoffPack,
     storyOutline,
-    arcOutlines,
-    beatOutlines,
+    arcOutlines: resolvedArcOutlines,
+    beatOutlines: resolvedBeatOutlines,
     authorPacks,
     themeBible,
     styleBible,
-    characterStates,
+    characterStates: resolvedCharacterStates,
     worldFacts,
     storyMemories,
     chapterPlans,

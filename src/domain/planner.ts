@@ -3,6 +3,7 @@ import type {
   ArcOutline,
   BeatOutline,
   ChapterPlan,
+  ChapterScenePlan,
   CharacterState,
   EpisodePacket,
   EntityId,
@@ -33,6 +34,12 @@ export interface PlannerInput {
   unresolvedDelayedConsequences?: string[];
   recentCommercialHistory?: string[];
   episodePacket?: EpisodePacket;
+  /**
+   * Optional per-chapter scene plan. When present, the planner must
+   * align chapterGoal/plannedOutcome/mustHitConflicts with the
+   * scene plan's pov, climax, and end hook.
+   */
+  scenePlan?: ChapterScenePlan;
 }
 
 export interface PlannerResult {

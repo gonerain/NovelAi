@@ -1,5 +1,13 @@
 import type { TaskAuthorPack } from "./author-profile-packs.js";
 import { buildMemoryRetrievalPack } from "./memory-system.js";
+import { getEffectiveRevealItems } from "./reveal-item.js";
+import { bindRevealItemsToWorldFacts } from "./world-fact-binding.js";
+import {
+  buildKnowledgeBoundaryContext,
+  effectiveRevealMode,
+  getLabelVocabulary,
+} from "./knowledge-boundary.js";
+import type { RevealMode } from "./types.js";
 import type {
   ContextChapterCardSnapshot,
   ContextLedgerSnapshot,
@@ -28,6 +36,8 @@ export interface ContextBuilderInput {
   chapterPlan: ChapterPlan;
   genrePayoffPack?: GenrePayoffPack;
   arcOutline?: ArcOutline;
+  /** Full arc list — used to stage RevealMode defaults (anomaly → suspected → named). */
+  allArcOutlines?: ArcOutline[];
   beatOutline?: BeatOutline;
   chapterArtifacts?: MemoryChapterArtifactSnapshot[];
   semanticOverrideHits?: SemanticRetrievalHit[];
@@ -36,6 +46,12 @@ export interface ContextBuilderInput {
   characterStates: CharacterState[];
   storyMemories: StoryMemory[];
   worldFacts: WorldFact[];
+  /**
+   * Optional per-chapter scene plan. When present, planner/writer
+   * elevate it as the primary scene blocking, overriding beat-level
+   * wording. See `ChapterScenePlan` in domain/types.ts.
+   */
+  scenePlan?: import("./types.js").ChapterScenePlan;
 }
 
 export interface ContextCharacterSnapshot {
@@ -128,6 +144,56 @@ export interface ContextPack {
   relevantChapterCards: ContextChapterCardSnapshot[];
   relevantWorldFacts: ContextWorldFactSnapshot[];
   arcSignals: string[];
+  /**
+   * Concrete in-arc character shifts pulled from arc.protagonistArc
+   * + supportingCharacterArcs that overlap the current chapter. Each
+   * entry is a short rendering of one ArcShift's
+   * pressureTrigger -> newChoice -> costPaid bound to a character.
+   * Empty when nothing is in range.
+   */
+  arcShiftSignals: string[];
+  /**
+   * Concrete per-chapter scene blocking pulled from the
+   * ChapterScenePlan when one exists for the current chapter. Each
+   * line is a key=value pair the writer/reviewer should treat as
+   * authoritative (overrides beat-level wording when in conflict).
+   * Empty when no scene plan is available.
+   */
+  scenePlanSignals: string[];
+  /**
+   * Reveal contracts that must land in THIS chapter, pulled from
+   * the active beat's `revealItems` filtered by dueChapter. Each
+   * entry is `id|severity|text`. Reviewer fires `reveal_missed`
+   * when a `hard` reveal here doesn't land. When the reveal binds
+   * to a known WorldFact, `factTitle` and `factDescription` are
+   * populated so the writer has the full grounding text on hand.
+   */
+  dueRevealContracts: Array<{
+    id: string;
+    severity: "soft" | "hard";
+    text: string;
+    refId?: string;
+    kind: string;
+    factTitle?: string;
+    factDescription?: string;
+    revealMode: RevealMode;
+    /**
+     * Vocabulary the POV character must NOT use in dialogue or
+     * interior monologue while this reveal is in
+     * `experienced_as_anomaly` or `suspected_as_pattern` mode.
+     */
+    forbiddenVocabulary: string[];
+  }>;
+  /**
+   * Per-reveal-mode roll-up of forbidden / allowed vocabulary
+   * across the active beat's bound facts. Writer prompt uses this
+   * to print one consolidated "knowledge boundary" block.
+   */
+  knowledgeBoundary: {
+    experiencedAsAnomaly: Array<{ factId: string; vocab: string[] }>;
+    suspectedAsPattern: Array<{ factId: string; vocab: string[] }>;
+    namedExplicitly: Array<{ factId: string; vocab: string[] }>;
+  };
   chapterSignals: string[];
   retrievalSignals: string[];
   unresolvedDelayedConsequences: string[];
@@ -376,9 +442,158 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
       input.arcOutline?.arcSellingPoint ? `Arc selling point: ${input.arcOutline.arcSellingPoint}` : "",
       input.arcOutline?.arcHook ? `Arc hook: ${input.arcOutline.arcHook}` : "",
       input.arcOutline?.arcPayoff ? `Arc payoff: ${input.arcOutline.arcPayoff}` : "",
+      input.arcOutline?.protagonistArc
+        ? `Protagonist arc target: ${input.arcOutline.protagonistArc.startInternalState} -> ${input.arcOutline.protagonistArc.endInternalState}`
+        : "",
+      input.arcOutline?.protagonistArc?.falseBeliefChallenged
+        ? `False belief challenged this arc: ${input.arcOutline.protagonistArc.falseBeliefChallenged}`
+        : "",
+      input.arcOutline?.protagonistArc?.costAccepted
+        ? `Cost accepted by arc end: ${input.arcOutline.protagonistArc.costAccepted}`
+        : "",
     ],
     8,
   );
+
+  const chapterNumber = input.chapterPlan.chapterNumber ?? 0;
+  const arcShiftLines: string[] = [];
+  const inRange = (range: { start: number; end: number } | undefined): boolean => {
+    if (!range) {
+      return true;
+    }
+    if (!chapterNumber) {
+      return false;
+    }
+    return chapterNumber >= range.start && chapterNumber <= range.end;
+  };
+  if (input.arcOutline?.protagonistArc?.shifts) {
+    for (const shift of input.arcOutline.protagonistArc.shifts) {
+      if (!inRange(shift.expectedChapterRange)) {
+        continue;
+      }
+      arcShiftLines.push(
+        `Protagonist shift due (${shift.id}): trigger=${shift.pressureTrigger}; choice=${shift.newChoice}; cost=${shift.costPaid}`,
+      );
+    }
+  }
+  const activeIds = new Set(input.chapterPlan.requiredCharacters);
+  if (input.arcOutline?.supportingCharacterArcs) {
+    for (const supportingArc of input.arcOutline.supportingCharacterArcs) {
+      if (!activeIds.has(supportingArc.characterId)) {
+        continue;
+      }
+      for (const shift of supportingArc.shifts) {
+        if (!inRange(shift.expectedChapterRange)) {
+          continue;
+        }
+        arcShiftLines.push(
+          `Supporting shift ${supportingArc.characterId} (${shift.id}): trigger=${shift.pressureTrigger}; choice=${shift.newChoice}; cost=${shift.costPaid}`,
+        );
+      }
+    }
+  }
+  const arcShiftSignals = uniqueTrimmed(arcShiftLines, 6);
+
+  const scenePlan = input.scenePlan;
+  const scenePlanLines: string[] = [];
+  if (scenePlan && scenePlan.chapterNumber === chapterNumber) {
+    if (scenePlan.pov) scenePlanLines.push(`pov=${scenePlan.pov}`);
+    if (scenePlan.location) scenePlanLines.push(`location=${scenePlan.location}`);
+    if (scenePlan.propsAndAnchors?.length) {
+      scenePlanLines.push(`props=${scenePlan.propsAndAnchors.join(" | ")}`);
+    }
+    if (scenePlan.openingScene?.entryHook) {
+      scenePlanLines.push(`opening.entryHook=${scenePlan.openingScene.entryHook}`);
+    }
+    if (scenePlan.openingScene?.situationOnPage) {
+      scenePlanLines.push(
+        `opening.situationOnPage=${scenePlan.openingScene.situationOnPage}`,
+      );
+    }
+    if (scenePlan.midConflict?.trigger) {
+      scenePlanLines.push(`midConflict.trigger=${scenePlan.midConflict.trigger}`);
+    }
+    if (scenePlan.midConflict?.escalation) {
+      scenePlanLines.push(`midConflict.escalation=${scenePlan.midConflict.escalation}`);
+    }
+    if (scenePlan.climax?.decisionOwnerId) {
+      scenePlanLines.push(`climax.owner=${scenePlan.climax.decisionOwnerId}`);
+    }
+    if (scenePlan.climax?.decisionUnderPressure) {
+      scenePlanLines.push(
+        `climax.decisionUnderPressure=${scenePlan.climax.decisionUnderPressure}`,
+      );
+    }
+    if (scenePlan.climax?.costPaid) {
+      scenePlanLines.push(`climax.costPaid=${scenePlan.climax.costPaid}`);
+    }
+    if (scenePlan.endHook) scenePlanLines.push(`endHook=${scenePlan.endHook}`);
+    if (scenePlan.dueRevealIds?.length) {
+      scenePlanLines.push(`dueRevealIds=${scenePlan.dueRevealIds.join(" | ")}`);
+    }
+    for (const microShift of scenePlan.characterArcMicroShift ?? []) {
+      const ref = microShift.arcShiftRef ? ` ref=${microShift.arcShiftRef}` : "";
+      scenePlanLines.push(
+        `microShift ${microShift.characterId}${ref}: trigger=${microShift.pressureTrigger}; choice=${microShift.newChoice}; cost=${microShift.costPaid}`,
+      );
+    }
+  }
+  const scenePlanSignals = uniqueTrimmed(scenePlanLines, 16);
+
+  // --- Due reveal contracts ---
+  const dueRevealContracts: ContextPack["dueRevealContracts"] = [];
+  const arcOutlinesForStaging = input.allArcOutlines ?? (input.arcOutline ? [input.arcOutline] : []);
+  if (input.beatOutline) {
+    const baseReveals = getEffectiveRevealItems(input.beatOutline);
+    const reveals = bindRevealItemsToWorldFacts(baseReveals, input.worldFacts);
+    const factById = new Map(input.worldFacts.map((fact) => [fact.id, fact]));
+    const sceneDueIds = new Set(scenePlan?.dueRevealIds ?? []);
+    const seenIds = new Set<string>();
+    for (const reveal of reveals) {
+      const dueByChapter = chapterNumber > 0 && reveal.dueChapter === chapterNumber;
+      const namedByScene = sceneDueIds.has(reveal.id);
+      if (!dueByChapter && !namedByScene) {
+        continue;
+      }
+      if (seenIds.has(reveal.id)) {
+        continue;
+      }
+      seenIds.add(reveal.id);
+      const boundFact = reveal.refId ? factById.get(reveal.refId) : undefined;
+      const mode = effectiveRevealMode(reveal, input.beatOutline, arcOutlinesForStaging);
+      const forbiddenVocab =
+        mode === "named_explicitly" || !boundFact
+          ? []
+          : getLabelVocabulary(boundFact);
+      dueRevealContracts.push({
+        id: reveal.id,
+        severity: reveal.severityIfMissed,
+        text: reveal.text,
+        kind: reveal.kind,
+        ...(reveal.refId ? { refId: reveal.refId } : {}),
+        ...(boundFact
+          ? {
+              factTitle: boundFact.title,
+              factDescription: boundFact.description,
+            }
+          : {}),
+        revealMode: mode,
+        forbiddenVocabulary: forbiddenVocab,
+      });
+    }
+  }
+  const knowledgeBoundary = (() => {
+    const ctx = buildKnowledgeBoundaryContext({
+      beat: input.beatOutline,
+      arcs: arcOutlinesForStaging,
+      worldFacts: input.worldFacts,
+    });
+    return {
+      experiencedAsAnomaly: ctx.factsByMode.experienced_as_anomaly,
+      suspectedAsPattern: ctx.factsByMode.suspected_as_pattern,
+      namedExplicitly: ctx.factsByMode.named_explicitly,
+    };
+  })();
 
   const chapterSignals = uniqueTrimmed(
     [
@@ -524,6 +739,10 @@ export function buildContextPack(input: ContextBuilderInput): ContextPack {
     relevantChapterCards: retrievalPack.relevantChapterCards,
     relevantWorldFacts,
     arcSignals,
+    arcShiftSignals,
+    scenePlanSignals,
+    dueRevealContracts,
+    knowledgeBoundary,
     chapterSignals,
     retrievalSignals: uniqueTrimmed(
       [

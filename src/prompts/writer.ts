@@ -3,16 +3,25 @@ import type { ChatMessage } from "../llm/types.js";
 
 function formatActiveCharacters(input: WriterInput): string {
   return input.contextPack.activeCharacters
-    .slice(0, 2)
-    .map((character) =>
-      [
+    .slice(0, 4)
+    .map((character) => {
+      const profile = character.decisionProfile;
+      const profileBits = profile
+        ? [
+            `controlPattern=${profile.controlPattern || "none"}`,
+            `falseBelief=${profile.falseBelief || "none"}`,
+            `defaultCopingStyle=${profile.defaultCopingStyle || "none"}`,
+          ]
+        : [];
+      return [
         `${character.name}(${character.id})`,
         `goals=${character.currentGoals.join(" / ") || "none"}`,
         `emotion=${character.emotionalState.join(" / ") || "none"}`,
         `wounds=${character.wounds.join(" / ") || "none"}`,
         `voice=${character.voiceNotes.join(" / ") || "none"}`,
-      ].join("; "),
-    )
+        ...profileBits,
+      ].join("; ");
+    })
     .join("\n");
 }
 
@@ -128,6 +137,13 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         "The novel draft itself must be written in Chinese.",
         "Do not explain your reasoning. Do not output planning notes. Do not output bullet points inside the draft.",
         "Honor mustRules strictly. Treat avoidRules as hard negatives.",
+        "Scene plan contract rule: when a 'Scene plan contract' block is present, it is authoritative for this chapter. Use the listed pov, location, propsAndAnchors, openingScene.entryHook, midConflict, climax (owner + decision + cost), and endHook as the literal scene structure. Do NOT replace them with paraphrased beat-level wording.",
+        "Reveal contract rule: every entry in 'Reveal contracts due THIS chapter' must show up on-page. HARD reveals are mandatory: surface the concrete fact / truth / setup directly through scene action, dialogue, or observable consequence. Do not gesture at it as mood. SOFT reveals are preferred but may be deferred if the chapter logically cannot carry them.",
+        "Knowledge boundary rule (CRITICAL): a reveal's `revealMode` controls how the POV character may articulate it.",
+        "  - experienced_as_anomaly: the POV character DOES NOT yet know the world-builder's name for this rule. Surface the reveal through specific evidence the character can only read through their existing frame: family pressure, social conspiracy, gaslighting, coincidence, the character's own perception failing. The bound `factTitle` and `factDescription` are reference for YOU; they are NOT lines the character may speak or think. The `forbiddenVocabulary` listed for this reveal must NOT appear in the POV character's dialogue or interior monologue, not even with quotation marks (e.g. 戏称为, 心里默念). Engineer evidence; never let the character articulate the rule.",
+        "  - suspected_as_pattern: the POV character may have noticed a pattern and may invent a private placeholder name in their own head. The `forbiddenVocabulary` (canonical world-builder terms) is still off-limits.",
+        "  - named_explicitly: the canonical vocabulary is now allowed in dialogue and monologue.",
+        "Voice constraint (HARD): for any active character whose `controlPattern` includes 'information' / 'silence' / 'leverage' / 'observation' (e.g. 闻既白), enforce: (a) per scene they reveal at MOST one concrete fragment; (b) they never explain a system, mechanism, rule, or motive in plain expository sentences — they hint via half-questions, ambiguous remarks, or a single specific observation; (c) they answer questions with another question or a redirect at least half the time; (d) any line that sounds like teaching the POV (含'其实是'/'你不知道吗'/'这就是…的原因'/'因为…所以…') is forbidden. If you find yourself writing a paragraph of their explanation, cut it to one fragment and let the POV be left guessing.",
         isEarlyChapter
           ? "Use chapterObjective + key memories as primary context. In chapter 1-3, world-setting must be explicit (not only implicit mood): include concrete mentions of institutions, procedures, labels, or social consequences."
           : "Use chapterObjective + key memories as primary context. Keep world facts tied to concrete scene consequences, not abstract lore blocks.",
@@ -237,6 +253,56 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
           ? `Episode packet: mode=${episode.chapterMode}; payoffType=${episode.payoffType}; choice=${episode.nonTransferableChoice}; cost=${episode.choiceCost}; consequence=${episode.protagonistConsequence}; readerPayoff=${episode.readerPayoff}; endHook=${episode.endHook}`
           : undefined,
         `Chapter signals: ${contextPack.chapterSignals.join(" | ")}`,
+        contextPack.scenePlanSignals?.length
+          ? `Scene plan contract for THIS chapter (authoritative; overrides beat-level wording when in conflict):\n${contextPack.scenePlanSignals.join("\n")}`
+          : undefined,
+        contextPack.dueRevealContracts?.length
+          ? `Reveal contracts due THIS chapter (each must surface on-page; HARD reveals are mandatory):\n${contextPack.dueRevealContracts
+              .map((item) => {
+                const head = `- ${item.id} [${item.severity}] kind=${item.kind} mode=${item.revealMode}${
+                  item.refId ? ` ref=${item.refId}` : ""
+                }: ${item.text}`;
+                const lines = [head];
+                if (item.factTitle && item.factDescription) {
+                  lines.push(`    bound world fact: ${item.factTitle}`);
+                  lines.push(`    description: ${item.factDescription}`);
+                }
+                if (item.forbiddenVocabulary.length > 0) {
+                  lines.push(
+                    `    FORBIDDEN VOCABULARY for POV (mode=${item.revealMode}): ${item.forbiddenVocabulary.join(" / ")}`,
+                  );
+                }
+                return lines.join("\n");
+              })
+              .join("\n")}`
+          : undefined,
+        (() => {
+          const kb = contextPack.knowledgeBoundary;
+          if (!kb) return undefined;
+          const blocks: string[] = [];
+          if (kb.experiencedAsAnomaly.length > 0) {
+            const list = kb.experiencedAsAnomaly
+              .map((entry) => `${entry.factId}: forbidden=${entry.vocab.join(" / ") || "(none)"}`)
+              .join("\n  ");
+            blocks.push(`Knowledge boundary — experienced_as_anomaly facts (POV must not name these):\n  ${list}`);
+          }
+          if (kb.suspectedAsPattern.length > 0) {
+            const list = kb.suspectedAsPattern
+              .map((entry) => `${entry.factId}: forbidden=${entry.vocab.join(" / ") || "(none)"}`)
+              .join("\n  ");
+            blocks.push(`Knowledge boundary — suspected_as_pattern facts (POV may use private placeholder, never canonical labels):\n  ${list}`);
+          }
+          if (kb.namedExplicitly.length > 0) {
+            const list = kb.namedExplicitly
+              .map((entry) => `${entry.factId}: allowed=${entry.vocab.join(" / ") || "(none)"}`)
+              .join("\n  ");
+            blocks.push(`Knowledge boundary — named_explicitly facts (canonical labels allowed):\n  ${list}`);
+          }
+          return blocks.length > 0 ? blocks.join("\n\n") : undefined;
+        })(),
+        contextPack.arcShiftSignals?.length
+          ? `Arc shift contract this chapter (must enact the listed pressureTrigger -> newChoice -> costPaid on-page; do not paraphrase as theme):\n${contextPack.arcShiftSignals.join("\n")}`
+          : undefined,
         `Retrieval signals: ${contextPack.retrievalSignals.join(" | ")}`,
         payoffPatterns.length
           ? `Payoff pattern: ${payoffPatterns.join(" | ")}`

@@ -1,8 +1,41 @@
 import type {
+  ArcOutline,
+  WorldFact,
+} from "../domain/types.js";
+import type {
   BeatOutlineGenerationInput,
   BeatOutlineGenerationResult,
 } from "../domain/index.js";
 import type { ChatMessage } from "../llm/types.js";
+
+function arcStartChapter(arc: ArcOutline): number {
+  return arc.chapterRangeHint?.start ?? 0;
+}
+
+function buildForbiddenVocabLines(
+  currentArc: ArcOutline,
+  allArcs: ArcOutline[],
+  worldFacts: WorldFact[],
+): string[] {
+  const currentStart = arcStartChapter(currentArc);
+  const lines: string[] = [];
+
+  for (const fact of worldFacts) {
+    if (!fact.minRevealArc) continue;
+    const minArc = allArcs.find((a) => a.id === fact.minRevealArc);
+    if (!minArc) continue;
+    if (arcStartChapter(minArc) <= currentStart) continue;
+
+    const vocab = fact.labelVocabulary ?? [];
+    if (vocab.length === 0) continue;
+
+    lines.push(
+      `  - ${vocab.join(" / ")}  (「${fact.title}」— earliest arc: ${fact.minRevealArc})`,
+    );
+  }
+
+  return lines;
+}
 
 export function buildBeatOutlineMessages(
   input: BeatOutlineGenerationInput,
@@ -23,6 +56,32 @@ export function buildBeatOutlineMessages(
     relationshipChanges: arc.relationshipChanges.slice(0, 4),
   }));
 
+  // Derive forbidden vocabulary lines for each arc being generated.
+  const allArcs = input.allArcOutlines ?? input.arcOutlines;
+  const forbiddenByArcId = new Map<string, string[]>();
+  if (input.worldFacts && input.worldFacts.length > 0) {
+    for (const arc of input.arcOutlines) {
+      const lines = buildForbiddenVocabLines(arc, allArcs, input.worldFacts);
+      if (lines.length > 0) {
+        forbiddenByArcId.set(arc.id, lines);
+      }
+    }
+  }
+
+  const forbiddenSection =
+    forbiddenByArcId.size > 0
+      ? [
+          "Info-pacing hard boundary (A-constraint):",
+          "The following canonical labels MUST NOT appear verbatim or as paraphrase in revealTargets / constraints / beatGoal of the listed arc's beats.",
+          "In those arcs, describe only what the POV character experiences or suspects — never name the underlying world-builder rule.",
+          "Example: write '旁人自动把她的拒绝理解成情绪波动' NOT '认知平滑处理了她的退出意图'.",
+          ...Array.from(forbiddenByArcId.entries()).flatMap(([arcId, lines]) => [
+            `Arc ${arcId} — forbidden labels:`,
+            ...lines,
+          ]),
+        ].join("\n")
+      : undefined;
+
   return [
     {
       role: "system",
@@ -37,8 +96,11 @@ export function buildBeatOutlineMessages(
         "- Beat chapter ranges must fully cover arc range contiguously with no overlap.",
         "- Beat order starts at 1 per arc and increments by 1.",
         "- Each beat must include beatGoal/conflict/expectedChange/constraints/revealTargets.",
+        forbiddenSection,
         "Return valid JSON only.",
-      ].join("\n"),
+      ]
+        .filter(Boolean)
+        .join("\n"),
     },
     {
       role: "user",

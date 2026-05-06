@@ -16,6 +16,8 @@ export function buildRoleDrivenReviewMessages(
         "Focus on whether the chapter's decisive turn comes from a character making a choice under pressure, and whether that choice creates visible cost or future consequence.",
         "Do not review world facts, resource recall, or commercial hook quality here.",
         "Use the provided chapter signals, active character decision profiles, and draft only.",
+        "Arc-shift adherence rule: when 'Arc shift contract' lines are provided, verify the chapter enacted the listed pressureTrigger -> newChoice -> costPaid on-page. If the chapter falls back to oldDefault behaviour without enacting any in-range shift, raise an 'author_pushed_turn' or 'character_cost_missing' finding citing the missing shift id.",
+        "Scene plan adherence rule: when a 'Scene plan contract' block is present, the chapter must respect the listed pov, location, climax owner, climax decision, and end hook. If the draft swaps pov, drops the climax, or replaces the listed decision with a transferable event, raise an 'author_pushed_turn' or 'choice_pressure_missing' finding citing the scene plan deviation.",
         "Always return scoring with choiceClarity, pressureBelievability, and consequenceStrength from 0 to 10.",
         "Return at most 4 findings. If the chapter is role-driven enough, return an empty findings array.",
       ].join("\n"),
@@ -25,6 +27,12 @@ export function buildRoleDrivenReviewMessages(
       content: [
         `Chapter objective: ${JSON.stringify(input.contextPack.chapterObjective, null, 2)}`,
         `Chapter signals: ${input.contextPack.chapterSignals.join(" | ")}`,
+        input.contextPack.scenePlanSignals?.length
+          ? `Scene plan contract (authoritative scene blocking for this chapter):\n${input.contextPack.scenePlanSignals.join("\n")}`
+          : undefined,
+        input.contextPack.arcShiftSignals?.length
+          ? `Arc shift contract:\n${input.contextPack.arcShiftSignals.join("\n")}`
+          : undefined,
         `Active characters: ${JSON.stringify(input.contextPack.activeCharacters, null, 2)}`,
         `Task rules: ${input.contextPack.taskRules.join(" | ")}`,
         input.previousChapter
@@ -46,6 +54,8 @@ export function buildRoleDrivenReviewMessages(
     },
   ];
 }
+
+
 
 export const roleDrivenReviewerResultSchema: RoleDrivenReviewerResult = {
   findings: [

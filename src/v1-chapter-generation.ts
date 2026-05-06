@@ -2,6 +2,7 @@ import {
   applyMemoryUpdaterResult,
   buildContextPack,
   buildSpecializedReviewerViews,
+  findKnowledgeBoundaryBreaches,
   pickArcForChapterDeterministic,
   pickBeatForChapterDeterministic,
   shouldRewriteForConsistency,
@@ -11,7 +12,9 @@ import {
   type ChapterPlan,
   type CommercialReviewerResult,
   type EpisodePacket,
+  type FactConsistencyFinding,
   type FactConsistencyReviewerResult,
+  type KnowledgeBoundaryFinding,
   type MemoryUpdaterResult,
   type MissingResourceReviewerResult,
   type RoleDrivenReviewerResult,
@@ -59,6 +62,48 @@ import { updateThreadsFromChapter } from "./v1-threads.js";
 import { applyOffscreenMovesForChapter } from "./v1-offscreen.js";
 import { readJsonArtifact } from "./v1-artifacts.js";
 import type { DecisionLogArtifact } from "./v1-role-drive.js";
+
+/**
+ * Convert deterministic knowledge-boundary breaches into the same
+ * shape the LLM fact reviewer emits, so the rewriter sees them in the
+ * channel it already responds to. Marked with a stable title prefix
+ * so we can dedupe across passes.
+ */
+function knowledgeBoundaryFindingsAsFactFindings(
+  findings: KnowledgeBoundaryFinding[],
+): FactConsistencyFinding[] {
+  return findings.map((f) => {
+    const severity: FactConsistencyFinding["severity"] =
+      f.revealMode === "experienced_as_anomaly" ? "high" : "medium";
+    const suggestedFix =
+      f.revealMode === "experienced_as_anomaly"
+        ? `POV此刻只是经验到具体异常，还不知道这套世界观语汇。删除「${f.vocabulary}」，改为感官/动作/人际反应描述：让POV怀疑的是具体的人或事（"对方明明前一秒还在笑，下一秒像换了一个人"），而不是抽象机制名。`
+        : `POV此刻只能怀疑模式存在，但还不能直接借用权威标签「${f.vocabulary}」。改为POV自己的私设说法或"她在心里把这种现象叫做……"句式；不要直接调用世界观词条。`;
+    return {
+      issueType: "knowledge_boundary_conflict",
+      severity,
+      title: `[KB-LEAK] POV不应使用「${f.vocabulary}」(${f.factTitle})`,
+      evidence: f.excerpt || `出现 ${f.occurrences} 次`,
+      violatedFactIds: [f.factId],
+      suggestedFix,
+    };
+  });
+}
+
+function mergeKnowledgeBoundaryIntoFactReview(
+  review: FactConsistencyReviewerResult,
+  findings: KnowledgeBoundaryFinding[],
+): FactConsistencyReviewerResult {
+  if (findings.length === 0) return review;
+  const synthetic = knowledgeBoundaryFindingsAsFactFindings(findings);
+  const existingTitles = new Set(review.findings.map((finding) => finding.title));
+  const additions = synthetic.filter((finding) => !existingTitles.has(finding.title));
+  if (additions.length === 0) return review;
+  return {
+    ...review,
+    findings: [...review.findings, ...additions],
+  };
+}
 
 type GenerateStructuredTaskWithRetry = <TSchema extends object>(args: {
   service: LlmService;
@@ -254,6 +299,16 @@ export async function generateChapterArtifact(args: {
   }
   const episodePacket: EpisodePacket = episodePlan.packet;
 
+  const allScenePlans = await args.repository.loadChapterScenePlans(args.projectId);
+  const scenePlanForChapter = allScenePlans.find(
+    (plan) => plan.chapterNumber === args.chapterNumber,
+  );
+  if (scenePlanForChapter) {
+    args.logStage(
+      "chapter",
+      `scene plan loaded chapter=${args.chapterNumber} pov=${scenePlanForChapter.pov} location=${scenePlanForChapter.location}`,
+    );
+  }
   const plannerMessages = buildPlannerMessages({
     authorPack: args.base.authorPacks.planner,
     themeBible: args.base.themeBible,
@@ -290,6 +345,7 @@ export async function generateChapterArtifact(args: {
       args.chapterNumber,
     ),
     episodePacket,
+    scenePlan: scenePlanForChapter,
   });
 
   args.logStage("chapter", `llm: planner chapter=${args.chapterNumber}`);
@@ -401,6 +457,8 @@ export async function generateChapterArtifact(args: {
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
     episodePacket,
+    scenePlan: scenePlanForChapter,
+    allArcOutlines: args.base.arcOutlines,
   });
   const reviewerContextPack = buildContextPack({
     task: "reviewer",
@@ -418,6 +476,8 @@ export async function generateChapterArtifact(args: {
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
     episodePacket,
+    scenePlan: scenePlanForChapter,
+    allArcOutlines: args.base.arcOutlines,
   });
   const specializedReviewerViews = buildSpecializedReviewerViews({
     chapterPlan,
@@ -554,9 +614,25 @@ export async function generateChapterArtifact(args: {
     maxTokens: 1600,
   });
 
+  const knowledgeBoundaryFindings = findKnowledgeBoundaryBreaches({
+    draft: writerResult.object.draft,
+    beat: currentBeat,
+    arcs: args.base.arcOutlines,
+    worldFacts: args.base.worldFacts,
+  });
+  if (knowledgeBoundaryFindings.length > 0) {
+    args.logStage(
+      "chapter",
+      `knowledge_boundary leak chapter=${args.chapterNumber} count=${knowledgeBoundaryFindings.length} words=${knowledgeBoundaryFindings.map((f) => f.vocabulary).join(",")}`,
+    );
+  }
+  const factReviewWithBoundary = mergeKnowledgeBoundaryIntoFactReview(
+    factConsistencyReview.object as FactConsistencyReviewerResult,
+    knowledgeBoundaryFindings,
+  );
   const initialNormalized = args.normalizeReviewerResults({
     missing: missingResourceReview.object as MissingResourceReviewerResult,
-    fact: factConsistencyReview.object as FactConsistencyReviewerResult,
+    fact: factReviewWithBoundary,
   });
   const initialMissing = initialNormalized.missing;
   const initialFact = initialNormalized.fact;
@@ -746,9 +822,25 @@ export async function generateChapterArtifact(args: {
     maxTokens: 1600,
   });
 
+  const knowledgeBoundaryFindingsFinal = findKnowledgeBoundaryBreaches({
+    draft: rewrittenDraft,
+    beat: currentBeat,
+    arcs: args.base.arcOutlines,
+    worldFacts: args.base.worldFacts,
+  });
+  if (knowledgeBoundaryFindingsFinal.length > 0) {
+    args.logStage(
+      "chapter",
+      `knowledge_boundary leak persists chapter=${args.chapterNumber} count=${knowledgeBoundaryFindingsFinal.length} words=${knowledgeBoundaryFindingsFinal.map((f) => f.vocabulary).join(",")}`,
+    );
+  }
+  const factReviewFinalWithBoundary = mergeKnowledgeBoundaryIntoFactReview(
+    factConsistencyReviewFinal.object as FactConsistencyReviewerResult,
+    knowledgeBoundaryFindingsFinal,
+  );
   const normalizedFinal = args.normalizeReviewerResults({
     missing: missingResourceReviewFinal.object as MissingResourceReviewerResult,
-    fact: factConsistencyReviewFinal.object as FactConsistencyReviewerResult,
+    fact: factReviewFinalWithBoundary,
   });
   activeMissing = normalizedFinal.missing;
   activeFact = normalizedFinal.fact;
