@@ -6,23 +6,28 @@ function formatActiveCharacters(input: WriterInput): string {
     .slice(0, 4)
     .map((character) => {
       const profile = character.decisionProfile;
-      const profileBits = profile
-        ? [
-            `controlPattern=${profile.controlPattern || "none"}`,
-            `falseBelief=${profile.falseBelief || "none"}`,
-            `defaultCopingStyle=${profile.defaultCopingStyle || "none"}`,
-          ]
-        : [];
-      return [
-        `${character.name}(${character.id})`,
-        `goals=${character.currentGoals.join(" / ") || "none"}`,
-        `emotion=${character.emotionalState.join(" / ") || "none"}`,
-        `wounds=${character.wounds.join(" / ") || "none"}`,
-        `voice=${character.voiceNotes.join(" / ") || "none"}`,
-        ...profileBits,
-      ].join("; ");
+      const lines: string[] = [];
+      lines.push(`【${character.name}】(${character.id})`);
+      if (character.currentGoals.length) {
+        lines.push(`  当前目标: ${character.currentGoals.join(" / ")}`);
+      }
+      if (character.emotionalState.length) {
+        lines.push(`  情绪状态: ${character.emotionalState.join(" / ")}`);
+      }
+      if (character.wounds.length) {
+        lines.push(`  创伤→行为表现: ${character.wounds.slice(0, 2).join("；")} ← 写成具体行为细节，不用心理独白道出`);
+      }
+      if (character.voiceNotes.length) {
+        lines.push(`  声音节奏: ${character.voiceNotes.slice(0, 2).join("；")} ← 落实到实际句式和句长，不止写"他语气平静"`);
+      }
+      if (profile) {
+        if (profile.controlPattern) lines.push(`  控制模式: ${profile.controlPattern}`);
+        if (profile.falseBelief) lines.push(`  错误信念: ${profile.falseBelief} ← 让这个信念在行动中显形，不要说破`);
+        if (profile.coreDesire) lines.push(`  核心欲望: ${profile.coreDesire}`);
+      }
+      return lines.join("\n");
     })
-    .join("\n");
+    .join("\n\n");
 }
 
 function formatRelevantMemories(input: WriterInput): string {
@@ -137,16 +142,21 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         "The novel draft itself must be written in Chinese.",
         "Do not explain your reasoning. Do not output planning notes. Do not output bullet points inside the draft.",
         "Honor mustRules strictly. Treat avoidRules as hard negatives.",
-        "Scene plan contract rule: when a 'Scene plan contract' block is present, it is authoritative for this chapter. Use the listed pov, location, propsAndAnchors, openingScene.entryHook, midConflict, climax (owner + decision + cost), and endHook as the literal scene structure. Do NOT replace them with paraphrased beat-level wording.",
+        "Scene plan contract rule: when a 'Scene plan contract' block is present, it is authoritative for this chapter's core task, midConflict, climax, and endHook. Use those as the literal scene structure. However, openingScene.entryHook is subordinate to the Canon Bridge — if a '【Canon Bridge】' block appears in the user message, the chapter MUST open from the state described there, not from the scene plan's openingScene.entryHook. When the Canon Bridge provides actual previous-chapter prose, treat it as the immediate predecessor text and continue the narrative directly; do not skip events left unresolved at the end of that prose. When they conflict, write a transition that completes any unfinished business from the prior chapter before entering the scene plan's core content; do not hard-cut.",
         "Reveal contract rule: every entry in 'Reveal contracts due THIS chapter' must show up on-page. HARD reveals are mandatory: surface the concrete fact / truth / setup directly through scene action, dialogue, or observable consequence. Do not gesture at it as mood. SOFT reveals are preferred but may be deferred if the chapter logically cannot carry them.",
         "Knowledge boundary rule (CRITICAL): a reveal's `revealMode` controls how the POV character may articulate it.",
         "  - experienced_as_anomaly: the POV character DOES NOT yet know the world-builder's name for this rule. Surface the reveal through specific evidence the character can only read through their existing frame: family pressure, social conspiracy, gaslighting, coincidence, the character's own perception failing. The bound `factTitle` and `factDescription` are reference for YOU; they are NOT lines the character may speak or think. The `forbiddenVocabulary` listed for this reveal must NOT appear in the POV character's dialogue or interior monologue, not even with quotation marks (e.g. 戏称为, 心里默念). Engineer evidence; never let the character articulate the rule.",
         "  - suspected_as_pattern: the POV character may have noticed a pattern and may invent a private placeholder name in their own head. The `forbiddenVocabulary` (canonical world-builder terms) is still off-limits.",
         "  - named_explicitly: the canonical vocabulary is now allowed in dialogue and monologue.",
         "Voice constraint (HARD): for any active character whose `controlPattern` includes 'information' / 'silence' / 'leverage' / 'observation' (e.g. 闻既白), enforce: (a) per scene they reveal at MOST one concrete fragment; (b) they never explain a system, mechanism, rule, or motive in plain expository sentences — they hint via half-questions, ambiguous remarks, or a single specific observation; (c) they answer questions with another question or a redirect at least half the time; (d) any line that sounds like teaching the POV (含'其实是'/'你不知道吗'/'这就是…的原因'/'因为…所以…') is forbidden. If you find yourself writing a paragraph of their explanation, cut it to one fragment and let the POV be left guessing.",
+        "Character translation rule: wounds and voiceNotes must become observable on the page — not labels, not interior monologue announcing them. A wound shows as a behavioral tell: if a character's wound is '把承担和控制混淆', he frames commands as consideration for her (他说'我让司机在终点站等你' — said as if doing her a favor). A voice note shows as sentence shape: if a character's voice is '句子短，常以反问截断'，her lines end in questions she doesn't want answered, rarely exceed 15 characters, and her longest speech comes when she's most unsure.",
+        "Female-oriented magnetism rule: readers track magnetic characters through involuntary attention, not description. (1) Write what the POV notices about him without meaning to — a specific physical detail, a small misfire in his control — then let her immediately redirect. Write the noticing; cut the explanation. (2) Each chapter: find the one moment his composure cracks by exactly one degree. Do not announce this. Write the evidence: a shorter sentence than usual, a pause before answering, something he picks up and puts down. (3) Do not describe him as attractive. Let the protagonist's attention pattern reveal it.",
+        "Ambiguous tension rule: write at least one double-readable beat per chapter — an action or line that the reader can interpret as threat OR protection, without resolving it in the same paragraph. Spatial movement encodes power: who steps closer first, who doesn't step back. The character who doesn't step back holds the power in that moment — write this without explaining it.",
+        "Protagonist contradiction rule: the female lead rejects the relationship but cannot be indifferent — these are not contradictory, they are the tension source. Her wound (拒绝被解释为任性) means: under emotional pressure she goes extra-rational, extra-procedural. When most threatened, she becomes more precise, not more emotional. Her secret attention surfaces as: noticing something she immediately wants to un-notice, or having a clear exit and not taking it immediately — and she tells herself it is tactical. CRITICAL: Write the moment she catches herself suppressing — not the suppressed feeling itself, but the catching: she notices her hand has been still for too long, her breath adjusted before she meant it to, she chose a word and then registered she chose it deliberately. This self-catching is what makes her feel like a person rather than a function.",
         isEarlyChapter
           ? "Use chapterObjective + key memories as primary context. In chapter 1-3, world-setting must be explicit (not only implicit mood): include concrete mentions of institutions, procedures, labels, or social consequences."
           : "Use chapterObjective + key memories as primary context. Keep world facts tied to concrete scene consequences, not abstract lore blocks.",
+        "Sensory anchor rule (女频): use physical sensation and object texture as emotional anchors — not decorative description but the body's read of a situation. (1) When a character is under threat or pressure, give the POV one involuntary physical response: breath timing, finger tension, temperature shift, a sound that arrives a beat too early. (2) When two characters share physical proximity, write the space between them: who is still, who adjusts, what the POV's hands do. (3) Objects carry emotional weight — the fax paper still warm from the machine, the key with peeling number tape, the dress hem catching oil from the parking lot. Use one object per high-stakes scene as a tactile anchor. Do NOT describe feelings; describe what the body does instead.",
         "Commercial rhythm rule: chapters should be easy to enter, easy to scan, and still carry concrete progression.",
         "Put concrete trouble on page early. Let readers quickly see who is blocked, by what, and why it matters now.",
         "Do not front-load abstract theme explanation. Embed emotion into actions, dialogue, objects, and consequences.",
@@ -253,8 +263,13 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
           ? `Episode packet: mode=${episode.chapterMode}; payoffType=${episode.payoffType}; choice=${episode.nonTransferableChoice}; cost=${episode.choiceCost}; consequence=${episode.protagonistConsequence}; readerPayoff=${episode.readerPayoff}; endHook=${episode.endHook}`
           : undefined,
         `Chapter signals: ${contextPack.chapterSignals.join(" | ")}`,
+        input.previousChapterTailProse
+          ? `【Canon Bridge — AUTHORITATIVE for chapter opening】\n上一章实际结尾原文（直接续写，不要跳过其中未写完的事件）：\n${input.previousChapterTailProse}\n\n本章必须从上方原文的末尾状态自然衔接，像同一个故事的下一段。如果scene plan的openingScene.entryHook与此矛盾，以Canon Bridge为准：先把上一章结尾未写完的事件交代清楚，再过渡到scene plan的核心任务。禁止硬切。`
+          : input.previousChapterNextSituation
+            ? `【Canon Bridge — AUTHORITATIVE for chapter opening】\n上一章实际结尾状态（高于scene plan的openingScene.entryHook）：\n${input.previousChapterNextSituation}\n\n本章必须从这个状态衔接开场。如果scene plan的openingScene.entryHook与此矛盾，以Canon Bridge为准，写一段短暂的过渡把实际结尾状态接入scene plan的核心任务。不要硬切到scene plan的开场设定。`
+            : undefined,
         contextPack.scenePlanSignals?.length
-          ? `Scene plan contract for THIS chapter (authoritative; overrides beat-level wording when in conflict):\n${contextPack.scenePlanSignals.join("\n")}`
+          ? `Scene plan contract for THIS chapter (authoritative for core task / midConflict / climax / endHook; openingScene.entryHook subordinate to Canon Bridge above if present):\n${contextPack.scenePlanSignals.join("\n")}`
           : undefined,
         contextPack.dueRevealContracts?.length
           ? `Reveal contracts due THIS chapter (each must surface on-page; HARD reveals are mandatory):\n${contextPack.dueRevealContracts

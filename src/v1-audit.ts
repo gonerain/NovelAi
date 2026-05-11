@@ -335,7 +335,7 @@ export async function regenerateBeatsForArc(
     messages,
     schema: beatOutlineGenerationResultSchema,
     temperature: 0.2,
-    maxTokens: 3200,
+    maxTokens: 5500,
   });
 
   const newBeats: BeatOutline[] = result.object.beatOutlines ?? [];

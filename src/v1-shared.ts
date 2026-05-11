@@ -415,6 +415,7 @@ export function normalizeCommercialPlan(args: {
       args.genrePayoffPack.rewardTargetBias[0] ||
       args.plannedOutcome.trim() ||
       args.chapterGoal.trim(),
+    readerContract: args.planned?.readerContract,
   };
 }
 

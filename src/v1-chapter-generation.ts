@@ -42,6 +42,7 @@ import {
 } from "./prompts/index.js";
 import { FileProjectRepository } from "./storage/index.js";
 import {
+  chapterCanonicalDraftPath,
   chapterConsequenceEdgesPath,
   chapterDecisionLogPath,
   chapterEpisodeEvalPath,
@@ -50,6 +51,7 @@ import {
   chapterRelationshipShiftPath,
   chapterStatsPath,
 } from "./v1-paths.js";
+import { readFile } from "node:fs/promises";
 import {
   buildConsequenceEdgesArtifact,
   buildDecisionLogArtifact,
@@ -62,6 +64,25 @@ import { updateThreadsFromChapter } from "./v1-threads.js";
 import { applyOffscreenMovesForChapter } from "./v1-offscreen.js";
 import { readJsonArtifact } from "./v1-artifacts.js";
 import type { DecisionLogArtifact } from "./v1-role-drive.js";
+
+/** Read the last `paragraphCount` non-empty paragraphs from a chapter draft. */
+async function extractTailProse(
+  projectId: string,
+  chapterNumber: number,
+  paragraphCount: number,
+): Promise<string | undefined> {
+  try {
+    const draftPath = chapterCanonicalDraftPath(projectId, chapterNumber);
+    const raw = await readFile(draftPath, "utf-8");
+    const paragraphs = raw
+      .split(/\n{2,}/)
+      .map((p) => p.trim())
+      .filter((p) => p.length > 0 && !p.startsWith("#"));
+    return paragraphs.slice(-paragraphCount).join("\n\n");
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Convert deterministic knowledge-boundary breaches into the same
@@ -320,6 +341,10 @@ export async function generateChapterArtifact(args: {
       args.chapterNumber <= shift.expectedChapterRange.end,
   );
 
+  const prevScenePlan = allScenePlans.find(
+    (plan) => plan.chapterNumber === args.chapterNumber - 1,
+  );
+
   const plannerMessages = buildPlannerMessages({
     authorPack: args.base.authorPacks.planner,
     themeBible: args.base.themeBible,
@@ -358,6 +383,7 @@ export async function generateChapterArtifact(args: {
     episodePacket,
     scenePlan: scenePlanForChapter,
     activeShifts: activeShifts.length > 0 ? activeShifts : undefined,
+    priorChapterEndHook: prevScenePlan?.endHook,
   });
 
   args.logStage("chapter", `llm: planner chapter=${args.chapterNumber}`);
@@ -499,8 +525,17 @@ export async function generateChapterArtifact(args: {
   });
 
   args.logStage("chapter", `llm: writer chapter=${args.chapterNumber}`);
+  const prevArtifact = args.availableChapterArtifacts.find(
+    (a) => a.chapterNumber === args.chapterNumber - 1,
+  );
+  const previousChapterTailProse =
+    args.chapterNumber > 1
+      ? await extractTailProse(args.projectId, args.chapterNumber - 1, 5)
+      : undefined;
   const writerMessages = buildWriterMessages({
     contextPack: writerContextPack,
+    previousChapterNextSituation: prevArtifact?.memoryUpdate?.nextSituation,
+    previousChapterTailProse,
     minParagraphs: 8,
     maxParagraphs: 14,
   });
@@ -525,72 +560,6 @@ export async function generateChapterArtifact(args: {
     } satisfies WriterResult,
   };
 
-  args.logStage("chapter", `llm: review_missing_resource chapter=${args.chapterNumber}`);
-  const missingReviewMessages = buildMissingResourceReviewMessages({
-    contextPack: reviewerContextPack,
-    draft: writerResult.object.draft,
-    storyMemories: args.base.storyMemories,
-    resourceCandidates: specializedReviewerViews.resourceCandidates,
-  });
-  await args.writePromptDebug({
-    projectId: args.projectId,
-    scope: "chapter",
-    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_missing_resource`,
-    messages: missingReviewMessages,
-  });
-  const missingResourceReview = await args.generateStructuredTaskWithRetry({
-    service: args.service,
-    task: "review_missing_resource",
-    messages: missingReviewMessages,
-    schema: missingResourceReviewerResultSchema,
-    temperature: 0.2,
-    maxTokens: 1800,
-  });
-
-  args.logStage("chapter", `llm: review_fact chapter=${args.chapterNumber}`);
-  const factReviewMessages = buildFactConsistencyReviewMessages({
-    contextPack: reviewerContextPack,
-    draft: writerResult.object.draft,
-    storyMemories: args.base.storyMemories,
-    worldFacts: args.base.worldFacts,
-    relationshipCandidates: specializedReviewerViews.relationshipCandidates,
-  });
-  await args.writePromptDebug({
-    projectId: args.projectId,
-    scope: "chapter",
-    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_fact`,
-    messages: factReviewMessages,
-  });
-  const factConsistencyReview = await args.generateStructuredTaskWithRetry({
-    service: args.service,
-    task: "review_fact",
-    messages: factReviewMessages,
-    schema: factConsistencyReviewerResultSchema,
-    temperature: 0.2,
-    maxTokens: 1800,
-  });
-
-  args.logStage("chapter", `llm: review_commercial chapter=${args.chapterNumber}`);
-  const commercialReviewMessages = buildCommercialReviewMessages({
-    contextPack: reviewerContextPack,
-    draft: writerResult.object.draft,
-  });
-  await args.writePromptDebug({
-    projectId: args.projectId,
-    scope: "chapter",
-    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_commercial`,
-    messages: commercialReviewMessages,
-  });
-  const commercialReview = await args.generateStructuredTaskWithRetry({
-    service: args.service,
-    task: "review_commercial",
-    messages: commercialReviewMessages,
-    schema: commercialReviewerResultSchema,
-    temperature: 0.2,
-    maxTokens: 1600,
-  });
-
-  args.logStage("chapter", `llm: review_role_drive chapter=${args.chapterNumber}`);
   const previousChapterDecisionLog =
     args.chapterNumber > 1
       ? await readJsonArtifact<DecisionLogArtifact>(
@@ -606,25 +575,45 @@ export async function generateChapterArtifact(args: {
         relationshipShift: previousChapterDecisionLog.relationshipShift,
       }
     : undefined;
+
+  const missingReviewMessages = buildMissingResourceReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: writerResult.object.draft,
+    storyMemories: args.base.storyMemories,
+    resourceCandidates: specializedReviewerViews.resourceCandidates,
+  });
+  const factReviewMessages = buildFactConsistencyReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: writerResult.object.draft,
+    storyMemories: args.base.storyMemories,
+    worldFacts: args.base.worldFacts,
+    relationshipCandidates: specializedReviewerViews.relationshipCandidates,
+  });
+  const commercialReviewMessages = buildCommercialReviewMessages({
+    contextPack: reviewerContextPack,
+    draft: writerResult.object.draft,
+  });
   const roleDrivenReviewMessages = buildRoleDrivenReviewMessages({
     contextPack: reviewerContextPack,
     draft: writerResult.object.draft,
     previousChapter: previousChapterRoleSnapshot,
   });
-  await args.writePromptDebug({
-    projectId: args.projectId,
-    scope: "chapter",
-    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_role_drive`,
-    messages: roleDrivenReviewMessages,
-  });
-  const roleDrivenReview = await args.generateStructuredTaskWithRetry({
-    service: args.service,
-    task: "review_role_drive",
-    messages: roleDrivenReviewMessages,
-    schema: roleDrivenReviewerResultSchema,
-    temperature: 0.2,
-    maxTokens: 1600,
-  });
+
+  await Promise.all([
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_missing_resource`, messages: missingReviewMessages }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_fact`, messages: factReviewMessages }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_commercial`, messages: commercialReviewMessages }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_role_drive`, messages: roleDrivenReviewMessages }),
+  ]);
+
+  args.logStage("chapter", `llm: review ×4 parallel chapter=${args.chapterNumber}`);
+  const [missingResourceReview, factConsistencyReview, commercialReview, roleDrivenReview] =
+    await Promise.all([
+      args.generateStructuredTaskWithRetry({ service: args.service, task: "review_missing_resource", messages: missingReviewMessages, schema: missingResourceReviewerResultSchema, temperature: 0.2, maxTokens: 1800 }),
+      args.generateStructuredTaskWithRetry({ service: args.service, task: "review_fact", messages: factReviewMessages, schema: factConsistencyReviewerResultSchema, temperature: 0.2, maxTokens: 1800 }),
+      args.generateStructuredTaskWithRetry({ service: args.service, task: "review_commercial", messages: commercialReviewMessages, schema: commercialReviewerResultSchema, temperature: 0.2, maxTokens: 1600 }),
+      args.generateStructuredTaskWithRetry({ service: args.service, task: "review_role_drive", messages: roleDrivenReviewMessages, schema: roleDrivenReviewerResultSchema, temperature: 0.2, maxTokens: 1600 }),
+    ]);
 
   const knowledgeBoundaryFindings = findKnowledgeBoundaryBreaches({
     draft: writerResult.object.draft,
@@ -748,29 +737,12 @@ export async function generateChapterArtifact(args: {
     }
   }
 
-  args.logStage("chapter", `llm: review_missing_resource_final chapter=${args.chapterNumber} pass=1`);
   const missingFinalMessages = buildMissingResourceReviewMessages({
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
     storyMemories: args.base.storyMemories,
     resourceCandidates: specializedReviewerViews.resourceCandidates,
   });
-  await args.writePromptDebug({
-    projectId: args.projectId,
-    scope: "chapter",
-    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_missing_resource_final`,
-    messages: missingFinalMessages,
-  });
-  const missingResourceReviewFinal = await args.generateStructuredTaskWithRetry({
-    service: args.service,
-    task: "review_missing_resource",
-    messages: missingFinalMessages,
-    schema: missingResourceReviewerResultSchema,
-    temperature: 0.2,
-    maxTokens: 1800,
-  });
-
-  args.logStage("chapter", `llm: review_fact_final chapter=${args.chapterNumber} pass=1`);
   const factFinalMessages = buildFactConsistencyReviewMessages({
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
@@ -778,61 +750,31 @@ export async function generateChapterArtifact(args: {
     worldFacts: args.base.worldFacts,
     relationshipCandidates: specializedReviewerViews.relationshipCandidates,
   });
-  await args.writePromptDebug({
-    projectId: args.projectId,
-    scope: "chapter",
-    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_fact_final`,
-    messages: factFinalMessages,
-  });
-  const factConsistencyReviewFinal = await args.generateStructuredTaskWithRetry({
-    service: args.service,
-    task: "review_fact",
-    messages: factFinalMessages,
-    schema: factConsistencyReviewerResultSchema,
-    temperature: 0.2,
-    maxTokens: 1800,
-  });
-
-  args.logStage("chapter", `llm: review_commercial_final chapter=${args.chapterNumber} pass=1`);
   const commercialFinalMessages = buildCommercialReviewMessages({
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
   });
-  await args.writePromptDebug({
-    projectId: args.projectId,
-    scope: "chapter",
-    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_commercial_final`,
-    messages: commercialFinalMessages,
-  });
-  const commercialReviewFinal = await args.generateStructuredTaskWithRetry({
-    service: args.service,
-    task: "review_commercial",
-    messages: commercialFinalMessages,
-    schema: commercialReviewerResultSchema,
-    temperature: 0.2,
-    maxTokens: 1600,
-  });
-
-  args.logStage("chapter", `llm: review_role_drive_final chapter=${args.chapterNumber} pass=1`);
   const roleDrivenFinalMessages = buildRoleDrivenReviewMessages({
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
     previousChapter: previousChapterRoleSnapshot,
   });
-  await args.writePromptDebug({
-    projectId: args.projectId,
-    scope: "chapter",
-    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_role_drive_final`,
-    messages: roleDrivenFinalMessages,
-  });
-  const roleDrivenReviewFinal = await args.generateStructuredTaskWithRetry({
-    service: args.service,
-    task: "review_role_drive",
-    messages: roleDrivenFinalMessages,
-    schema: roleDrivenReviewerResultSchema,
-    temperature: 0.2,
-    maxTokens: 1600,
-  });
+
+  await Promise.all([
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_missing_resource_final`, messages: missingFinalMessages }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_fact_final`, messages: factFinalMessages }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_commercial_final`, messages: commercialFinalMessages }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_role_drive_final`, messages: roleDrivenFinalMessages }),
+  ]);
+
+  args.logStage("chapter", `llm: review ×4 parallel final chapter=${args.chapterNumber}`);
+  const [missingResourceReviewFinal, factConsistencyReviewFinal, commercialReviewFinal, roleDrivenReviewFinal] =
+    await Promise.all([
+      args.generateStructuredTaskWithRetry({ service: args.service, task: "review_missing_resource", messages: missingFinalMessages, schema: missingResourceReviewerResultSchema, temperature: 0.2, maxTokens: 1800 }),
+      args.generateStructuredTaskWithRetry({ service: args.service, task: "review_fact", messages: factFinalMessages, schema: factConsistencyReviewerResultSchema, temperature: 0.2, maxTokens: 1800 }),
+      args.generateStructuredTaskWithRetry({ service: args.service, task: "review_commercial", messages: commercialFinalMessages, schema: commercialReviewerResultSchema, temperature: 0.2, maxTokens: 1600 }),
+      args.generateStructuredTaskWithRetry({ service: args.service, task: "review_role_drive", messages: roleDrivenFinalMessages, schema: roleDrivenReviewerResultSchema, temperature: 0.2, maxTokens: 1600 }),
+    ]);
 
   const knowledgeBoundaryFindingsFinal = findKnowledgeBoundaryBreaches({
     draft: rewrittenDraft,

@@ -48,6 +48,12 @@ export interface PlannerInput {
    * above the full arc shift list.
    */
   activeShifts?: ArcShift[];
+  /**
+   * Exact endHook text from the previous chapter's scene plan.
+   * Injected at call site so the planner can copy it verbatim into
+   * readerContract.priorEndHook without having to recall or infer it.
+   */
+  priorChapterEndHook?: string;
 }
 
 export interface PlannerResult {

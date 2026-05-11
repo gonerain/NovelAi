@@ -41,6 +41,13 @@ export interface SceneDecomposerInput {
   revealItems?: RevealItem[];
   /** Full arc list — used to stage RevealMode defaults. */
   allArcOutlines?: ArcOutline[];
+  /** Pre-computed beat budget status for this specific chapter. */
+  beatBudgetStatus?: {
+    chaptersRemaining: number;
+    taskBudgetRemaining: number;
+    shortfall: number;
+    isFinale: boolean;
+  };
 }
 
 export interface SceneDecomposerResult {
@@ -153,7 +160,10 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
         "- Skip characters who only observe; only include micro-shifts for characters who actually change in the chapter.",
         "- propsAndAnchors should list 2-4 concrete sensory or material objects/places that anchor the scene.",
         "- Use the protagonistArc.shifts and supportingCharacterArcs.shifts as the source of truth for which shift each chapter advances. Respect their expectedChapterRange.",
-        "- Narrative task assignment: if the beat provides narrativeTasks, before writing scene content, look at the task pool and each task's chaptersUsed / targetChapterBudget ratio. Select 1-2 tasks to advance this chapter (put their ids in advancingTaskIds). List the remaining tasks in heldTaskIds. A chapter that tries to advance all tasks simultaneously will feel diffuse — use task assignment to force structural variety across the beat's chapters.",
+        "- Narrative task assignment: if the beat provides narrativeTasks, before writing scene content, look at the task pool and each task's chaptersUsed / targetChapterBudget ratio. Select 1-2 tasks to advance this chapter (put their ids in advancingTaskIds). List the remaining tasks in heldTaskIds. A chapter that tries to advance all tasks simultaneously will feel diffuse — use task assignment to force structural variety across the beat's chapters. If all tasks have reached their targetChapterBudget, do NOT leave advancingTaskIds empty — either carry over the most critical task (at the cost of slightly exceeding its budget) or create a chapter-local task described as 'local: [description]'.",
+        "- Anomaly mechanism category diversity rule: six categories exist — (1) communication_override (phones, messages, calls redirected), (2) identity_document_forgery (signatures, records, credentials replaced), (3) physical_presence_substitute (doppelganger, body double in physical space), (4) transportation_redirect (tickets, routes, vehicles altered), (5) surveillance_tracking (location exposed or monitored by system), (6) social_consensus (everyone assumes protagonist is present/agreed without evidence). No two CONSECUTIVE chapters within the same beat may use the same primary category. Track what the prior chapter used and choose a different one. Include the chosen category id in a comment in your reasoning but you do not need to output it as a JSON field.",
+        "- Beat payoff rule: the FINAL 1-2 chapters of a beat MUST deliver a payoff scene that resolves or escalates the most prominent hook planted in the OPENING chapter of that beat. If the opening chapter planted 'there is a physical double standing in for her', the beat cannot close without at least one scene where protagonist encounters that double directly. Repeating the same demonstration pattern (system overrides her choice, she observes and escapes, nothing changes hands) across all chapters of a beat is FORBIDDEN — the final chapter must raise the stakes by confrontation, alliance, or betrayal that was impossible in chapter 1.",
+        "- Climax outcome diversity rule: three outcome types exist — (1) `blocked`: protagonist is redirected, stopped, or forced onto the preset path; pays a cost but gains nothing concrete. (2) `partial_win`: protagonist gains concrete information, leverage, or capability at a cost; the next chapter starts from a stronger position. (3) `pivot`: protagonist abandons the current approach entirely and commits to a fundamentally different tactic; the story's strategic situation changes. Look at the peer chapters' climax.costPaid and climax.decisionUnderPressure to infer what outcome type they used. Two consecutive `blocked` chapters within the same beat are FORBIDDEN. Plan your chapter's climax outcome type and ensure it differs from the prior chapter.",
         "- characterDecisionArc: fill this for every chapter. It is the psychological shape of the central decision, grounded in the advancing tasks. desire = the one concrete thing the POV character is trying to get (info/leverage/proof/exit, never an emotion). misjudgment = what they got wrong before the chapter corrected them. activeCounter = the named person or mechanism that actively blocks (not passive circumstance — something that acts against them). forcedChoice = the binary the counter imposes. costPaid = the observable price. downstreamImpact = how this cost constrains the next chapter.",
         "Per-chapter shape:",
         "  chapterNumber, beatId, arcId, pov, location, propsAndAnchors[2-4],",
@@ -258,12 +268,44 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
               2,
             )}`
           : undefined,
+        (() => {
+          const b = input.beatBudgetStatus;
+          if (!b) return undefined;
+          const lines = [
+            `Beat budget status for chapter ${input.targetChapterNumber ?? "?"}:`,
+            `  chapters remaining in beat (including this one): ${b.chaptersRemaining}`,
+            `  task budget points remaining: ${b.taskBudgetRemaining}`,
+          ];
+          if (b.shortfall > 0) {
+            lines.push(
+              `  ⚠ budget shortfall: ${b.shortfall} chapter(s) have no task to advance`,
+            );
+          }
+          if (b.isFinale) {
+            lines.push(
+              `  → BEAT FINALE MODE: task pool is exhausted before the beat ends. This chapter MUST NOT repeat a prior demonstration. It must deliver the payoff promised by the beat's opening hook — confrontation, revelation, or a pivot that was impossible in chapter 1. Use a 'local:' task in advancingTaskIds.`,
+            );
+          }
+          return lines.join("\n");
+        })(),
         input.existingPlans?.length
           ? `Existing scene plans (refine, do not erase fields you keep):\n${JSON.stringify(input.existingPlans, null, 2)}`
           : undefined,
         isSingleChapter && input.peerPlans?.length
-          ? `Peer scene plans for other chapters in this beat (must differ structurally from these):\n${JSON.stringify(
-              input.peerPlans,
+          ? `Peer scene plans for other chapters in this beat (must differ structurally — especially the midConflict mechanism — from these):\n${JSON.stringify(
+              input.peerPlans.map((p) => ({
+                chapterNumber: p.chapterNumber,
+                pov: p.pov,
+                location: p.location,
+                openingScene: { entryHook: p.openingScene?.entryHook },
+                midConflict: p.midConflict,
+                climax: {
+                  decisionOwnerId: p.climax?.decisionOwnerId,
+                  decisionUnderPressure: p.climax?.decisionUnderPressure,
+                },
+                endHook: p.endHook,
+                advancingTaskIds: p.advancingTaskIds,
+              })),
               null,
               2,
             )}`
@@ -278,97 +320,76 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
   ];
 }
 
+// ── SCHEMA EXAMPLE ─────────────────────────────────────────────────────────────
+// This example shows a BEAT-FINAL chapter (chapter 5 of 5 in a beat).
+// Key design choices to study:
+//   • Anomaly category: physical_presence_substitute (doppelganger confronted
+//     face-to-face). The prior chapter used transportation_redirect, the one before
+//     used surveillance_tracking — categories rotate, never repeat consecutively.
+//   • Beat payoff: ch1 planted "there is a physical double standing in for her";
+//     this beat-final chapter MUST deliver a direct encounter with that double.
+//     Failing to do so (e.g. another ticket-redirect scene) would violate beat payoff rule.
+//   • advancingTaskIds: the main_plot task has reached its budget, but rather than
+//     leave the array empty, the emotional task is carried over with budget slightly
+//     exceeded — the array is never empty.
+//   • protagonistGain: non-null; she gains a concrete new rule about the system
+//     (the double is self-aware), not an emotion.
+//   • characterDecisionArc.desire is chapter-specific (not copied from beat goal).
+//   • endHook is produced by protagonist's own action, not by an external arrival.
 export const sceneDecomposerResultSchema: SceneDecomposerResult = {
   scenePlans: [
     {
-      chapterNumber: 1,
-      beatId: "beat_example_001",
-      arcId: "arc_example",
+      chapterNumber: 5,
+      beatId: "beat_escape_001",
+      arcId: "arc_escape",
       pov: "protagonist",
-      location: "hotel lobby",
-      propsAndAnchors: ["crumpled invitation", "pay phone", "exit sign", "her own reflection"],
+      location: "hotel backstage corridor — dressing room wing, end of beat-1 beat range",
+      propsAndAnchors: [
+        "wedding veil left on a folding chair",
+        "dual mirrors angled to show infinite reflection",
+        "the double's handwriting on a crumpled serviette",
+        "security badge clipped to the double's collar",
+      ],
       openingScene: {
-        entryHook: "she finds the invitation still bearing her name despite her written refusal",
-        situationOnPage: "she tries to tear it up but the paper reconstitutes itself",
+        entryHook: "she slips past a distracted security guard into the backstage corridor, expecting the doppelganger to be alone now that the ceremony is winding down",
+        situationOnPage: "the corridor is dim; she sees a figure in the bridal gown at the far end, back turned, touching up lipstick in a pocket mirror",
       },
       midConflict: {
-        trigger: "a hotel employee addresses her by the wrong name",
-        escalation: "every attempt to correct him only deepens the confusion",
+        trigger: "the figure turns and their eyes meet — the double does not run or freeze; instead it says her name, her childhood nickname, in her own voice",
+        escalation: "the double recites a specific memory only she knows (the smell of her grandmother's kitchen the morning she left for university), proving it holds her interior life — this was not a shallow copy",
       },
       climax: {
         decisionOwnerId: "protagonist",
-        decisionUnderPressure: "she stops arguing and instead asks: when exactly did the booking change?",
-        costPaid: "she reveals she has noticed the anomaly, giving the other party information",
+        decisionUnderPressure: "she realizes the double does not know it is a copy — it believes it is her, acting freely, and signed the marriage register believing it was making its own choice; she must decide whether to claim her identity back (which means destroying someone who thinks it is real) or step aside and learn what the double knows about the system",
+        costPaid: "she steps aside; the double signs the final reception document in her name; the legal act is now complete and cannot be undone tonight",
       },
-      endHook: "the answer is a date that predates her refusal letter — the correction happened before she even sent it",
-      protagonistGain: "she discovers the mechanism can retroactively rewrite timestamps, giving her the first concrete rule to test",
-      advancingTaskIds: ["task_example_main"],
-      heldTaskIds: ["task_example_emotional", "task_example_relationship"],
+      endHook: "as she leaves, she finds a handwritten note slipped into her coat pocket — 'I know you exist. I've known since the car. Don't come back unless you're ready to talk.'",
+      protagonistGain: "she discovers the doppelganger is self-aware and not a mindless puppet — the system does not merely substitute bodies, it instantiates autonomous identity copies; her prior plan to destroy the system's 'prop' is now ethically impossible",
+      advancingTaskIds: ["task_escape_001_emotional"],
+      heldTaskIds: ["task_escape_001_relationship"],
       characterDecisionArc: {
-        desire: "she wants the hotel booking record as proof the system altered it after her refusal",
-        misjudgment: "she assumed arguing loudly would force the front desk to acknowledge the discrepancy",
-        activeCounter: "the front desk manager closes the terminal and says 'the system shows no changes, Ms. Lin'",
-        forcedChoice: "stop arguing and pivot to observation (lose the confrontation, gain data) vs keep pushing (maintain stance, leave with nothing)",
-        costPaid: "she gives up the confrontation posture; the manager now reads her silence as acquiescence",
-        downstreamImpact: "next chapter she cannot replay the same confrontation — she must use the anomaly she observed instead of demanding acknowledgment",
+        desire: "she wants to reclaim her physical presence at the venue and force at least one witness to acknowledge that two 'Lin Jianyue' exist simultaneously",
+        misjudgment: "she assumed the double was a hollow substitute that would panic or glitch on contact — she planned to exploit that breakdown as public proof",
+        activeCounter: "the double engages her as a peer, not a prop — it has her full memory, her voice, her affect; a breakdown scene is impossible because there is nothing broken",
+        forcedChoice: "assert identity at the cost of a public confrontation that destroys a self-aware being vs observe silently and collect the note (let the double 'win' tonight, gain intelligence)",
+        costPaid: "she withdraws; the marriage document is legally signed in her name by another consciousness; she loses tonight's window to invalidate the ceremony",
+        downstreamImpact: "next chapter she must decide whether to contact the double through the note — she can no longer treat the double as an obstacle to remove; it is a potential source or a trap",
       },
-      dueRevealIds: ["reveal_example_01"],
+      dueRevealIds: ["reveal_escape_double_awareness"],
       characterArcMicroShift: [
         {
           characterId: "protagonist",
-          arcShiftRef: "shift_example_01",
-          oldDefault: "she would have kept arguing and demanding to be heard",
-          pressureTrigger: "every argument is absorbed without effect; she realises force achieves nothing",
-          newChoice: "she switches from confrontation to observation, asking questions instead",
-          costPaid: "she has to pretend partial acceptance, which others read as softening",
+          arcShiftRef: "shift_escape_01_agency",
+          oldDefault: "she would have confronted loudly and demanded the double 'admit' what it is",
+          pressureTrigger: "the double recites her private memory verbatim; loud confrontation would only look like a deranged bride attacking herself",
+          newChoice: "she asks a single quiet question — 'who told you about the kitchen?' — then waits",
+          costPaid: "asking reveals she is testing for consciousness, which the double logs; she is no longer anonymous to it",
         },
       ],
-      expectedDeltas: ["protagonist shifts from reactive to observational mode"],
-    },
-    {
-      chapterNumber: 2,
-      beatId: "beat_example_001",
-      arcId: "arc_example",
-      pov: "protagonist",
-      location: "stairwell",
-      propsAndAnchors: ["fire door", "her phone", "a scrawled note", "fluorescent flicker"],
-      openingScene: {
-        entryHook: "her message to a friend arrives garbled — the wrong words where her refusal should be",
-        situationOnPage: "she reads back her own sent messages and finds them rewritten",
-      },
-      midConflict: {
-        trigger: "she attempts to send a plain-text warning, stripping all context",
-        escalation: "even minimal context is enough for the mechanism to reroute meaning",
-      },
-      climax: {
-        decisionOwnerId: "protagonist",
-        decisionUnderPressure: "she decides to encode her message in a format the mechanism has no template for",
-        costPaid: "the encoding takes time she does not have; she misses her window",
-      },
-      endHook: "the encoded message arrives intact — she has found one channel the mechanism cannot yet read",
-      protagonistGain: null,
-      advancingTaskIds: ["task_example_emotional"],
-      heldTaskIds: ["task_example_main", "task_example_relationship"],
-      characterDecisionArc: {
-        desire: "she wants to send a message her friend will definitely receive in her own words",
-        misjudgment: "she assumed even minimal context would slip through the mechanism unaltered",
-        activeCounter: "the mechanism reroutes meaning as soon as there is enough relational context to work with",
-        forcedChoice: "encode in an alien format (buy time, miss the window) vs send plaintext again (fast, definitely rerouted)",
-        costPaid: "she encodes too slowly and misses the critical window; her friend does not respond in time",
-        downstreamImpact: "next chapter the encoded channel is her only remaining tool; she cannot fall back on standard communication",
-      },
-      dueRevealIds: [],
-      characterArcMicroShift: [
-        {
-          characterId: "protagonist",
-          arcShiftRef: "shift_example_01",
-          oldDefault: "rely on standard communication channels",
-          pressureTrigger: "every standard channel has been compromised",
-          newChoice: "improvise an off-script encoding method",
-          costPaid: "misses the window; the delay has consequences in the next chapter",
-        },
+      expectedDeltas: [
+        "protagonist's threat model shifts from 'system controlling a prop' to 'system that can instantiate autonomous copies'",
+        "double is now a character with potential for alliance or betrayal, not a pure antagonist",
       ],
-      expectedDeltas: ["protagonist pays a cost for the win in chapter 1; pair rhythm satisfied"],
     },
   ],
   notes: ["string"],

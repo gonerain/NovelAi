@@ -735,6 +735,26 @@ function clampScenePlan(
       costPaid: typeof climax.costPaid === "string" ? climax.costPaid.trim() : "",
     },
     endHook,
+    protagonistGain: typeof r.protagonistGain === "string" ? r.protagonistGain.trim() : null,
+    advancingTaskIds: Array.isArray(r.advancingTaskIds)
+      ? r.advancingTaskIds.filter((item): item is string => typeof item === "string")
+      : [],
+    heldTaskIds: Array.isArray(r.heldTaskIds)
+      ? r.heldTaskIds.filter((item): item is string => typeof item === "string")
+      : [],
+    characterDecisionArc: (() => {
+      const arc = r.characterDecisionArc as Record<string, unknown> | undefined;
+      if (!arc || typeof arc !== "object") return undefined;
+      const str = (k: string) => (typeof arc[k] === "string" ? (arc[k] as string).trim() : "");
+      return {
+        desire: str("desire"),
+        misjudgment: str("misjudgment"),
+        activeCounter: str("activeCounter"),
+        forcedChoice: str("forcedChoice"),
+        costPaid: str("costPaid"),
+        downstreamImpact: str("downstreamImpact"),
+      };
+    })(),
     dueRevealIds,
     characterArcMicroShift: microShifts,
     expectedDeltas,
@@ -891,6 +911,23 @@ export async function decomposeChapterScenesForProject(
         .map((chapter) => planByChapter.get(chapter))
         .filter((plan): plan is ChapterScenePlan => plan !== undefined && plan.beatId === beat.id);
 
+      // Compute beat budget status for this specific chapter position.
+      const chaptersRemaining = range.end - chapterNumber + 1;
+      const totalTaskBudget = (beat.narrativeTasks ?? []).reduce(
+        (sum, t) => sum + t.targetChapterBudget,
+        0,
+      );
+      // Approximate budget consumed by chapters before this one (peer plans that exist).
+      const budgetConsumedByPeers = peerPlans.reduce(
+        (sum, p) => sum + (p.advancingTaskIds?.length ? 1 : 0),
+        0,
+      );
+      const taskBudgetRemaining = Math.max(0, totalTaskBudget - budgetConsumedByPeers);
+      const shortfall = Math.max(0, chaptersRemaining - taskBudgetRemaining);
+      const beatBudgetStatus = beat.narrativeTasks?.length
+        ? { chaptersRemaining, taskBudgetRemaining, shortfall, isFinale: taskBudgetRemaining === 0 }
+        : undefined;
+
       log(
         "bible",
         `scene_decomposer beat=${beat.id} chapter=${chapterNumber} (peers=${peerPlans.length})`,
@@ -917,9 +954,10 @@ export async function decomposeChapterScenesForProject(
         chapterRange: range,
         targetChapterNumber: chapterNumber,
         peerPlans,
-        existingPlans: existingForChapter ? [existingForChapter] : undefined,
+        existingPlans: existingForChapter && !options.force ? [existingForChapter] : undefined,
         revealItems: beatRevealItems,
         allArcOutlines: arcs,
+        beatBudgetStatus,
       });
       await writePromptDebug({
         projectId: options.projectId,
@@ -933,7 +971,7 @@ export async function decomposeChapterScenesForProject(
           messages,
           schema: sceneDecomposerResultSchema,
           temperature: 0.4,
-          maxTokens: 3000,
+          maxTokens: 6000,
         });
         const rawPlans = Array.isArray(result.object.scenePlans)
           ? (result.object.scenePlans as unknown[])

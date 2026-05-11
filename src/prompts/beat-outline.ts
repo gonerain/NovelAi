@@ -96,7 +96,7 @@ export function buildBeatOutlineMessages(
         "- Beat chapter ranges must fully cover arc range contiguously with no overlap.",
         "- Beat order starts at 1 per arc and increments by 1.",
         "- Each beat must include beatGoal/conflict/expectedChange/constraints/revealTargets.",
-        "- Each beat should include narrativeTasks: 3-5 tasks covering different dimensions (main_plot / emotional / relationship / worldbuilding / foreshadowing). Each task has a targetChapterBudget — the number of chapters it expects to take. Total budget across all tasks must not exceed the beat's chapter count. Tasks should be independent so the scene decomposer can advance one without advancing others in the same chapter.",
+        "- Each beat MUST include narrativeTasks: exactly 3-5 tasks covering distinct dimensions (main_plot / emotional / relationship / worldbuilding / foreshadowing). Each task needs: a unique id, dimension, concrete description of what it accomplishes across the beat, targetChapterBudget (chapters expected), chaptersUsed=0. Total budget must not exceed chapter count. Tasks must be independent — advancing one should not require advancing another in the same chapter.",
         forbiddenSection,
         "Return valid JSON only.",
       ]
@@ -141,10 +141,24 @@ export const beatOutlineGenerationResultSchema: BeatOutlineGenerationResult = {
       },
       narrativeTasks: [
         {
-          id: "string",
+          id: "task_beat_id_main",
           dimension: "main_plot",
-          description: "string",
-          targetChapterBudget: 3,
+          description: "protagonist collects concrete evidence that her refusal is being systematically overridden",
+          targetChapterBudget: 4,
+          chaptersUsed: 0,
+        },
+        {
+          id: "task_beat_id_emotional",
+          dimension: "emotional",
+          description: "protagonist shifts from confident self-assurance to unsettled urgency as evidence mounts",
+          targetChapterBudget: 2,
+          chaptersUsed: 0,
+        },
+        {
+          id: "task_beat_id_relationship",
+          dimension: "relationship",
+          description: "antagonist moves from background presence to visible direct pressure on protagonist",
+          targetChapterBudget: 2,
           chaptersUsed: 0,
         },
       ],

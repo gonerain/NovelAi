@@ -252,6 +252,23 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
       role: "system",
       content: [
         "Task: produce a structured ChapterPlan for one chapter.",
+        "",
+        "## How to plan a chapter (follow this order):",
+        "1. READ the scene plan's characterDecisionArc first. This is the structural spine of the chapter — every other input is a constraint layered on top of it, not a replacement.",
+        "   - desire → sets chapterGoal (what the POV character is concretely trying to obtain this chapter)",
+        "   - misjudgment → sets the opening assumption the chapter will correct",
+        "   - activeCounter → the named force that blocks; must appear in mustHitConflicts",
+        "   - forcedChoice + costPaid → the climax beat; must appear verbatim in mustHitConflicts",
+        "   - downstreamImpact → directly determines commercial.endHook and readerContract.newContract (the next chapter is constrained by THIS, not by a free-form hook)",
+        "2. CHECK arc shifts IN RANGE. They tell you how far to advance character change this chapter — not how to replace the scene plan spine.",
+        "3. CHECK the Episode Packet for chapter mode, payoff type, and agency owner. If it conflicts with the scene plan's characterDecisionArc, keep the characterDecisionArc's desire/forcedChoice and adapt the mode label.",
+        "4. CHECK recentConsequences and unresolvedDelayedConsequences to make sure the situation at chapter start is consistent.",
+        "5. BUILD commercial controls last. endHook must be a concrete new problem produced by the costPaid — not an external arrival, not a mood. readerContract.priorEndHook = exact text from the 'Prior chapter endHook' line (copy verbatim).",
+        "",
+        "## Input priority (highest to lowest):",
+        "  scene plan characterDecisionArc > arc shifts IN RANGE > episode packet > recentConsequences > beat outline > commercial history",
+        "  Beat outline is soft scaffolding — adapt its wording to current pressure, do not obey stale beat goals that contradict the active situation.",
+        "",
         "Hard constraints:",
         "- JSON only, no prose writing.",
         "- Keep JSON keys/schema fields/id-like tokens in English exactly as required.",
@@ -348,6 +365,9 @@ export function buildPlannerMessages(input: PlannerInput): ChatMessage[] {
     {
       role: "user",
       content: [
+        input.priorChapterEndHook
+          ? `Prior chapter endHook (verbatim — copy into readerContract.priorEndHook exactly): ${input.priorChapterEndHook}`
+          : undefined,
         `Premise: ${input.premise}`,
         `Current arc goal: ${input.currentArcGoal}`,
         `Current situation: ${input.currentSituation}`,
