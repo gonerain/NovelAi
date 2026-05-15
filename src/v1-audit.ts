@@ -20,7 +20,7 @@ import {
 } from "./prompts/index.js";
 import { FileProjectRepository } from "./storage/index.js";
 import { chapterEpisodePacketPath } from "./v1-paths.js";
-import { readJsonArtifact } from "./v1-artifacts.js";
+import { readJsonArtifact, writePromptDebug } from "./v1-artifacts.js";
 
 export interface AuditChapterPlanArgs {
   projectId: string;
@@ -111,7 +111,7 @@ export async function auditChapterPlan(
     });
   }
 
-  const messages = buildChapterPlanAuditMessages({
+  const chapterPlanAuditInput = {
     projectId,
     fromChapter: args.fromChapter,
     toChapter: args.toChapter,
@@ -121,6 +121,15 @@ export async function auditChapterPlan(
     beatOutlines,
     worldFacts,
     chapters,
+  };
+  const messages = buildChapterPlanAuditMessages(chapterPlanAuditInput);
+  await writePromptDebug({
+    projectId,
+    scope: "outline",
+    label: `chapter_plan_audit_ch${String(args.fromChapter).padStart(3, "0")}-${String(args.toChapter).padStart(3, "0")}`,
+    messages,
+    module: "chapter_plan_audit",
+    input: chapterPlanAuditInput,
   });
 
   const service = new LlmService();
@@ -218,11 +227,20 @@ export async function auditBeatPacing(
     const arcBeats = beatOutlines.filter((b) => b.arcId === arc.id);
     if (arcBeats.length === 0) continue;
 
-    const messages = buildBeatPacingAuditMessages({
+    const beatPacingAuditInput = {
       arc,
       beats: arcBeats,
       worldFacts,
       allArcOutlines: arcOutlines,
+    };
+    const messages = buildBeatPacingAuditMessages(beatPacingAuditInput);
+    await writePromptDebug({
+      projectId,
+      scope: "outline",
+      label: `beat_pacing_audit_${arc.id}`,
+      messages,
+      module: "beat_pacing_audit",
+      input: beatPacingAuditInput,
     });
 
     const result = await service.generateObjectForTask({
@@ -320,13 +338,22 @@ export async function regenerateBeatsForArc(
   if (!arc) throw new Error(`Arc not found: ${args.arcId} in project=${projectId}`);
   if (!storyOutline) throw new Error(`Story outline missing for project=${projectId}`);
 
-  const messages = buildBeatOutlineMessages({
+  const beatOutlineInput = {
     projectTitle: storyOutline.title,
     storyOutline,
     arcOutlines: [arc],
     allArcOutlines: arcOutlines,
     worldFacts,
     targetChapterCount: args.targetChapterCount ?? 250,
+  };
+  const messages = buildBeatOutlineMessages(beatOutlineInput);
+  await writePromptDebug({
+    projectId,
+    scope: "outline",
+    label: `beat_outline_regen_${arc.id}`,
+    messages,
+    module: "beat_outline",
+    input: beatOutlineInput,
   });
 
   const service = new LlmService();

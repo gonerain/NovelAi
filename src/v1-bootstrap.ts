@@ -28,6 +28,7 @@ import {
   buildAuthorInterviewSmallModelNormalizeMessages,
 } from "./prompts/index.js";
 import { FileProjectRepository } from "./storage/index.js";
+import { writePromptDebug } from "./v1-artifacts.js";
 import { deriveFallbackSeedMemories, type ProjectBaseState } from "./v1-shared.js";
 
 async function generateAuthorProfileFromInterviewInput(args: {
@@ -45,6 +46,14 @@ async function generateAuthorProfileFromInterviewInput(args: {
         args.logStage("bootstrap", "llm: author_interview normalized-only");
         const normalizedOnlyMessages =
           buildAuthorInterviewSmallModelNormalizeMessages(args.interviewInput);
+        await writePromptDebug({
+          projectId: args.projectId,
+          scope: "outline",
+          label: "author_interview_normalized_only",
+          messages: normalizedOnlyMessages,
+          module: "author_interview_small_model_normalize",
+          input: args.interviewInput,
+        });
         const normalizedOnlyResult = await args.service.generateObjectForTask({
           task: "author_interview",
           messages: normalizedOnlyMessages,
@@ -74,6 +83,14 @@ async function generateAuthorProfileFromInterviewInput(args: {
     : await (async () => {
         args.logStage("bootstrap", "llm: author_interview display");
         const displayMessages = buildAuthorInterviewDisplayMessages(args.interviewInput);
+        await writePromptDebug({
+          projectId: args.projectId,
+          scope: "outline",
+          label: "author_interview_display",
+          messages: displayMessages,
+          module: "author_interview_display",
+          input: args.interviewInput,
+        });
         const displayResult = await args.service.generateObjectForTask({
           task: "author_interview",
           messages: displayMessages,
@@ -82,9 +99,18 @@ async function generateAuthorProfileFromInterviewInput(args: {
           maxTokens: 2200,
         });
         args.logStage("bootstrap", "llm: author_interview normalized");
-        const normalizedMessages = buildAuthorInterviewNormalizeMessages({
+        const normalizeInput = {
           input: args.interviewInput,
           display: displayResult.object.display,
+        };
+        const normalizedMessages = buildAuthorInterviewNormalizeMessages(normalizeInput);
+        await writePromptDebug({
+          projectId: args.projectId,
+          scope: "outline",
+          label: "author_interview_normalized",
+          messages: normalizedMessages,
+          module: "author_interview_normalize",
+          input: normalizeInput,
         });
         const normalizedResult = await args.service.generateObjectForTask({
           task: "author_interview",

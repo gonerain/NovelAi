@@ -18,6 +18,7 @@ import {
 import { LlmService } from "./llm/service.js";
 import type { ChatMessage } from "./llm/types.js";
 import { FileProjectRepository } from "./storage/index.js";
+import { writePromptDebug } from "./v1-artifacts.js";
 import {
   buildCommercialReviewMessages,
   buildFactConsistencyReviewMessages,
@@ -200,12 +201,23 @@ export async function rewriteChapterDraft(args: {
     chapterArtifacts: priorArtifacts,
   });
 
+  const chapterLabel = String(args.chapterNumber).padStart(3, "0");
+
   args.logStage("chapter", `llm: review_missing_resource_draft chapter=${args.chapterNumber}`);
-  const missingReviewMessages = buildMissingResourceReviewMessages({
+  const missingReviewInput = {
     contextPack: reviewerContextPack,
     draft: existingArtifact.writerResult.draft,
     storyMemories: base.storyMemories,
     resourceCandidates: specializedReviewerViews.resourceCandidates,
+  };
+  const missingReviewMessages = buildMissingResourceReviewMessages(missingReviewInput);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${chapterLabel}_review_missing_resource_draft`,
+    messages: missingReviewMessages,
+    module: "review_missing_resource",
+    input: missingReviewInput,
   });
   const missingResourceReview = await args.generateStructuredTaskWithRetry({
     service,
@@ -217,12 +229,21 @@ export async function rewriteChapterDraft(args: {
   });
 
   args.logStage("chapter", `llm: review_fact_draft chapter=${args.chapterNumber}`);
-  const factReviewMessages = buildFactConsistencyReviewMessages({
+  const factReviewInput = {
     contextPack: reviewerContextPack,
     draft: existingArtifact.writerResult.draft,
     storyMemories: base.storyMemories,
     worldFacts: base.worldFacts,
     relationshipCandidates: specializedReviewerViews.relationshipCandidates,
+  };
+  const factReviewMessages = buildFactConsistencyReviewMessages(factReviewInput);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${chapterLabel}_review_fact_draft`,
+    messages: factReviewMessages,
+    module: "review_fact",
+    input: factReviewInput,
   });
   const factConsistencyReview = await args.generateStructuredTaskWithRetry({
     service,
@@ -234,9 +255,18 @@ export async function rewriteChapterDraft(args: {
   });
 
   args.logStage("chapter", `llm: review_commercial_draft chapter=${args.chapterNumber}`);
-  const commercialReviewMessages = buildCommercialReviewMessages({
+  const commercialReviewInput = {
     contextPack: reviewerContextPack,
     draft: existingArtifact.writerResult.draft,
+  };
+  const commercialReviewMessages = buildCommercialReviewMessages(commercialReviewInput);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${chapterLabel}_review_commercial_draft`,
+    messages: commercialReviewMessages,
+    module: "review_commercial",
+    input: commercialReviewInput,
   });
   const commercialReview = await args.generateStructuredTaskWithRetry({
     service,
@@ -248,9 +278,18 @@ export async function rewriteChapterDraft(args: {
   });
 
   args.logStage("chapter", `llm: review_role_drive_draft chapter=${args.chapterNumber}`);
-  const roleDrivenReviewMessages = buildRoleDrivenReviewMessages({
+  const roleDrivenReviewInput = {
     contextPack: reviewerContextPack,
     draft: existingArtifact.writerResult.draft,
+  };
+  const roleDrivenReviewMessages = buildRoleDrivenReviewMessages(roleDrivenReviewInput);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${chapterLabel}_review_role_drive_draft`,
+    messages: roleDrivenReviewMessages,
+    module: "review_role_drive",
+    input: roleDrivenReviewInput,
   });
   const roleDrivenReview = await args.generateStructuredTaskWithRetry({
     service,
@@ -285,7 +324,7 @@ export async function rewriteChapterDraft(args: {
       : draftRewritePlan.objective;
 
   args.logStage("chapter", `llm: rewrite_draft chapter=${args.chapterNumber} mode=${draftRewritePlan.mode}`);
-  const rewriterMessages = buildRewriterMessages({
+  const rewriterInput = {
     title: existingArtifact.writerResult.title,
     draft: existingArtifact.writerResult.draft,
     mode: draftRewritePlan.mode,
@@ -294,6 +333,15 @@ export async function rewriteChapterDraft(args: {
     factConsistencyReview: initialFact,
     commercialReview: initialCommercial,
     roleDrivenReview: initialRoleDriven,
+  };
+  const rewriterMessages = buildRewriterMessages(rewriterInput);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${chapterLabel}_rewriter_draft_${draftRewritePlan.mode}`,
+    messages: rewriterMessages,
+    module: "rewriter",
+    input: rewriterInput,
   });
   const rewrittenOutput = await args.generateWriterLikeResult({
     service,
@@ -305,57 +353,97 @@ export async function rewriteChapterDraft(args: {
   });
 
   args.logStage("chapter", `llm: review_missing_resource_draft_final chapter=${args.chapterNumber}`);
+  const missingFinalInput = {
+    contextPack: reviewerContextPack,
+    draft: rewrittenOutput.draft,
+    storyMemories: base.storyMemories,
+    resourceCandidates: specializedReviewerViews.resourceCandidates,
+  };
+  const missingFinalMessages = buildMissingResourceReviewMessages(missingFinalInput);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${chapterLabel}_review_missing_resource_draft_final`,
+    messages: missingFinalMessages,
+    module: "review_missing_resource",
+    input: missingFinalInput,
+  });
   const missingResourceReviewFinal = await args.generateStructuredTaskWithRetry({
     service,
     task: "review_missing_resource",
-    messages: buildMissingResourceReviewMessages({
-      contextPack: reviewerContextPack,
-      draft: rewrittenOutput.draft,
-      storyMemories: base.storyMemories,
-      resourceCandidates: specializedReviewerViews.resourceCandidates,
-    }),
+    messages: missingFinalMessages,
     schema: missingResourceReviewerResultSchema,
     temperature: 0.2,
     maxTokens: 1800,
   });
 
   args.logStage("chapter", `llm: review_fact_draft_final chapter=${args.chapterNumber}`);
+  const factFinalInput = {
+    contextPack: reviewerContextPack,
+    draft: rewrittenOutput.draft,
+    storyMemories: base.storyMemories,
+    worldFacts: base.worldFacts,
+    relationshipCandidates: specializedReviewerViews.relationshipCandidates,
+  };
+  const factFinalMessages = buildFactConsistencyReviewMessages(factFinalInput);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${chapterLabel}_review_fact_draft_final`,
+    messages: factFinalMessages,
+    module: "review_fact",
+    input: factFinalInput,
+  });
   const factConsistencyReviewFinal = await args.generateStructuredTaskWithRetry({
     service,
     task: "review_fact",
-    messages: buildFactConsistencyReviewMessages({
-      contextPack: reviewerContextPack,
-      draft: rewrittenOutput.draft,
-      storyMemories: base.storyMemories,
-      worldFacts: base.worldFacts,
-      relationshipCandidates: specializedReviewerViews.relationshipCandidates,
-    }),
+    messages: factFinalMessages,
     schema: factConsistencyReviewerResultSchema,
     temperature: 0.2,
     maxTokens: 1800,
   });
 
   args.logStage("chapter", `llm: review_commercial_draft_final chapter=${args.chapterNumber}`);
+  const commercialFinalInput = {
+    contextPack: reviewerContextPack,
+    draft: rewrittenOutput.draft,
+  };
+  const commercialFinalMessages = buildCommercialReviewMessages(commercialFinalInput);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${chapterLabel}_review_commercial_draft_final`,
+    messages: commercialFinalMessages,
+    module: "review_commercial",
+    input: commercialFinalInput,
+  });
   const commercialReviewFinal = await args.generateStructuredTaskWithRetry({
     service,
     task: "review_commercial",
-    messages: buildCommercialReviewMessages({
-      contextPack: reviewerContextPack,
-      draft: rewrittenOutput.draft,
-    }),
+    messages: commercialFinalMessages,
     schema: commercialReviewerResultSchema,
     temperature: 0.2,
     maxTokens: 1600,
   });
 
   args.logStage("chapter", `llm: review_role_drive_draft_final chapter=${args.chapterNumber}`);
+  const roleDrivenFinalInput = {
+    contextPack: reviewerContextPack,
+    draft: rewrittenOutput.draft,
+  };
+  const roleDrivenFinalMessages = buildRoleDrivenReviewMessages(roleDrivenFinalInput);
+  await writePromptDebug({
+    projectId: args.projectId,
+    scope: "chapter",
+    label: `chapter-${chapterLabel}_review_role_drive_draft_final`,
+    messages: roleDrivenFinalMessages,
+    module: "review_role_drive",
+    input: roleDrivenFinalInput,
+  });
   const roleDrivenReviewFinal = await args.generateStructuredTaskWithRetry({
     service,
     task: "review_role_drive",
-    messages: buildRoleDrivenReviewMessages({
-      contextPack: reviewerContextPack,
-      draft: rewrittenOutput.draft,
-    }),
+    messages: roleDrivenFinalMessages,
     schema: roleDrivenReviewerResultSchema,
     temperature: 0.2,
     maxTokens: 1600,

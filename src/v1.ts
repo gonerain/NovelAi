@@ -51,6 +51,7 @@ import {
   validateOutlineStack,
 } from "./outline-lib.js";
 import { auditBeatPacing, auditChapterPlan, regenerateBeatsForArc } from "./v1-audit.js";
+import { listAvailableModules, replayPrompt } from "./v1-prompt-replay.js";
 import { loadStoryProject } from "./project/index.js";
 import { FileProjectRepository } from "./storage/index.js";
 import {
@@ -171,7 +172,9 @@ type CommandName =
   | "chapter:invalidate-from"
   | "chapter:invalidate-target"
   | "chapter:reset-all"
-  | "chapter:plan-only";
+  | "chapter:plan-only"
+  | "prompt:replay"
+  | "prompt:list";
 
 interface ParsedArgs {
   command: CommandName;
@@ -197,6 +200,10 @@ interface ParsedArgs {
   fromFile?: string;
   taskId?: string;
   noDrafts?: boolean;
+  fixture?: string;
+  temperature?: number;
+  maxTokens?: number;
+  dryRun?: boolean;
 }
 
 function readOption(args: Map<string, string>, key: string): string | undefined {
@@ -280,6 +287,10 @@ function parseCommand(argv: string[]): ParsedArgs {
   const strictEval = strictEvalOption === "true";
   const withEval = withEvalOption === "true" || strictEval;
   const fromFileOption = readOption(flags, "--from-file");
+  const fixtureOption = readOption(flags, "--fixture");
+  const temperatureOption = readOption(flags, "--temperature");
+  const maxTokensOption = readOption(flags, "--max-tokens");
+  const dryRunOption = readOption(flags, "--dry-run");
   const taskIdOption = readOption(flags, "--task-id") ?? readOption(flags, "--task");
   const beatIdOption = readOption(flags, "--beat") ?? readOption(flags, "--beat-id");
   const arcIdOption = readOption(flags, "--arc") ?? readOption(flags, "--arc-id");
@@ -349,6 +360,8 @@ function parseCommand(argv: string[]): ParsedArgs {
     "chapter:invalidate-target",
     "chapter:reset-all",
     "chapter:plan-only",
+    "prompt:replay",
+    "prompt:list",
   ]);
 
   if (!allowed.has(command)) {
@@ -379,6 +392,10 @@ function parseCommand(argv: string[]): ParsedArgs {
     fromFile: fromFileOption,
     taskId: taskIdOption,
     noDrafts: noDraftsOption === "true",
+    fixture: fixtureOption,
+    temperature: temperatureOption ? Number(temperatureOption) : undefined,
+    maxTokens: maxTokensOption ? Number(maxTokensOption) : undefined,
+    dryRun: dryRunOption === "true",
   };
 }
 
@@ -1359,6 +1376,49 @@ async function main(): Promise<void> {
         chapterNumber: 1,
       });
       console.log(formatInvalidateResult(result));
+      return;
+    }
+
+    case "prompt:list": {
+      const modules = listAvailableModules();
+      console.log("Available prompt modules (use as fixture.module):");
+      for (const name of modules) {
+        console.log(`  ${name}`);
+      }
+      console.log("");
+      console.log(
+        `Fixtures land at data/projects/<id>/debug/fixtures/<scope>/<timestamp>_<label>.json`,
+      );
+      console.log(
+        `Replay: node dist/v1.js prompt replay --fixture <path> [--temperature N] [--max-tokens N] [--dry-run true]`,
+      );
+      return;
+    }
+
+    case "prompt:replay": {
+      if (!parsed.fixture) {
+        throw new Error("prompt replay requires --fixture <path>");
+      }
+      const result = await replayPrompt({
+        fixturePath: parsed.fixture,
+        temperature: parsed.temperature,
+        maxTokens: parsed.maxTokens,
+        dryRun: parsed.dryRun,
+      });
+      console.log(
+        `[replay] module=${result.module} task=${result.task} kind=${result.kind} label=${result.label}`,
+      );
+      if (parsed.dryRun) {
+        console.log("--- messages (dry-run) ---");
+        console.log(JSON.stringify(result.messages, null, 2));
+        return;
+      }
+      console.log("--- output ---");
+      if (result.kind === "structured") {
+        console.log(JSON.stringify(result.output, null, 2));
+      } else {
+        console.log(result.output);
+      }
       return;
     }
 

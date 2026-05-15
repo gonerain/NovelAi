@@ -31,27 +31,26 @@ export async function writePromptDebug(args: {
   scope: "outline" | "chapter";
   label: string;
   messages: ChatMessage[];
+  /** Optional: prompt module identifier — when paired with `input`, also dumps a replay fixture. */
+  module?: string;
+  /** Optional: the exact object passed to buildXxxMessages — captured for `prompt:replay`. */
+  input?: unknown;
 }): Promise<void> {
-  const dir = path.resolve(
-    process.cwd(),
-    "data",
-    "projects",
-    args.projectId,
-    "debug",
-    "prompts",
-    args.scope,
-  );
-  await mkdir(dir, { recursive: true });
+  const projectRoot = path.resolve(process.cwd(), "data", "projects", args.projectId);
+  const promptDir = path.join(projectRoot, "debug", "prompts", args.scope);
+  await mkdir(promptDir, { recursive: true });
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filename = `${timestamp}_${args.label}.json`;
+  const generatedAt = new Date().toISOString();
   await writeFile(
-    path.join(dir, filename),
+    path.join(promptDir, filename),
     JSON.stringify(
       {
         projectId: args.projectId,
         scope: args.scope,
         label: args.label,
-        generatedAt: new Date().toISOString(),
+        module: args.module,
+        generatedAt,
         messages: args.messages,
       },
       null,
@@ -59,6 +58,27 @@ export async function writePromptDebug(args: {
     ),
     "utf-8",
   );
+
+  if (args.module && args.input !== undefined) {
+    const fixtureDir = path.join(projectRoot, "debug", "fixtures", args.scope);
+    await mkdir(fixtureDir, { recursive: true });
+    await writeFile(
+      path.join(fixtureDir, filename),
+      JSON.stringify(
+        {
+          projectId: args.projectId,
+          scope: args.scope,
+          label: args.label,
+          module: args.module,
+          generatedAt,
+          input: args.input,
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+  }
 }
 
 export async function writeJsonArtifact(filepath: string, data: unknown): Promise<void> {

@@ -183,18 +183,21 @@ export async function fillDecisionProfilesForProject(
 
   for (const character of targets) {
     log("bible", `decision_profile fill character=${character.id}`);
-    const messages = buildDecisionProfileMessages({
+    const decisionProfileInput = {
       character,
       authorPack: plannerPack,
       themeBible,
       storyOutline: storyOutline ?? undefined,
       premise,
-    });
+    };
+    const messages = buildDecisionProfileMessages(decisionProfileInput);
     await writePromptDebug({
       projectId: options.projectId,
       scope: "outline",
       label: `decision_profile_${character.id}`,
       messages,
+      module: "cast_decision_profile",
+      input: decisionProfileInput,
     });
     try {
       const result = await service.generateObjectForTask({
@@ -464,19 +467,22 @@ export async function deriveArcShiftsForProject(
     const supportingCharacters = characterStates.filter(
       (state) => state.id !== protagonist.id,
     );
-    const messages = buildArcShiftDeriveMessages({
+    const arcShiftInput = {
       arc,
       protagonist,
       supportingCharacters,
       authorPack: plannerPack,
       themeBible,
       storyOutline: storyOutline ?? undefined,
-    });
+    };
+    const messages = buildArcShiftDeriveMessages(arcShiftInput);
     await writePromptDebug({
       projectId: options.projectId,
       scope: "outline",
       label: `arc_shift_${arc.id}`,
       messages,
+      module: "arc_shift_derive",
+      input: arcShiftInput,
     });
     try {
       const result = await service.generateObjectForTask({
@@ -932,7 +938,7 @@ export async function decomposeChapterScenesForProject(
         "bible",
         `scene_decomposer beat=${beat.id} chapter=${chapterNumber} (peers=${peerPlans.length})`,
       );
-      const messages = buildSceneDecomposerMessages({
+      const sceneDecomposerInput = {
         arc: arc ?? {
           id: beat.arcId,
           name: "(unknown arc)",
@@ -958,12 +964,15 @@ export async function decomposeChapterScenesForProject(
         revealItems: beatRevealItems,
         allArcOutlines: arcs,
         beatBudgetStatus,
-      });
+      };
+      const messages = buildSceneDecomposerMessages(sceneDecomposerInput);
       await writePromptDebug({
         projectId: options.projectId,
         scope: "outline",
         label: `scene_decomposer_${beat.id}_ch${String(chapterNumber).padStart(3, "0")}`,
         messages,
+        module: "scene_decomposer",
+        input: sceneDecomposerInput,
       });
       try {
         const result = await service.generateObjectForTask({

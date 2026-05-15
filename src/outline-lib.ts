@@ -11,7 +11,6 @@ import type {
 } from "./domain/index.js";
 import { buildDerivedAuthorProfilePacks } from "./domain/index.js";
 import { LlmService } from "./llm/service.js";
-import type { ChatMessage } from "./llm/types.js";
 import {
   arcOutlineGenerationResultSchema,
   beatOutlineGenerationResultSchema,
@@ -24,45 +23,11 @@ import {
 } from "./prompts/index.js";
 import { loadStoryProject } from "./project/index.js";
 import { FileProjectRepository } from "./storage/index.js";
+import { writePromptDebug } from "./v1-artifacts.js";
 import { bootstrapProject } from "./v1-lib.js";
 
 function logStage(stage: string, detail: string): void {
   console.log(`[${stage}] ${detail}`);
-}
-
-async function writePromptDebug(args: {
-  projectId: string;
-  scope: "outline" | "chapter";
-  label: string;
-  messages: ChatMessage[];
-}): Promise<void> {
-  const dir = path.resolve(
-    process.cwd(),
-    "data",
-    "projects",
-    args.projectId,
-    "debug",
-    "prompts",
-    args.scope,
-  );
-  await mkdir(dir, { recursive: true });
-  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const filename = `${timestamp}_${args.label}.json`;
-  await writeFile(
-    path.join(dir, filename),
-    JSON.stringify(
-      {
-        projectId: args.projectId,
-        scope: args.scope,
-        label: args.label,
-        generatedAt: new Date().toISOString(),
-        messages: args.messages,
-      },
-      null,
-      2,
-    ),
-    "utf-8",
-  );
 }
 
 export interface GenerateOutlineStackOptions {
@@ -254,7 +219,7 @@ export async function generateOutlineStack(
   const authorPacks = buildDerivedAuthorProfilePacks(project.authorProfile);
 
   logStage("outline", "llm: story_outline");
-  const storyOutlineMessages = buildStoryOutlineMessages({
+  const storyOutlineInput = {
     projectTitle: project.title,
     authorProfile: authorPacks.compact,
     themeBible: project.themeBible,
@@ -262,12 +227,15 @@ export async function generateOutlineStack(
     storySetup: project.storySetup,
     targetChapterCount: options.targetChapterCount ?? 250,
     targetArcCount: options.targetArcCount ?? 10,
-  });
+  };
+  const storyOutlineMessages = buildStoryOutlineMessages(storyOutlineInput);
   await writePromptDebug({
     projectId: options.projectId,
     scope: "outline",
     label: "story_outline",
     messages: storyOutlineMessages,
+    module: "story_outline",
+    input: storyOutlineInput,
   });
   const storyOutlineResult = await service.generateObjectForTask({
     task: "story_outline",
@@ -282,19 +250,22 @@ export async function generateOutlineStack(
 
   logStage("outline", "llm: cast_expansion");
   const desiredLongTermCastSize = options.desiredLongTermCastSize ?? 6;
-  const castMessages = buildCastExpansionMessages({
+  const castInput = {
     projectTitle: project.title,
     authorProfile: authorPacks.compact,
     storyOutline,
     arcBlueprints,
     existingCoreCharacters: coreCharacters(project),
     desiredLongTermCastSize,
-  });
+  };
+  const castMessages = buildCastExpansionMessages(castInput);
   await writePromptDebug({
     projectId: options.projectId,
     scope: "outline",
     label: "cast_expansion",
     messages: castMessages,
+    module: "cast_expansion",
+    input: castInput,
   });
   const firstCastResult = await service.generateObjectForTask({
     task: "cast_expansion",
@@ -307,7 +278,7 @@ export async function generateOutlineStack(
   if (cast.length < desiredLongTermCastSize) {
     const missing = desiredLongTermCastSize - cast.length;
     logStage("outline", `llm: cast_expansion topup missing=${missing}`);
-    const castTopupMessages = buildCastExpansionMessages({
+    const castTopupInput = {
       projectTitle: project.title,
       authorProfile: authorPacks.compact,
       storyOutline,
@@ -321,12 +292,15 @@ export async function generateOutlineStack(
         })),
       ],
       desiredLongTermCastSize: missing,
-    });
+    };
+    const castTopupMessages = buildCastExpansionMessages(castTopupInput);
     await writePromptDebug({
       projectId: options.projectId,
       scope: "outline",
       label: "cast_expansion_topup",
       messages: castTopupMessages,
+      module: "cast_expansion",
+      input: castTopupInput,
     });
     const topupResult = await service.generateObjectForTask({
       task: "cast_expansion",
@@ -339,19 +313,22 @@ export async function generateOutlineStack(
   }
 
   logStage("outline", "llm: arc_outline");
-  const arcMessages = buildArcOutlineMessages({
+  const arcInput = {
     projectTitle: project.title,
     storyOutline,
     arcBlueprints,
     cast,
     targetArcCount: options.targetArcCount ?? 10,
     targetChapterCount: options.targetChapterCount ?? 250,
-  });
+  };
+  const arcMessages = buildArcOutlineMessages(arcInput);
   await writePromptDebug({
     projectId: options.projectId,
     scope: "outline",
     label: "arc_outline",
     messages: arcMessages,
+    module: "arc_outline",
+    input: arcInput,
   });
   const arcResult = await service.generateObjectForTask({
     task: "arc_outline",
@@ -364,17 +341,20 @@ export async function generateOutlineStack(
   const allBeatOutlines = [];
   for (const arc of arcResult.object.arcOutlines) {
     logStage("outline", `llm: beat_outline arc=${arc.id}`);
-    const beatMessages = buildBeatOutlineMessages({
+    const beatInput = {
       projectTitle: project.title,
       storyOutline,
       arcOutlines: [arc],
       targetChapterCount: options.targetChapterCount ?? 250,
-    });
+    };
+    const beatMessages = buildBeatOutlineMessages(beatInput);
     await writePromptDebug({
       projectId: options.projectId,
       scope: "outline",
       label: `beat_outline_${arc.id || "unknown"}`,
       messages: beatMessages,
+      module: "beat_outline",
+      input: beatInput,
     });
     const beatResult = await service.generateObjectForTask({
       task: "beat_outline",

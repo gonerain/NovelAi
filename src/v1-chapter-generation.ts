@@ -202,6 +202,8 @@ export async function generateChapterArtifact(args: {
     scope: "chapter" | "outline";
     label: string;
     messages: ChatMessage[];
+    module?: string;
+    input?: unknown;
   }) => Promise<void>;
   writeJsonArtifact: (filepath: string, data: unknown) => Promise<void>;
   writeRetrievalDebugReport: (args: {
@@ -345,7 +347,10 @@ export async function generateChapterArtifact(args: {
     (plan) => plan.chapterNumber === args.chapterNumber - 1,
   );
 
-  const plannerMessages = buildPlannerMessages({
+  const activeCharacterIds = currentBeat?.requiredCharacters.length
+    ? currentBeat.requiredCharacters
+    : args.base.storySetup.defaultActiveCharacterIds;
+  const plannerInput = {
     authorPack: args.base.authorPacks.planner,
     themeBible: args.base.themeBible,
     styleBible: args.base.styleBible,
@@ -355,20 +360,13 @@ export async function generateChapterArtifact(args: {
     beatOutline: currentBeat,
     arcId: currentArc?.id,
     chapterNumber: args.chapterNumber,
-    mode: args.chapterNumber === 1 ? "opening" : "continuation",
+    mode: args.chapterNumber === 1 ? ("opening" as const) : ("continuation" as const),
     premise: args.base.storySetup.premise,
     currentArcGoal: currentArc?.arcGoal ?? args.base.storySetup.currentArcGoal,
     currentSituation: args.currentSituation,
-    activeCharacterIds:
-      currentBeat?.requiredCharacters.length
-        ? currentBeat.requiredCharacters
-        : args.base.storySetup.defaultActiveCharacterIds,
+    activeCharacterIds,
     activeCharacters: args.base.characterStates.filter((character) =>
-      (
-        currentBeat?.requiredCharacters.length
-          ? currentBeat.requiredCharacters
-          : args.base.storySetup.defaultActiveCharacterIds
-      ).includes(character.id),
+      activeCharacterIds.includes(character.id),
     ),
     candidateMemoryIds: args.base.storyMemories
       .filter((memory) => memory.status === "active" || memory.status === "triggered")
@@ -384,7 +382,8 @@ export async function generateChapterArtifact(args: {
     scenePlan: scenePlanForChapter,
     activeShifts: activeShifts.length > 0 ? activeShifts : undefined,
     priorChapterEndHook: prevScenePlan?.endHook,
-  });
+  };
+  const plannerMessages = buildPlannerMessages(plannerInput);
 
   args.logStage("chapter", `llm: planner chapter=${args.chapterNumber}`);
   await args.writePromptDebug({
@@ -392,6 +391,8 @@ export async function generateChapterArtifact(args: {
     scope: "chapter",
     label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_planner`,
     messages: plannerMessages,
+    module: "planner",
+    input: plannerInput,
   });
   const plannerResult = await args.generateStructuredTaskWithRetry({
     service: args.service,
@@ -532,18 +533,21 @@ export async function generateChapterArtifact(args: {
     args.chapterNumber > 1
       ? await extractTailProse(args.projectId, args.chapterNumber - 1, 5)
       : undefined;
-  const writerMessages = buildWriterMessages({
+  const writerInput = {
     contextPack: writerContextPack,
     previousChapterNextSituation: prevArtifact?.memoryUpdate?.nextSituation,
     previousChapterTailProse,
     minParagraphs: 8,
     maxParagraphs: 14,
-  });
+  };
+  const writerMessages = buildWriterMessages(writerInput);
   await args.writePromptDebug({
     projectId: args.projectId,
     scope: "chapter",
     label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_writer`,
     messages: writerMessages,
+    module: "writer",
+    input: writerInput,
   });
   const writerOutput = await args.generateWriterLikeResult({
     service: args.service,
@@ -576,34 +580,39 @@ export async function generateChapterArtifact(args: {
       }
     : undefined;
 
-  const missingReviewMessages = buildMissingResourceReviewMessages({
+  const missingReviewInput = {
     contextPack: reviewerContextPack,
     draft: writerResult.object.draft,
     storyMemories: args.base.storyMemories,
     resourceCandidates: specializedReviewerViews.resourceCandidates,
-  });
-  const factReviewMessages = buildFactConsistencyReviewMessages({
+  };
+  const missingReviewMessages = buildMissingResourceReviewMessages(missingReviewInput);
+  const factReviewInput = {
     contextPack: reviewerContextPack,
     draft: writerResult.object.draft,
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
     relationshipCandidates: specializedReviewerViews.relationshipCandidates,
-  });
-  const commercialReviewMessages = buildCommercialReviewMessages({
+  };
+  const factReviewMessages = buildFactConsistencyReviewMessages(factReviewInput);
+  const commercialReviewInput = {
     contextPack: reviewerContextPack,
     draft: writerResult.object.draft,
-  });
-  const roleDrivenReviewMessages = buildRoleDrivenReviewMessages({
+  };
+  const commercialReviewMessages = buildCommercialReviewMessages(commercialReviewInput);
+  const roleDrivenReviewInput = {
     contextPack: reviewerContextPack,
     draft: writerResult.object.draft,
     previousChapter: previousChapterRoleSnapshot,
-  });
+  };
+  const roleDrivenReviewMessages = buildRoleDrivenReviewMessages(roleDrivenReviewInput);
 
+  const chapterLabel = String(args.chapterNumber).padStart(3, "0");
   await Promise.all([
-    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_missing_resource`, messages: missingReviewMessages }),
-    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_fact`, messages: factReviewMessages }),
-    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_commercial`, messages: commercialReviewMessages }),
-    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_role_drive`, messages: roleDrivenReviewMessages }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${chapterLabel}_review_missing_resource`, messages: missingReviewMessages, module: "review_missing_resource", input: missingReviewInput }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${chapterLabel}_review_fact`, messages: factReviewMessages, module: "review_fact", input: factReviewInput }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${chapterLabel}_review_commercial`, messages: commercialReviewMessages, module: "review_commercial", input: commercialReviewInput }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${chapterLabel}_review_role_drive`, messages: roleDrivenReviewMessages, module: "review_role_drive", input: roleDrivenReviewInput }),
   ]);
 
   args.logStage("chapter", `llm: review ×4 parallel chapter=${args.chapterNumber}`);
@@ -662,7 +671,7 @@ export async function generateChapterArtifact(args: {
   if (shouldRewriteNow) {
     const rewriteTemp = rewritePlan.mode === "repair_first" ? 0.35 : 0.5;
     args.logStage("chapter", `llm: rewriter chapter=${args.chapterNumber} mode=${rewritePlan.mode} pass=1`);
-    const rewriterMessages = buildRewriterMessages({
+    const rewriterInput = {
       title: rewrittenTitle,
       draft: rewrittenDraft,
       mode: rewritePlan.mode,
@@ -671,12 +680,15 @@ export async function generateChapterArtifact(args: {
       factConsistencyReview: activeFact,
       commercialReview: activeCommercial,
       roleDrivenReview: activeRoleDriven,
-    });
+    };
+    const rewriterMessages = buildRewriterMessages(rewriterInput);
     await args.writePromptDebug({
       projectId: args.projectId,
       scope: "chapter",
       label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_rewriter_${rewritePlan.mode}`,
       messages: rewriterMessages,
+      module: "rewriter",
+      input: rewriterInput,
     });
     const rewrittenOutput = await args.generateWriterLikeResult({
       service: args.service,
@@ -701,21 +713,24 @@ export async function generateChapterArtifact(args: {
       "chapter",
       `llm: rewriter chapter=${args.chapterNumber} mode=length_expand pass=1 cn_chars=${cnCharCount(rewrittenDraft)}`,
     );
-    const expandMessages = buildRewriterMessages({
+    const expandInput = {
       title: rewrittenTitle,
       draft: rewrittenDraft,
-      mode: "quality_boost",
+      mode: "quality_boost" as const,
       objective: `Expand the existing draft to 3000-4500 Chinese characters by deepening sensory detail, dialogue beats, internal-state shifts, and reaction shots within the SAME scene structure. Do NOT add new plot turns. Do NOT contradict any prior chapter. Do NOT pad with summary or recap. Current draft length is below 2500 Chinese characters; the next pass must close that gap.`,
       missingResourceReview: activeMissing,
       factConsistencyReview: activeFact,
       commercialReview: activeCommercial,
       roleDrivenReview: activeRoleDriven,
-    });
+    };
+    const expandMessages = buildRewriterMessages(expandInput);
     await args.writePromptDebug({
       projectId: args.projectId,
       scope: "chapter",
       label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_rewriter_length_expand`,
       messages: expandMessages,
+      module: "rewriter",
+      input: expandInput,
     });
     const expandedOutput = await args.generateWriterLikeResult({
       service: args.service,
@@ -737,34 +752,38 @@ export async function generateChapterArtifact(args: {
     }
   }
 
-  const missingFinalMessages = buildMissingResourceReviewMessages({
+  const missingFinalInput = {
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
     storyMemories: args.base.storyMemories,
     resourceCandidates: specializedReviewerViews.resourceCandidates,
-  });
-  const factFinalMessages = buildFactConsistencyReviewMessages({
+  };
+  const missingFinalMessages = buildMissingResourceReviewMessages(missingFinalInput);
+  const factFinalInput = {
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
     storyMemories: args.base.storyMemories,
     worldFacts: args.base.worldFacts,
     relationshipCandidates: specializedReviewerViews.relationshipCandidates,
-  });
-  const commercialFinalMessages = buildCommercialReviewMessages({
+  };
+  const factFinalMessages = buildFactConsistencyReviewMessages(factFinalInput);
+  const commercialFinalInput = {
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
-  });
-  const roleDrivenFinalMessages = buildRoleDrivenReviewMessages({
+  };
+  const commercialFinalMessages = buildCommercialReviewMessages(commercialFinalInput);
+  const roleDrivenFinalInput = {
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
     previousChapter: previousChapterRoleSnapshot,
-  });
+  };
+  const roleDrivenFinalMessages = buildRoleDrivenReviewMessages(roleDrivenFinalInput);
 
   await Promise.all([
-    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_missing_resource_final`, messages: missingFinalMessages }),
-    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_fact_final`, messages: factFinalMessages }),
-    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_commercial_final`, messages: commercialFinalMessages }),
-    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_review_role_drive_final`, messages: roleDrivenFinalMessages }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${chapterLabel}_review_missing_resource_final`, messages: missingFinalMessages, module: "review_missing_resource", input: missingFinalInput }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${chapterLabel}_review_fact_final`, messages: factFinalMessages, module: "review_fact", input: factFinalInput }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${chapterLabel}_review_commercial_final`, messages: commercialFinalMessages, module: "review_commercial", input: commercialFinalInput }),
+    args.writePromptDebug({ projectId: args.projectId, scope: "chapter", label: `chapter-${chapterLabel}_review_role_drive_final`, messages: roleDrivenFinalMessages, module: "review_role_drive", input: roleDrivenFinalInput }),
   ]);
 
   args.logStage("chapter", `llm: review ×4 parallel final chapter=${args.chapterNumber}`);
@@ -818,18 +837,21 @@ export async function generateChapterArtifact(args: {
   }
 
   args.logStage("chapter", `llm: memory_updater chapter=${args.chapterNumber}`);
-  const memoryMessages = buildMemoryUpdaterMessages({
+  const memoryUpdaterInput = {
     chapterNumber: args.chapterNumber,
     chapterPlan,
     draft: rewrittenDraft,
     storyMemories: args.base.storyMemories,
     activeCharacterIds: chapterPlan.requiredCharacters,
-  });
+  };
+  const memoryMessages = buildMemoryUpdaterMessages(memoryUpdaterInput);
   await args.writePromptDebug({
     projectId: args.projectId,
     scope: "chapter",
-    label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_memory_updater`,
+    label: `chapter-${chapterLabel}_memory_updater`,
     messages: memoryMessages,
+    module: "memory_updater",
+    input: memoryUpdaterInput,
   });
   const memoryUpdate = await args.generateStructuredTaskWithRetry({
     service: args.service,
