@@ -287,7 +287,10 @@ function memoryScore(
 
   score += priorityWeight(memory.priority) * 10;
 
-  const triggerMatches = memory.triggerConditions.filter((condition) =>
+  const triggerConditions = memory.triggerConditions ?? [];
+  const relatedMemoryCharacterIds = memory.relatedCharacterIds ?? [];
+
+  const triggerMatches = triggerConditions.filter((condition) =>
     triggerKeywords.some(
       (keyword) =>
         keyword.includes(condition.toLowerCase()) || condition.toLowerCase().includes(keyword),
@@ -295,17 +298,19 @@ function memoryScore(
   ).length;
   score += triggerMatches * 15;
 
-  const characterMatches = memory.relatedCharacterIds.filter((characterId) =>
+  const characterMatches = relatedMemoryCharacterIds.filter((characterId) =>
     chapterPlan.requiredCharacters.includes(characterId),
   ).length;
   score += characterMatches * 8;
-  const searchEntityMatches = memory.relatedCharacterIds.filter((characterId) =>
+  const searchEntityMatches = relatedMemoryCharacterIds.filter((characterId) =>
     chapterPlan.searchIntent?.entityIds.includes(characterId),
   ).length;
   score += searchEntityMatches * 6;
   if (
     exactTerms.some((term) =>
-      [memory.id, memory.title, memory.summary].some((value) => value.toLowerCase().includes(term)),
+      [memory.id, memory.title, memory.summary].some((value) =>
+        (value ?? "").toLowerCase().includes(term),
+      ),
     )
   ) {
     score += 40;
@@ -331,16 +336,18 @@ function worldFactScore(
     item.trim().toLowerCase(),
   );
 
-  const characterMatches = fact.relatedCharacterIds.filter((characterId) =>
+  const relatedFactCharacterIds = fact.relatedCharacterIds ?? [];
+
+  const characterMatches = relatedFactCharacterIds.filter((characterId) =>
     chapterPlan.requiredCharacters.includes(characterId),
   ).length;
   score += characterMatches * 10;
-  const searchEntityMatches = fact.relatedCharacterIds.filter((characterId) =>
+  const searchEntityMatches = relatedFactCharacterIds.filter((characterId) =>
     chapterPlan.searchIntent?.entityIds.includes(characterId),
   ).length;
   score += searchEntityMatches * 8;
 
-  const haystack = `${fact.title} ${fact.description} ${fact.category}`.toLowerCase();
+  const haystack = `${fact.title ?? ""} ${fact.description ?? ""} ${fact.category ?? ""}`.toLowerCase();
   const keywordMatches = triggerKeywords.filter((keyword) => haystack.includes(keyword)).length;
   score += keywordMatches * 6;
   if (exactTerms.some((term) => haystack.includes(term))) {

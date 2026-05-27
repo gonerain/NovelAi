@@ -189,9 +189,9 @@ export class DeepSeekClient implements LlmClient {
 
   private getRetryMaxTokens(maxTokens?: number): number | undefined {
     if (maxTokens == null) {
-      return 3200;
+      return 6400;
     }
-    return Math.min(Math.max(maxTokens * 2, 3200), 6400);
+    return Math.min(Math.max(maxTokens * 2, 6400), 12000);
   }
 
   private async requestChatCompletionWithRetry(args: {

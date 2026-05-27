@@ -361,6 +361,35 @@ export const genrePayoffPacks: GenrePayoffPack[] = [
       aftermath: ["status_shift", "relationship_pull"],
     },
   },
+  {
+    id: "urban_rule_pawnshop_v1",
+    name: "Urban Rule Pawnshop V1",
+    summary:
+      "Prioritize a strong urban-fantasy hook, concrete life trouble, strange transactions, human desire, and rule-for-price consequences. Chapters should feel commercial, eerie, and easy to retell: ordinary people sell a life rule to solve an urgent problem, then pay a relationship or identity cost.",
+    openingModes: ["daily_abnormal", "hard_hook", "aftermath_hook"],
+    hookBias: [
+      "Open from a concrete real-life pressure such as rent, inheritance, debt, keys, documents, missing person, or a shop that should not be open.",
+      "Introduce the first client and first rule transaction early; do not explain the full mechanism.",
+      "Make the rule small, life-like, and emotionally sharp rather than a grand power.",
+    ],
+    microPayoffBias: [
+      "Small reward should reveal a clue, a transaction price, a hidden desire, or a reality change caused by the rule.",
+      "Every transaction should solve one immediate problem while creating a more personal consequence.",
+    ],
+    rewardTargetBias: ["clue", "price", "risk", "desire", "contract"],
+    avoidPatterns: [
+      "Cold dungeon or instance-clearing structure.",
+      "Rules becoming abstract power upgrades.",
+      "Clients functioning only as clue dispensers without real desire and danger.",
+      "Explaining the pawnshop origin before the first transaction becomes emotionally legible.",
+    ],
+    preferredRewardTypes: {
+      setup: ["rule_reveal", "proof_win"],
+      progress: ["countermove", "rule_reveal"],
+      payoff: ["proof_win", "status_shift"],
+      aftermath: ["relationship_pull", "status_shift"],
+    },
+  },
 ];
 
 export function getPayoffPatternById(id: EntityId): PayoffPattern | undefined {

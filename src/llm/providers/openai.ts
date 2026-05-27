@@ -36,6 +36,19 @@ export class OpenAiClient implements LlmClient {
     }
   }
 
+  private compatibilityExtraBody(): Record<string, unknown> {
+    const base = this.baseUrl.toLowerCase();
+    if (base.includes("bigmodel.cn") || base.includes("z.ai") || base.includes("zhipu")) {
+      return {
+        // Z.AI hosted APIs use `thinking`; vLLM/OpenAI-compatible GLM
+        // adapters commonly use `chat_template_kwargs`.
+        thinking: { type: "disabled" },
+        chat_template_kwargs: { enable_thinking: false },
+      };
+    }
+    return {};
+  }
+
   async generateText(input: GenerateTextInput): Promise<GenerateTextResult> {
     const model = input.options?.model ?? this.defaultModel;
     const response = await fetch(`${this.baseUrl}/chat/completions`, {
@@ -49,6 +62,7 @@ export class OpenAiClient implements LlmClient {
         messages: input.messages,
         temperature: input.options?.temperature,
         max_tokens: input.options?.maxTokens,
+        ...this.compatibilityExtraBody(),
       }),
       signal: input.options?.signal,
     });
@@ -80,17 +94,48 @@ export class OpenAiClient implements LlmClient {
     input: StructuredGenerationInput<TObject>,
   ): Promise<StructuredGenerationResult<TObject>> {
     const systemInstruction = buildJsonInstruction(input.schema);
-    const result = await this.generateText({
-      messages: [
-        ...input.messages,
-        { role: "system", content: systemInstruction },
-      ],
-      options: input.options,
+    const model = input.options?.model ?? this.defaultModel;
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${this.apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          ...input.messages,
+          { role: "system", content: systemInstruction },
+        ],
+        temperature: input.options?.temperature,
+        max_tokens: input.options?.maxTokens,
+        response_format: { type: "json_object" },
+        ...this.compatibilityExtraBody(),
+      }),
+      signal: input.options?.signal,
     });
+    await ensureOk(response, this.provider);
+    const data = await parseJsonResponse(response, this.provider) as {
+      choices: Array<{ message?: { content?: string } }>;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
+    };
+    const text = data.choices[0]?.message?.content ?? "";
 
     return {
-      ...result,
-      object: parseStructuredOutput<TObject>(result.text, this.provider),
+      provider: this.provider,
+      model,
+      text,
+      usage: {
+        inputTokens: data.usage?.prompt_tokens,
+        outputTokens: data.usage?.completion_tokens,
+        totalTokens: data.usage?.total_tokens,
+      },
+      raw: data,
+      object: parseStructuredOutput<TObject>(text, this.provider),
     };
   }
 }

@@ -8,13 +8,14 @@ import {
   validateCharacterDecisionProfileCoverage,
   type AuthorInterviewSessionInput,
   type DerivedAuthorProfilePacks,
+  type StoryOutline,
 } from "./domain/index.js";
 import {
   bindWorldFactsForProject,
   deriveArcShiftsForProject,
   fillDecisionProfilesForProject,
 } from "./v1-bible.js";
-import { demoPremise, demoProjectTitle, demoStoryMemories, demoStoryOutline, demoArcOutlines, demoBeatOutlines, demoCharacterStates, demoWorldFacts, demoThemeBible, demoStyleBible, demoStorySetup } from "./defaults/demo-project.js";
+import { demoPremise, demoProjectId, demoProjectTitle, demoStoryMemories, demoStoryOutline, demoArcOutlines, demoBeatOutlines, demoCharacterStates, demoWorldFacts, demoThemeBible, demoStyleBible, demoStorySetup } from "./defaults/demo-project.js";
 import {
   buildInterviewInputFromQuizAnswers,
   getAuthorInterviewPresetById,
@@ -208,12 +209,36 @@ export async function ensureBootstrappedProject(args: {
   const loadedCharacterStates = await args.repository.loadCharacterStates(args.projectId);
   const loadedWorldFacts = await args.repository.loadWorldFacts(args.projectId);
   const loadedStoryMemories = await args.repository.loadStoryMemories(args.projectId);
-  const storyOutline = loadedStoryOutline ?? demoStoryOutline;
-  const arcOutlines = loadedArcOutlines.length ? loadedArcOutlines : demoArcOutlines;
-  const beatOutlines = loadedBeatOutlines.length ? loadedBeatOutlines : demoBeatOutlines;
-  const characterStates = loadedCharacterStates.length ? loadedCharacterStates : demoCharacterStates;
-  const worldFacts = loadedWorldFacts.length ? loadedWorldFacts : demoWorldFacts;
-  const storyMemories = loadedStoryMemories.length ? loadedStoryMemories : demoStoryMemories;
+  const isDemoProject = args.projectId === demoProjectId;
+  const fallbackStoryOutline: StoryOutline = isDemoProject
+    ? demoStoryOutline
+    : {
+        id: storySetup.storyOutlineId ?? `${args.projectId}-outline`,
+        title: existingProject?.title ?? args.projectId,
+        premise: storySetup.premise,
+        coreTheme: themeBible.coreTheme,
+        endingTarget: themeBible.endingTarget,
+        majorArcIds: storySetup.currentArcId ? [storySetup.currentArcId] : [],
+        keyTurningPoints: [],
+      };
+  const storyOutline = loadedStoryOutline ?? fallbackStoryOutline;
+  const arcOutlines = loadedArcOutlines.length ? loadedArcOutlines : isDemoProject ? demoArcOutlines : [];
+  const beatOutlines = loadedBeatOutlines.length
+    ? loadedBeatOutlines
+    : isDemoProject
+      ? demoBeatOutlines
+      : [];
+  const characterStates = loadedCharacterStates.length
+    ? loadedCharacterStates
+    : isDemoProject
+      ? demoCharacterStates
+      : [];
+  const worldFacts = loadedWorldFacts.length ? loadedWorldFacts : isDemoProject ? demoWorldFacts : [];
+  const storyMemories = loadedStoryMemories.length
+    ? loadedStoryMemories
+    : isDemoProject
+      ? demoStoryMemories
+      : [];
   const chapterPlans = await args.repository.loadChapterPlans(args.projectId);
 
   await args.repository.saveThemeBible(args.projectId, themeBible);
@@ -228,7 +253,11 @@ export async function ensureBootstrappedProject(args: {
   if ((await args.repository.loadSeedStoryMemories(args.projectId)).length === 0) {
     await args.repository.saveSeedStoryMemories(
       args.projectId,
-      loadedStoryMemories.length ? deriveFallbackSeedMemories(storyMemories) : demoStoryMemories,
+      loadedStoryMemories.length
+        ? deriveFallbackSeedMemories(storyMemories)
+        : isDemoProject
+          ? demoStoryMemories
+          : [],
     );
   }
   await args.rebuildMemorySystemOutputsForProject(

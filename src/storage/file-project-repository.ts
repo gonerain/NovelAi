@@ -449,7 +449,7 @@ export class FileProjectRepository implements ProjectRepository {
   private async readJsonOrNull<T>(filepath: string): Promise<T | null> {
     try {
       const content = await readFile(filepath, "utf8");
-      return JSON.parse(content) as T;
+      return JSON.parse(stripUtf8Bom(content)) as T;
     } catch (error) {
       if (isNotFoundError(error)) {
         return null;
@@ -458,6 +458,10 @@ export class FileProjectRepository implements ProjectRepository {
       throw error;
     }
   }
+}
+
+function stripUtf8Bom(content: string): string {
+  return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
 }
 
 function isNotFoundError(error: unknown): error is NodeJS.ErrnoException {

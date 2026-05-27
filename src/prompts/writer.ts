@@ -74,7 +74,7 @@ function formatRelevantChapterCards(input: WriterInput): string {
 
 function formatRelevantWorldFacts(input: WriterInput): string {
   return input.contextPack.relevantWorldFacts
-    .slice(0, 2)
+    .slice(0, 4)
     .map((fact) =>
       [
         `${fact.title}(${fact.id})`,
@@ -132,6 +132,30 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
   const commercialSignals = contextPack.commercialSignals;
   const paragraphRhythm = commercialSignals?.paragraphRhythm ?? "balanced";
   const episode = contextPack.episodePacket;
+  const isPawnshopChapter = contextPack.readerValue?.genrePackId === "urban_rule_pawnshop_v1";
+  const pawnshopChapterStaging =
+    isPawnshopChapter && chapterNumber === 1
+      ? [
+          "CHAPTER 1 PAWNSHOP STAGING — HARD INVALIDATION RULE:",
+          "The first chapter must NOT complete the first transaction.",
+          "Forbidden in chapter 1 draft: 我确认, 签字, 签下, 签名, 按手印, 交易完成, 已接单, 代价生效, 线索地址, 定位线索.",
+          "Chapter 1 must stop at the transaction question / candidate pawned rule / contract draft pressure. The client can say what he wants to pawn, but no confirmation or exchange may occur.",
+        ].join("\n")
+      : isPawnshopChapter && chapterNumber === 2
+        ? [
+            "CHAPTER 2 PAWNSHOP STAGING — HARD INVALIDATION RULE:",
+            "The second chapter must deepen the first transaction only.",
+            "Forbidden in chapter 2 draft: 第二单, 新客人, 我想卖一条规则, 撤销, 暂停, 赎回, 退款, 交易完成, 交易成立, 已接单, 代价生效, 签名栏, 签字笔, 按手印, 事后补充, 代价我来写, 女儿安全了.",
+            "Chapter 2 must expose the client's hidden fault/desire and make the exact cost concrete, but the exchange is not completed yet. Do not let anyone sign, establish the transaction, or fill the price after completion.",
+          ].join("\n")
+        : isPawnshopChapter && chapterNumber === 3
+          ? [
+              "CHAPTER 3 PAWNSHOP STAGING — HARD INVALIDATION RULE:",
+              "The third chapter may complete or lock the first transaction and show the first cost starting.",
+              "Forbidden in chapter 3 draft: 第二单, 新客人, 我想卖一条规则, 撤销, 暂停, 赎回, 退款, 女儿安全了, 案件解决.",
+              "Chapter 3 must not resolve the missing-person case. It should end on first backlash from the first transaction.",
+            ].join("\n")
+          : undefined;
 
   return [
     {
@@ -144,6 +168,12 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         "Honor mustRules strictly. Treat avoidRules as hard negatives.",
         "Scene plan contract rule: when a 'Scene plan contract' block is present, it is authoritative for this chapter's core task, midConflict, climax, and endHook. Use those as the literal scene structure. However, openingScene.entryHook is subordinate to the Canon Bridge — if a '【Canon Bridge】' block appears in the user message, the chapter MUST open from the state described there, not from the scene plan's openingScene.entryHook. When the Canon Bridge provides actual previous-chapter prose, treat it as the immediate predecessor text and continue the narrative directly; do not skip events left unresolved at the end of that prose. When they conflict, write a transition that completes any unfinished business from the prior chapter before entering the scene plan's core content; do not hard-cut.",
         "Reveal contract rule: every entry in 'Reveal contracts due THIS chapter' must show up on-page. HARD reveals are mandatory: surface the concrete fact / truth / setup directly through scene action, dialogue, or observable consequence. Do not gesture at it as mood. SOFT reveals are preferred but may be deferred if the chapter logically cannot carry them.",
+        "Transaction semantics lock (HARD): preserve the exact subject, object, beneficiary, loss target, payer, and received benefit of every rule/bargain/cost/exchange/debt/contract from the outline, scene plan, memories, and world facts. Do not reinterpret the bargain to make the protagonist the new target, owner, beneficiary, rescuer, debtor, or chosen person unless the provided facts explicitly say so.",
+        "Transaction semantics lock (HARD): before drafting any bargain-related scene, silently check: who owns the original rule, what is pawned/lost, who loses it, what is received, who receives it, and who suffers the consequence. The prose must preserve those roles. If the outline says a father loses his status as the daughter's first rescue route, write that loss; do not transfer the daughter's first rescue route to the protagonist.",
+        "Failed-workaround rule (HARD): if a cost can be bypassed by a trivial workaround (different name, different wording, different channel, another phone, another person asking the same thing), either show why that workaround fails on-page or make the cost concrete enough that the workaround does not solve it.",
+        "Pawnshop opening staging (HARD, urban_rule_pawnshop_v1): if this is chapter 1, do not complete the first transaction. The chapter may reveal the shop, first client, urgent request, and candidate pawned rule, but it must not sign/handprint/finish exchange/deliver clue/collect price.",
+        "Pawnshop opening staging (HARD, urban_rule_pawnshop_v1): if this is chapter 2, do not introduce a second client or second transaction, do not sign/complete/establish the first transaction, and do not reveal pause/cancel/redeem/post-completion-price mechanics. Deepen the first client's lie, desire, and exact price; end before signature or exchange.",
+        "Pawnshop opening staging (HARD, urban_rule_pawnshop_v1): if this is chapter 3, complete or lock the first transaction and show the first cost starting. Do not resolve the case, do not make the missing person safely found, and do not reveal transaction cancellation/赎回/暂停 rules.",
         "Knowledge boundary rule (CRITICAL): a reveal's `revealMode` controls how the POV character may articulate it.",
         "  - experienced_as_anomaly: the POV character DOES NOT yet know the world-builder's name for this rule. Surface the reveal through specific evidence the character can only read through their existing frame: family pressure, social conspiracy, gaslighting, coincidence, the character's own perception failing. The bound `factTitle` and `factDescription` are reference for YOU; they are NOT lines the character may speak or think. The `forbiddenVocabulary` listed for this reveal must NOT appear in the POV character's dialogue or interior monologue, not even with quotation marks (e.g. 戏称为, 心里默念). Engineer evidence; never let the character articulate the rule.",
         "  - suspected_as_pattern: the POV character may have noticed a pattern and may invent a private placeholder name in their own head. The `forbiddenVocabulary` (canonical world-builder terms) is still off-limits.",
@@ -336,6 +366,7 @@ export function buildWriterMessages(input: WriterInput): ChatMessage[] {
         // Re-stated at the tail because earlier system-prompt length directives lose
         // weight as retrieval/memory context grows over later chapters.
         `Length contract (HARD): produce 3000–4500 Chinese characters. If you finish below 2500 characters, expand sensory detail, beat texture, dialogue, and reaction shots before stopping. Do NOT pad with summary or restate prior chapters; expand the current scene.`,
+        pawnshopChapterStaging,
       ]
         .filter(Boolean)
         .join("\n\n"),

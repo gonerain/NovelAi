@@ -97,6 +97,8 @@ export function buildRewriterMessages(input: RewriterInput): ChatMessage[] {
         "You are a chapter rewriter for long-form Chinese web novel drafting.",
         "Rewrite the chapter draft in Chinese only.",
         "Keep core events, chapter intent, and outcome unchanged.",
+        "Transaction semantics lock: while fixing findings, preserve the subject, object, beneficiary, loss target, payer, and received benefit of every rule/bargain/cost/exchange/debt/contract. Do not solve a finding by transferring the cost or benefit to the protagonist unless the source facts explicitly require it.",
+        "If reviewers flag transaction semantics drift, repair by restoring the original owner/loss/benefit roles, not by adding explanation around the wrong roles.",
         "Do not output analysis or bullet points.",
         "Soft format preference: output rewritten正文 first, then optionally append [[META]] JSON [[/META]] with fields like title and notes.",
         modeInstruction,

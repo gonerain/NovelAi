@@ -6,6 +6,7 @@ import type {
   BeatOutline,
   CastCharacterOutline,
   ChapterScenePlan,
+  StorySetup,
   StoryOutline,
   StoryProject,
 } from "./domain/index.js";
@@ -58,6 +59,19 @@ export interface OutlineDraftExportResult {
   projectId: string;
   storyOutlinePath: string;
   detailedOutlinePath: string;
+}
+
+function defaultTargetArcCount(targetChapterCount: number): number {
+  // Treat arcs as rolling episodes. For short test windows, keep the whole
+  // window on the current episode instead of forcing a miniature full-book
+  // structure.
+  if (targetChapterCount <= 30) {
+    return 1;
+  }
+  if (targetChapterCount <= 80) {
+    return 2;
+  }
+  return Math.ceil(targetChapterCount / 30);
 }
 
 function validateArcCoverage(
@@ -181,11 +195,123 @@ function attachBeatIdsToArcs(
   });
 }
 
+function distributeBeatRanges(
+  beats: BeatOutline[],
+  startChapter: number,
+  endChapter: number,
+  orderOffset = 0,
+): BeatOutline[] {
+  if (beats.length === 0) {
+    return [];
+  }
+
+  const totalChapters = endChapter - startChapter + 1;
+  const baseSize = Math.max(1, Math.floor(totalChapters / beats.length));
+  let remainder = Math.max(0, totalChapters - baseSize * beats.length);
+  let nextStart = startChapter;
+
+  return beats.map((beat, index) => {
+    const size = baseSize + (remainder > 0 ? 1 : 0);
+    remainder = Math.max(0, remainder - 1);
+    const start = nextStart;
+    const end =
+      index === beats.length - 1 ? endChapter : Math.min(endChapter, start + size - 1);
+    nextStart = end + 1;
+
+    return {
+      ...beat,
+      order: orderOffset + index + 1,
+      chapterRangeHint: {
+        start,
+        end,
+      },
+    };
+  });
+}
+
+function normalizeBeatRangesForArc(
+  arc: ArcOutline,
+  beats: BeatOutline[],
+  storySetup: StorySetup,
+): BeatOutline[] {
+  if (!arc.chapterRangeHint || beats.length === 0) {
+    return beats;
+  }
+
+  const sorted = [...beats].sort((left, right) => left.order - right.order);
+  const isPawnshopOpeningArc =
+    storySetup.genrePayoffPackId === "urban_rule_pawnshop_v1" &&
+    arc.chapterRangeHint.start === 1 &&
+    sorted.length >= 4 &&
+    arc.chapterRangeHint.end - arc.chapterRangeHint.start + 1 >= 18;
+
+  if (isPawnshopOpeningArc) {
+    const openingEnd = Math.min(arc.chapterRangeHint.start + 2, arc.chapterRangeHint.end);
+    const [openingBeat, ...remainingBeats] = sorted;
+    return [
+      {
+        ...openingBeat,
+        order: 1,
+        chapterRangeHint: {
+          start: arc.chapterRangeHint.start,
+          end: openingEnd,
+        },
+      },
+      ...distributeBeatRanges(remainingBeats, openingEnd + 1, arc.chapterRangeHint.end, 1),
+    ];
+  }
+
+  return distributeBeatRanges(sorted, arc.chapterRangeHint.start, arc.chapterRangeHint.end);
+}
+
 function coreCharacters(project: StoryProject): Array<{ id: string; name: string; role: string }> {
-  return project.characters.slice(0, 2).map((character, index) => ({
+  const coreIds = new Set<string>([
+    "protagonist",
+    "char_01",
+    ...project.storySetup.defaultActiveCharacterIds,
+  ]);
+  const selected = project.characters.filter((character) => coreIds.has(character.id));
+  const fallback = selected.length > 0 ? selected : project.characters.slice(0, 3);
+
+  return fallback.map((character) => ({
     id: character.id,
     name: character.name,
-    role: index === 0 ? "protagonist" : "core counterpart",
+    role:
+      character.id === "protagonist"
+        ? "protagonist"
+        : character.id === "char_01"
+          ? "old intimate counterpart"
+          : character.archetype ?? "existing core character",
+  }));
+}
+
+function existingCharactersAsCast(project: StoryProject): CastCharacterOutline[] {
+  return project.characters.slice(0, 8).map((character) => ({
+    id: character.id,
+    name: character.name,
+    role:
+      character.id === "protagonist"
+        ? "protagonist"
+        : character.id === "char_01"
+          ? "old intimate counterpart"
+          : character.archetype ?? "existing character",
+    storyFunction: character.currentGoals.slice(0, 2).join("；") || "已有核心角色，必须保持连续性",
+    relationshipToProtagonist:
+      character.id === "protagonist"
+        ? "本人"
+        : character.relationships
+            .find((relationship) => relationship.targetCharacterId === "protagonist")
+            ?.privateTruth ?? "与主角已有关系，禁止重名替换",
+    relationshipToSeniorBrother:
+      character.relationships
+        .find((relationship) => relationship.targetCharacterId === "char_01")
+        ?.privateTruth,
+    coreTension:
+      character.decisionProfile
+        ? `${character.decisionProfile.coreDesire} / ${character.decisionProfile.coreFear}`
+        : character.fears.slice(0, 2).join("；") || "已有张力待展开",
+    intendedArc: character.currentGoals.slice(0, 2).join("；") || "延续既有人物弧光",
+    presenceSpan: "existing project character; preserve name/id continuity",
   }));
 }
 
@@ -226,7 +352,7 @@ export async function generateOutlineStack(
     styleBible: project.styleBible,
     storySetup: project.storySetup,
     targetChapterCount: options.targetChapterCount ?? 250,
-    targetArcCount: options.targetArcCount ?? 10,
+    targetArcCount: options.targetArcCount ?? defaultTargetArcCount(options.targetChapterCount ?? 250),
   };
   const storyOutlineMessages = buildStoryOutlineMessages(storyOutlineInput);
   await writePromptDebug({
@@ -242,7 +368,7 @@ export async function generateOutlineStack(
     messages: storyOutlineMessages,
     schema: storyOutlineGenerationResultSchema,
     temperature: 0.2,
-    maxTokens: 2600,
+    maxTokens: 3600,
   });
 
   const storyOutline = storyOutlineResult.object.storyOutline;
@@ -316,9 +442,10 @@ export async function generateOutlineStack(
   const arcInput = {
     projectTitle: project.title,
     storyOutline,
+    storySetup: project.storySetup,
     arcBlueprints,
-    cast,
-    targetArcCount: options.targetArcCount ?? 10,
+    cast: dedupeCast([...existingCharactersAsCast(project), ...cast]),
+    targetArcCount: options.targetArcCount ?? defaultTargetArcCount(options.targetChapterCount ?? 250),
     targetChapterCount: options.targetChapterCount ?? 250,
   };
   const arcMessages = buildArcOutlineMessages(arcInput);
@@ -335,7 +462,7 @@ export async function generateOutlineStack(
     messages: arcMessages,
     schema: arcOutlineGenerationResultSchema,
     temperature: 0.2,
-    maxTokens: 3200,
+    maxTokens: 8000,
   });
   logStage("outline", "llm: beat_outline");
   const allBeatOutlines = [];
@@ -344,6 +471,7 @@ export async function generateOutlineStack(
     const beatInput = {
       projectTitle: project.title,
       storyOutline,
+      storySetup: project.storySetup,
       arcOutlines: [arc],
       targetChapterCount: options.targetChapterCount ?? 250,
     };
@@ -361,16 +489,26 @@ export async function generateOutlineStack(
       messages: beatMessages,
       schema: beatOutlineGenerationResultSchema,
       temperature: 0.2,
-      maxTokens: 3200,
+      maxTokens: 5500,
     });
-    allBeatOutlines.push(...beatResult.object.beatOutlines);
+    const normalizedArcBeats = normalizeBeatRangesForArc(
+      arc,
+      beatResult.object.beatOutlines.map((beat) => ({
+        ...beat,
+        // We generate beats one episode at a time; normalize provider mistakes
+        // where the model echoes a nearby or shortened arc id.
+        arcId: arc.id,
+      })),
+      project.storySetup,
+    );
+    allBeatOutlines.push(...normalizedArcBeats);
   }
 
   logStage("outline", "validate: cast/arc/beat coverage");
   validateCastSize(cast, desiredLongTermCastSize);
   validateArcCoverage(
     arcResult.object.arcOutlines,
-    options.targetArcCount ?? 10,
+    options.targetArcCount ?? defaultTargetArcCount(options.targetChapterCount ?? 250),
     options.targetChapterCount ?? 250,
   );
   validateBeatCoverage(allBeatOutlines, arcResult.object.arcOutlines);

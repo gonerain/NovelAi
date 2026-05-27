@@ -110,6 +110,34 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
 
   const chapterCount = input.chapterRange.end - input.chapterRange.start + 1;
   const isSingleChapter = typeof input.targetChapterNumber === "number";
+  const isPawnshopBeat =
+    input.beat.payoffPatternIds?.includes("urban_rule_pawnshop_v1") ||
+    input.storyOutline?.title.includes("典当") ||
+    input.arc.name.includes("典当") ||
+    input.arc.arcGoal.includes("典当");
+  const pawnshopChapterStaging =
+    isPawnshopBeat && input.targetChapterNumber === 1
+      ? [
+          "CHAPTER 1 PAWNSHOP STAGING — HARD:",
+          "- Output for chapter 1 must NOT include signing, handprint, transaction completion, exchange completion, price collection, clue address, or '代价已生效'.",
+          "- Chapter 1 endHook should stop at: the client names or nearly names the candidate pawned rule, and the shop prepares a contract. No confirmation yet.",
+          "- The first client must appear within openingScene.situationOnPage, not only in midConflict.",
+        ].join("\n")
+      : isPawnshopBeat && input.targetChapterNumber === 2
+        ? [
+            "CHAPTER 2 PAWNSHOP STAGING — HARD:",
+            "- Output for chapter 2 must NOT include a second client, second deal, anonymous 'I want to sell a rule' message, pause, cancellation, redeem, refund, or full transaction completion.",
+            "- Chapter 2 must expose the first client's hidden fault/desire and make the exact rule/cost concrete enough that obvious workarounds fail.",
+            "- Chapter 2 endHook should lock pressure around whether the client will confirm the first transaction, not open a new case.",
+          ].join("\n")
+        : isPawnshopBeat && input.targetChapterNumber === 3
+          ? [
+              "CHAPTER 3 PAWNSHOP STAGING — HARD:",
+              "- Output for chapter 3 may lock/confirm the first transaction and show the first irreversible cost starting.",
+              "- Output for chapter 3 must NOT resolve the missing-person case, reveal the missing person is safely found, introduce a second client/deal, or reveal pause/cancel/redeem mechanics.",
+              "- Chapter 3 endHook should be first backlash from the completed first transaction, not a new transaction request.",
+            ].join("\n")
+          : undefined;
 
   return [
     {
@@ -128,6 +156,17 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
           ? "- The new scene plan must differ from any 'peer scene plans' (already-written chapters in this beat) on at least three of: pov, location, openingScene.entryHook, climax.decisionOwnerId/decisionUnderPressure, endHook."
           : "- Two consecutive chapters must differ on at least three of: pov, location, openingScene.entryHook, climax.decisionOwnerId/decisionUnderPressure, endHook. Byte-identical scene plans are forbidden.",
         "- Each chapter must own ONE concrete scene with a real on-page entry, a real escalation, a real climax under pressure, and a real exit hook. Do not paraphrase the beatGoal.",
+        "- Concept grounding rule: every rule/cost/clue/relationship shift in this chapter must answer 'so what?' through a visible action, loss, danger, leverage, blocked route, changed access, or concrete behavior. If the consequence only works as symbolism, rewrite it.",
+        "- Transaction semantics lock: for any rule/bargain/cost/exchange/debt/contract in the arc or beat, preserve the exact subject, object, beneficiary, loss target, payer, and received benefit. Do not make the protagonist the new owner/target/rescuer/beneficiary unless the arc or beat explicitly says the rule transfers to her.",
+        "- Transaction semantics lock: if a character pawns a relationship route (for example: someone would seek them first in danger), the scene cost must damage that route for that character. It must not quietly create a convenient new route to the protagonist.",
+        "- Failed workaround rule: identify the obvious workaround a reader would think of and block it inside the scene logic. Do not rely on readers doing literary interpretation.",
+        "- Scene proof rule: prove every important concept with an object/action/result on page within this chapter, not with explanation.",
+        "- Female-frequency scene rule: every chapter needs a concrete daily-life surface (food, laundry, transport, work, hotel, phone, medicine, clothes, rent, documents) and a relationship pressure embedded in that surface. Do not stage chapters as abstract rule tests.",
+        "- Protagonist texture rule: every chapter must include one visible small habit/flaw/action in propsAndAnchors, openingScene, or expectedDeltas (sorting labels, splitting food, hiding a chewed pen cap, arranging tickets, refusing water while clearly thirsty). This prevents the protagonist from reading like a correct-opinion speaker.",
+        "- Hearing / explaining rule: every chapter must make clear inside scene text who fails to hear the protagonist, who hears her more accurately, or who explains her away. Encode this through midConflict, climax, endHook, or expectedDeltas.",
+        "- Old-intimacy pressure rule: when the old intimate figure appears, his action must contain both real tenderness and real control. He remembers a habit or pain point, but still does not ask or respect the protagonist's current consent.",
+        "- Female-friend agency rule: when the female friend appears, she must have her own cost, anger, choice, or boundary. She is not a free safe house, assistant, or exposition partner.",
+        "- Witness-character restraint rule: an order/witness character may accurately repeat the protagonist's words, but must not become a rescuer or instant romantic answer in the opening episode.",
         "- pov and climax.decisionOwnerId MUST be known character ids ('protagonist', 'char_01', 'char_05', etc.) — NEVER display names. Do not output Chinese names in these two fields.",
         "- climax.decisionOwnerId must match a known character id; the character must be present in this chapter; the choice must be one only that character could make.",
         "- climax.costPaid must be observable (info exposed, leverage spent, relationship damaged, identity revealed). Not an emotion.",
@@ -155,7 +194,13 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
         "- Opening-arc supporting-POV gate (chapter <= 6): if a chapter's pov is NOT 'protagonist', that chapter's climax.decisionOwnerId must equal that POV character AND climax.costPaid must be a concrete cost paid by that POV character on-page (not by the protagonist). If you cannot ground both, the chapter must use protagonist POV instead.",
         "- Opening-arc info-release ceiling (chapter <= 6): each chapter's dueRevealIds may include AT MOST 1-3 reveals about world rules. Distribute beat reveals so the opening-arc chapters surface signals at a varied cadence; do not stack 4+ reveals in any single chapter even if they all 'belong to the same beat'. SOFT anomaly hints (atmospheric weirdness, POV's private mis-readings, sensory glitches NOT bound to a reveal contract id) are encouraged on top of the dueRevealIds budget — plant one such hint per chapter to keep mid-arc texture varied.",
         "- Opening-arc mechanism-explanation ban (chapter <= 6): climax.decisionUnderPressure / midConflict.escalation / endHook MUST NOT contain 'explain the rule', 'reveal the mechanism', 'walk through how X works' framings. The chapter shows experience, not exposition. Mechanism description belongs to chapter 7+.",
+        "- Pawnshop opening hook rule (urban_rule_pawnshop_v1, chapter 1): the first 800 Chinese characters must establish protagonist + concrete money/life trouble + pawnshop abnormality + first client arrival/request. Do not spend the whole first chapter only on entering the shop.",
+        "- Pawnshop first-transaction staging (urban_rule_pawnshop_v1, chapter 1): DO NOT complete the transaction, sign the contract, press a handprint, deliver the clue, or collect the price. Chapter 1 should end after the exact candidate rule / trade question becomes clear.",
+        "- Pawnshop first-transaction staging (urban_rule_pawnshop_v1, chapter 2): expose the client's hidden fault/desire, block the obvious workaround, and define the exact rule/cost in concrete terms. DO NOT sign, complete, lock, establish, or fulfill the transaction. DO NOT let the protagonist write the price/代价, fill a post-completion price field, or say the price can be completed later. DO NOT introduce a second client, second transaction, anonymous 'I want to sell a rule' message, refund, pause, cancellation,赎回, or撤销.",
+        "- Pawnshop first-transaction staging (urban_rule_pawnshop_v1, chapter 3): complete or lock the first transaction, deliver the first clue, and show the first irreversible cost starting to collect. DO NOT resolve the first case, do not reveal whether the missing person is safe, do not introduce a second transaction, and do not reveal pause/cancel/redeem mechanics.",
+        "- Pawnshop first-transaction compression (urban_rule_pawnshop_v1, chapter 1-3): chapter 1 sells the premise; chapter 2 makes the human desire dangerous; chapter 3 lands exchange + first backlash. Keep the first case alive after chapter 3.",
         "- Opening-arc endHook rule (chapter <= 6): endHook MUST be a new problem produced by the POV character's on-page action or choice — NOT 'a new character arrives', 'a message is received', 'a clue is dropped on her'. Acceptable shapes: protagonist makes a cut and reality refuses; she gains a small win and pays for it; she suspects person X but discovers a larger pattern; a supporting character breaks from their default position.",
+        "- Opening-arc continuity ban (chapter <= 6): do not use a new incoming client/second deal as the hook while the first case is unresolved. Escalate the active case instead.",
         "- Opening-arc partial-win rhythm (chapter <= 6): MANDATORY protagonistGain field. For every consecutive pair of chapters (1-2, 3-4, 5-6), at least ONE of the two MUST have a non-null protagonistGain. protagonistGain must be a concrete observable on-page acquisition: information she learns, a loophole she discovers, leverage she keeps, an ally she protects. NOT an emotion ('she feels braver') and NOT a restatement of endHook. Set to null only when this chapter intentionally serves the 'cost/failure' side of the pair — and only if its partner chapter already has a non-null entry.",
         "- Skip characters who only observe; only include micro-shifts for characters who actually change in the chapter.",
         "- propsAndAnchors should list 2-4 concrete sensory or material objects/places that anchor the scene.",
@@ -313,6 +358,7 @@ export function buildSceneDecomposerMessages(input: SceneDecomposerInput): ChatM
         isSingleChapter
           ? `Produce exactly one scenePlans entry for chapter ${input.targetChapterNumber}. Do not write chapter prose.`
           : "Produce scenePlans[] only. Do not write chapter prose.",
+        pawnshopChapterStaging,
       ]
         .filter(Boolean)
         .join("\n\n"),
