@@ -63,6 +63,7 @@ export type TaskName =
   | "scene_decomposer"
   | "arc_outline"
   | "beat_outline"
+  | "episode_plan_lab"
   | "planner"
   | "writer"
   | "rewriter"

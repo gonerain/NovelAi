@@ -33,6 +33,10 @@ export const defaultTaskRoutes: Record<TaskName, ModelRoute> = {
     provider: "deepseek",
     model: "deepseek-v4-flash",
   },
+  episode_plan_lab: {
+    provider: "deepseek",
+    model: "deepseek-v4-flash",
+  },
   planner: {
     provider: "deepseek",
     model: "deepseek-v4-flash",

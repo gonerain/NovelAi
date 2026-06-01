@@ -12,6 +12,7 @@ export * from "./change-impact.js";
 export * from "./commercial-variety.js";
 export * from "./context-builder.js";
 export * from "./decision-profile.js";
+export * from "./episode-plan-lab.js";
 export * from "./knowledge-boundary.js";
 export * from "./memory-system.js";
 export * from "./memory-updater.js";

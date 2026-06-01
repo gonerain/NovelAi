@@ -6,6 +6,7 @@ export * from "./beat-pacing-audit.js";
 export * from "./cast-expansion.js";
 export * from "./chapter-plan-audit.js";
 export * from "./decision-profile.js";
+export * from "./episode-plan-lab.js";
 export * from "./memory-updater.js";
 export * from "./planner.js";
 export * from "./rewriter.js";
