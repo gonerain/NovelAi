@@ -729,7 +729,7 @@ export function buildRewritePlan(args: {
     return {
       mode: "repair_first",
       objective:
-        "Fix all high-severity consistency issues first; keep chapter events and outcomes unchanged.",
+        "Fix all high-severity consistency issues first. Preserve valid events, but if a high-severity finding says an event violates chapter staging or world rules, remove or replace that event instead of keeping it.",
     };
   }
 

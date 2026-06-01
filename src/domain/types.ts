@@ -67,7 +67,8 @@ export type MemorySearchLedgerType =
 export type GenrePayoffPackId =
   | "male_webnovel_v1"
   | "female_relationship_v1"
-  | "suspense_v1";
+  | "suspense_v1"
+  | "urban_rule_pawnshop_v1";
 
 export type StoryContractType =
   | "story_truth"

@@ -3,6 +3,8 @@ import { DefaultClientRegistry, type ClientRegistry } from "./registry.js";
 import type {
   ChatMessage,
   GenerateTextResult,
+  LlmProvider,
+  ModelRoute,
   StructuredGenerationResult,
   TaskName,
 } from "./types.js";
@@ -104,6 +106,35 @@ function dumpPromptDebug(task: TaskName, messages: ChatMessage[]): void {
   console.log(`[debug] prompt task=${task} end`);
 }
 
+function isLlmProvider(value: string): value is LlmProvider {
+  return value === "openai" || value === "deepseek" || value === "anthropic" || value === "ollama";
+}
+
+function envKeyForTask(task: TaskName, suffix: "PROVIDER" | "MODEL"): string {
+  return `NOVELAI_${task.toUpperCase()}_${suffix}`;
+}
+
+function resolveTaskRoute(task: TaskName): ModelRoute {
+  const base = defaultTaskRoutes[task];
+  const providerRaw = process.env[envKeyForTask(task, "PROVIDER")] ?? process.env.NOVELAI_PROVIDER;
+  const model = process.env[envKeyForTask(task, "MODEL")] ?? process.env.NOVELAI_MODEL ?? base.model;
+  const provider = providerRaw?.trim();
+
+  if (!provider) {
+    return { ...base, model };
+  }
+  if (!isLlmProvider(provider)) {
+    throw new Error(
+      `Invalid LLM provider override "${provider}". Expected one of: openai, deepseek, anthropic, ollama.`,
+    );
+  }
+
+  return {
+    provider,
+    model,
+  };
+}
+
 interface GenerateForTaskArgs {
   task: TaskName;
   messages: ChatMessage[];
@@ -122,7 +153,7 @@ export class LlmService {
   ) {}
 
   async generateForTask(args: GenerateForTaskArgs): Promise<GenerateTextResult> {
-    const route = defaultTaskRoutes[args.task];
+    const route = resolveTaskRoute(args.task);
     const client = this.registry.get(route.provider);
     dumpPromptDebug(args.task, args.messages);
 
@@ -143,7 +174,7 @@ export class LlmService {
   async generateObjectForTask<TObject extends object>(
     args: GenerateObjectForTaskArgs<TObject>,
   ): Promise<StructuredGenerationResult<TObject>> {
-    const route = defaultTaskRoutes[args.task];
+    const route = resolveTaskRoute(args.task);
     const client = this.registry.get(route.provider);
     dumpPromptDebug(args.task, args.messages);
 

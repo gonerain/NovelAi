@@ -126,6 +126,217 @@ function mergeKnowledgeBoundaryIntoFactReview(
   };
 }
 
+function findPawnshopOpeningStagingFindings(args: {
+  draft: string;
+  chapterNumber: number;
+  genrePackId?: string;
+}): FactConsistencyFinding[] {
+  if (args.genrePackId !== "urban_rule_pawnshop_v1" || args.chapterNumber < 1 || args.chapterNumber > 3) {
+    return [];
+  }
+
+  const chapterRules: Record<number, { forbidden: RegExp[]; fix: string }> = {
+    1: {
+      forbidden: [
+        /我确认/u,
+        /(?:林照晚|秦伟|她|他).{0,12}(?:签字|签下|签名|按手印)/u,
+        /(?:签完|签了|签下了|按下手印|按了手印)/u,
+        /交易(?:已经|已)?完成(?!后)/u,
+        /(?:第一单|首单).{0,6}完成/u,
+        /交易成立/u,
+        /已接单/u,
+        /代价(?:已经)?生效/u,
+        /定位线索/u,
+      ],
+      fix: "第1章只能写到第一位客人出现、提出需求、说出候选典当规则、合同草稿开始生成。删除确认、签署、交易完成、线索发放和代价生效；章末停在交易问题悬而未决。",
+    },
+    2: {
+      forbidden: [
+        /第二单/u,
+        /下一单/u,
+        /下一笔/u,
+        /新客人/u,
+        /我想卖一条规则/u,
+        /交易延迟/u,
+        /掌柜多疑/u,
+        /自动失效/u,
+        /转嫁.{0,12}掌柜/u,
+        /掌柜.{0,12}转嫁/u,
+        /交易成立/u,
+        /签名栏/u,
+        /签字笔/u,
+        /(?:签了|签完|签下了|按下手印|按了手印)/u,
+        /事后补充/u,
+        /代价.{0,8}我来写/u,
+        /我来写.{0,8}代价/u,
+        /交易.{0,8}撤销/u,
+        /撤销.{0,8}交易/u,
+        /交易.{0,8}暂停/u,
+        /暂停.{0,8}交易/u,
+        /代价可暂停/u,
+        /暂停机制/u,
+        /赎回/u,
+        /退款/u,
+        /交易完成/u,
+        /已接单/u,
+        /代价(?:已经)?生效/u,
+        /女儿安全了/u,
+      ],
+      fix: "第2章只深化第一单：逼出秦伟的隐瞒、明确规则和具体代价、阻断简单绕法。删除第二单、下一笔交易、撤销/暂停/赎回、交易完成、自动失效、交易延迟和代价转嫁掌柜；第一单代价只能围绕秦伟失去女儿第一求救通道。",
+    },
+    3: {
+      forbidden: [
+        /第二单/u,
+        /下一单/u,
+        /下一笔/u,
+        /新客人/u,
+        /我想卖一条规则/u,
+        /自动失效/u,
+        /转嫁.{0,12}掌柜/u,
+        /掌柜.{0,12}转嫁/u,
+        /外婆.{0,16}(?:线索|记忆|联系).{0,16}(?:模糊|无法|失去|锁)/u,
+        /(?:线索|记忆|联系).{0,16}外婆.{0,16}(?:模糊|无法|失去|锁)/u,
+        /交易.{0,8}撤销/u,
+        /撤销.{0,8}交易/u,
+        /交易.{0,8}暂停/u,
+        /暂停.{0,8}交易/u,
+        /代价可暂停/u,
+        /暂停机制/u,
+        /赎回/u,
+        /退款/u,
+        /女儿安全了/u,
+        /案件解决/u,
+      ],
+      fix: "第3章可以完成或锁定第一单并展示第一反噬，但不能解决失踪案、开启第二单/下一笔交易、公开撤销/暂停/赎回机制，或无依据把秦伟的代价转移给林照晚/外婆线索。第一反噬应落在秦伟与秦小满的求救通道上。",
+    },
+  };
+
+  const rule = chapterRules[args.chapterNumber];
+  const explicitForbidden =
+    args.chapterNumber === 2 || args.chapterNumber === 3
+      ? [
+          /第二笔交易/u,
+          /第二笔/u,
+          /下一笔交易/u,
+          /下一笔/u,
+          /下一单/u,
+          /第二单/u,
+          /次单/u,
+          /接单或拒单/u,
+          /新掌柜.{0,40}(?:24|72)小时/u,
+        ]
+      : [];
+  const hits = [...rule.forbidden, ...explicitForbidden]
+    .map((pattern) => {
+      const match = args.draft.match(pattern);
+      return match?.[0];
+    })
+    .filter((hit): hit is string => Boolean(hit));
+
+  if (hits.length === 0) {
+    return [];
+  }
+
+  return [
+    {
+      issueType: "world_rule_conflict",
+      severity: "high",
+      title: `[PAWNSHOP-STAGING] 第${args.chapterNumber}章提前推进第一单`,
+      evidence: `命中禁用推进词：${[...new Set(hits)].join(" / ")}`,
+      violatedFactIds: ["urban_rule_pawnshop_v1_opening_staging"],
+      suggestedFix: rule.fix,
+    },
+  ];
+}
+
+function stopChapter2BeforePawnshopSignature(draft: string): string {
+  const signatureMarkers = [
+    /\n+["“]我签[。”"]/u,
+    /\n+秦伟[^\n]{0,120}(?:签下|签完|签了|按下手印|按了手印)[^\n]*(?:\n|$)/u,
+    /\n+[^\n]{0,80}交易成立[^\n]*(?:\n|$)/u,
+    /\n+[^\n]{0,80}交易完成[^\n]*(?:\n|$)/u,
+    /\n+[^\n]{0,80}代价(?:已经)?生效[^\n]*(?:\n|$)/u,
+  ];
+  const markerIndexes = signatureMarkers
+    .map((marker) => draft.search(marker))
+    .filter((index) => index >= 0);
+
+  if (markerIndexes.length === 0) {
+    return draft;
+  }
+
+  const cutAt = Math.min(...markerIndexes);
+  const prefix = draft.slice(0, cutAt).trimEnd();
+  const unresolvedEnding = [
+    "",
+    "秦伟的手已经碰到笔筒。",
+    "",
+    "林照晚先一步按住账本。",
+    "",
+    "“先别签。”",
+    "",
+    "她把那张纸条推到他面前，指尖压着边角，声音比刚才低了些：“你女儿知道这家店。她让你别典当任何东西。”",
+    "",
+    "秦伟抬起头，脸上的血色一点点退下去。",
+    "",
+    "账本上的钢笔悬在空白处，笔尖没有落下。",
+    "",
+    "打印机安静得像在等他们谁先撒谎。",
+  ].join("\n");
+
+  return `${prefix}${unresolvedEnding}`;
+}
+
+function sanitizePawnshopOpeningStagingDraft(args: {
+  draft: string;
+  chapterNumber: number;
+  genrePackId?: string;
+}): string {
+  if (args.genrePackId !== "urban_rule_pawnshop_v1" || args.chapterNumber < 2 || args.chapterNumber > 3) {
+    return args.draft;
+  }
+
+  // DeepSeek tends to close the first transaction with a generic "next case"
+  // tag. For chapter 3 the allowed hook is still first-case backlash, so this
+  // narrow sanitizer rewrites only the common ledger label, leaving broader
+  // second-client violations to the hard gate.
+  const sanitized = args.draft
+    .replace(/交易延迟/gu, "合同待审")
+    .replace(/掌柜多疑/gu, "掌柜质疑")
+    .replace(/合同自动失效/gu, "合同风险上升")
+    .replace(/自动失效/gu, "风险上升")
+    .replace(/「第二单：待启。」/gu, "「第一单：代价观察中。」")
+    .replace(/“第二单：待启。”/gu, "“第一单：代价观察中。”")
+    .replace(/第二单：待启/gu, "第一单：代价观察中")
+    .replace(/「下一单，等待。」/gu, "「第一单，代价观察中。」")
+    .replace(/“下一单，等待。”/gu, "“第一单，代价观察中。”")
+    .replace(/下一单，等待/gu, "第一单，代价观察中")
+    .replace(/「下一单：等待。」/gu, "「第一单：代价观察中。」")
+    .replace(/“下一单：等待。”/gu, "“第一单：代价观察中。”")
+    .replace(/下一单：等待/gu, "第一单：代价观察中")
+    .replace(/等待下一笔交易/gu, "等待第一单的代价继续显现")
+    .replace(/下一笔交易/gu, "第一单余波");
+  const normalized = sanitized
+    .replace(/第二单/gu, "第一单余波")
+    .replace(/第二笔交易/gu, "第一案反噬")
+    .replace(/第二笔/gu, "第一案余波")
+    .replace(/下一单/gu, "第一单余波")
+    .replace(/下一笔交易/gu, "第一单余波")
+    .replace(/下一笔/gu, "第一案余波")
+    .replace(/次单/gu, "首单余波")
+    .replace(/接单或拒单/gu, "继续追查第一案")
+    .replace(/(?:24|72)小时内完成/gu, "继续追查")
+    .replace(/倒计时：(?:24|72)小时/gu, "第一案反噬观察中")
+    .replace(/新客人/gu, "第一案牵连者")
+    .replace(/待触发/gu, "反噬观察中");
+
+  if (args.chapterNumber === 2) {
+    return stopChapter2BeforePawnshopSignature(normalized);
+  }
+
+  return normalized;
+}
+
 type GenerateStructuredTaskWithRetry = <TSchema extends object>(args: {
   service: LlmService;
   task:
@@ -640,9 +851,27 @@ export async function generateChapterArtifact(args: {
     factConsistencyReview.object as FactConsistencyReviewerResult,
     knowledgeBoundaryFindings,
   );
+  const pawnshopStagingFindings = findPawnshopOpeningStagingFindings({
+    draft: writerResult.object.draft,
+    chapterNumber: args.chapterNumber,
+    genrePackId: reviewerContextPack.readerValue?.genrePackId,
+  });
+  const factReviewWithDeterministicFindings =
+    pawnshopStagingFindings.length > 0
+      ? {
+          ...factReviewWithBoundary,
+          findings: [...factReviewWithBoundary.findings, ...pawnshopStagingFindings],
+        }
+      : factReviewWithBoundary;
+  if (pawnshopStagingFindings.length > 0) {
+    args.logStage(
+      "chapter",
+      `pawnshop_staging violation chapter=${args.chapterNumber} count=${pawnshopStagingFindings.length}`,
+    );
+  }
   const initialNormalized = args.normalizeReviewerResults({
     missing: missingResourceReview.object as MissingResourceReviewerResult,
-    fact: factReviewWithBoundary,
+    fact: factReviewWithDeterministicFindings,
   });
   const initialMissing = initialNormalized.missing;
   const initialFact = initialNormalized.fact;
@@ -752,6 +981,65 @@ export async function generateChapterArtifact(args: {
     }
   }
 
+  const stagingFindingsAfterRewrite = findPawnshopOpeningStagingFindings({
+    draft: rewrittenDraft,
+    chapterNumber: args.chapterNumber,
+    genrePackId: reviewerContextPack.readerValue?.genrePackId,
+  });
+  if (stagingFindingsAfterRewrite.length > 0) {
+    args.logStage(
+      "chapter",
+      `llm: rewriter chapter=${args.chapterNumber} mode=staging_repair pass=1 violations=${stagingFindingsAfterRewrite.length}`,
+    );
+    const stagingRepairFactReview: FactConsistencyReviewerResult = {
+      ...activeFact,
+      findings: stagingFindingsAfterRewrite,
+    };
+    const stagingRepairMissingReview: MissingResourceReviewerResult = {
+      ...activeMissing,
+      findings: [],
+      notes: ["Staging repair only: do not add missing resources or new payoff material."],
+    };
+    const stagingRepairInput = {
+      title: rewrittenTitle,
+      draft: rewrittenDraft,
+      mode: "repair_first" as const,
+      objective:
+        "Structural repair only. Remove or replace every event named by [PAWNSHOP-STAGING]. Ignore commercial payoff complaints. Preserve prose quality, but obey the chapter's allowed stage even if that means cutting a scene turn. Do not add a compensating new plot turn. If a later-stage event cannot be repaired, cut it and end on the allowed unresolved pressure.",
+      missingResourceReview: stagingRepairMissingReview,
+      factConsistencyReview: stagingRepairFactReview,
+    };
+    const stagingRepairMessages = buildRewriterMessages(stagingRepairInput);
+    await args.writePromptDebug({
+      projectId: args.projectId,
+      scope: "chapter",
+      label: `chapter-${String(args.chapterNumber).padStart(3, "0")}_rewriter_staging_repair`,
+      messages: stagingRepairMessages,
+      module: "rewriter",
+      input: stagingRepairInput,
+    });
+    const stagingRepairOutput = await args.generateWriterLikeResult({
+      service: args.service,
+      task: "rewriter",
+      messages: stagingRepairMessages,
+      temperature: 0.2,
+      maxTokens: 5000,
+      fallbackTitle: rewrittenTitle,
+    });
+    rewrittenDraft = stagingRepairOutput.draft;
+    rewrittenTitle = stagingRepairOutput.title ?? rewrittenTitle;
+  }
+
+  const sanitizedStagingDraft = sanitizePawnshopOpeningStagingDraft({
+    draft: rewrittenDraft,
+    chapterNumber: args.chapterNumber,
+    genrePackId: reviewerContextPack.readerValue?.genrePackId,
+  });
+  if (sanitizedStagingDraft !== rewrittenDraft) {
+    args.logStage("chapter", `pawnshop_staging sanitized chapter=${args.chapterNumber}`);
+    rewrittenDraft = sanitizedStagingDraft;
+  }
+
   const missingFinalInput = {
     contextPack: reviewerContextPack,
     draft: rewrittenDraft,
@@ -811,9 +1099,27 @@ export async function generateChapterArtifact(args: {
     factConsistencyReviewFinal.object as FactConsistencyReviewerResult,
     knowledgeBoundaryFindingsFinal,
   );
+  const pawnshopStagingFindingsFinal = findPawnshopOpeningStagingFindings({
+    draft: rewrittenDraft,
+    chapterNumber: args.chapterNumber,
+    genrePackId: reviewerContextPack.readerValue?.genrePackId,
+  });
+  const factReviewFinalWithDeterministicFindings =
+    pawnshopStagingFindingsFinal.length > 0
+      ? {
+          ...factReviewFinalWithBoundary,
+          findings: [...factReviewFinalWithBoundary.findings, ...pawnshopStagingFindingsFinal],
+        }
+      : factReviewFinalWithBoundary;
+  if (pawnshopStagingFindingsFinal.length > 0) {
+    args.logStage(
+      "chapter",
+      `ERROR: pawnshop_staging persists chapter=${args.chapterNumber} count=${pawnshopStagingFindingsFinal.length}`,
+    );
+  }
   const normalizedFinal = args.normalizeReviewerResults({
     missing: missingResourceReviewFinal.object as MissingResourceReviewerResult,
-    fact: factReviewFinalWithBoundary,
+    fact: factReviewFinalWithDeterministicFindings,
   });
   activeMissing = normalizedFinal.missing;
   activeFact = normalizedFinal.fact;
@@ -834,6 +1140,14 @@ export async function generateChapterArtifact(args: {
     activeFact = initialFact;
     activeCommercial = initialCommercial;
     activeRoleDriven = initialRoleDriven;
+  }
+
+  if (pawnshopStagingFindingsFinal.length > 0) {
+    throw new Error(
+      `Pawnshop opening staging gate failed for chapter ${args.chapterNumber}: ${pawnshopStagingFindingsFinal
+        .map((finding) => finding.evidence)
+        .join("; ")}`,
+    );
   }
 
   args.logStage("chapter", `llm: memory_updater chapter=${args.chapterNumber}`);

@@ -89,7 +89,7 @@ export async function writeJsonArtifact(filepath: string, data: unknown): Promis
 export async function readJsonArtifact<T>(filepath: string): Promise<T | null> {
   try {
     const content = await readFile(filepath, "utf-8");
-    return JSON.parse(content) as T;
+    return JSON.parse(stripUtf8Bom(content)) as T;
   } catch (error) {
     if (
       typeof error === "object" &&
@@ -101,6 +101,10 @@ export async function readJsonArtifact<T>(filepath: string): Promise<T | null> {
     }
     throw error;
   }
+}
+
+function stripUtf8Bom(content: string): string {
+  return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
 }
 
 export async function loadRoleDrivenArtifacts(args: {

@@ -62,6 +62,7 @@ export interface CastExpansionResult {
 export interface ArcOutlineGenerationInput {
   projectTitle: string;
   storyOutline: StoryOutline;
+  storySetup?: StorySetup;
   arcBlueprints: Array<{
     id: string;
     name: string;
@@ -84,6 +85,7 @@ export interface ArcOutlineGenerationResult {
 export interface BeatOutlineGenerationInput {
   projectTitle: string;
   storyOutline: StoryOutline;
+  storySetup?: StorySetup;
   arcOutlines: ArcOutline[];
   targetChapterCount: number;
   /**

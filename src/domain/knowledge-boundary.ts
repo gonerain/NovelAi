@@ -23,10 +23,51 @@ const STOP_BIGRAMS = new Set<string>([
 
 const PUNCTUATION = /[\s，。！？、；：,.!?;:'"'"“”\(\)（）]/u;
 
+const GENERIC_BOUNDARY_VOCABULARY_STOP = new Set<string>([
+  "代价",
+  "定位",
+  "线索",
+  "电话",
+  "短信",
+  "消息",
+  "地址",
+  "书包",
+  "粉色书包",
+  "手机",
+  "合同",
+  "票据",
+  "账本",
+  "打印机",
+]);
+
+const CONCEPT_LABEL_MARKERS = [
+  "机制",
+  "规则",
+  "资格",
+  "权限",
+  "锚点",
+  "修正",
+  "失配",
+  "典当",
+  "契约",
+  "债务",
+  "回归",
+  "掌柜",
+  "异常",
+  "开门费",
+];
+
 function isCjk(ch: string): boolean {
   if (!ch) return false;
   const code = ch.codePointAt(0) ?? 0;
   return code >= 0x4e00 && code <= 0x9fff;
+}
+
+function isBoundaryVocabularyCandidate(word: string): boolean {
+  const trimmed = word.trim();
+  if (!trimmed) return false;
+  if (GENERIC_BOUNDARY_VOCABULARY_STOP.has(trimmed)) return false;
+  return CONCEPT_LABEL_MARKERS.some((marker) => trimmed.includes(marker));
 }
 
 function extractCjkRuns(text: string): string[] {
@@ -61,12 +102,12 @@ export function extractLabelVocabularyFromTitle(title: string, max = 6): string[
   // that contain at least one "noun-flavoured" character. Heuristic
   // is loose; the writer prompt will treat the list as advisory.
   const ranked = [...candidates].sort((a, b) => b.length - a.length);
-  return ranked.slice(0, max);
+  return ranked.filter(isBoundaryVocabularyCandidate).slice(0, max);
 }
 
 export function getLabelVocabulary(fact: WorldFact): string[] {
   if (fact.labelVocabulary && fact.labelVocabulary.length > 0) {
-    return fact.labelVocabulary;
+    return fact.labelVocabulary.filter(isBoundaryVocabularyCandidate);
   }
   return extractLabelVocabularyFromTitle(fact.title);
 }
